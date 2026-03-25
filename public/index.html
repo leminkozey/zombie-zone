@@ -116,6 +116,66 @@
   #reload-label { font-size: 10px; color: #888; letter-spacing: 3px; text-align: center; margin-bottom: 4px; }
   #reload-bar-bg { width: 100%; height: 4px; background: #222; }
   #reload-bar { height: 4px; background: #ccaa00; width: 0%; transition: none; }
+  #auth-screen {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    gap: 12px;
+  }
+  #auth-screen h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 60px;
+    color: #cc2200;
+    letter-spacing: 10px;
+    text-shadow: 0 0 40px #cc220088;
+    margin-bottom: 8px;
+  }
+  .auth-tabs {
+    display: flex;
+    gap: 0;
+  }
+  .auth-tab {
+    padding: 8px 24px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+    background: transparent;
+    border: 1px solid #333;
+    color: #555;
+    cursor: pointer;
+  }
+  .auth-tab.active {
+    color: #cc2200;
+    border-color: #cc2200;
+    background: rgba(204,34,0,0.1);
+  }
+  .auth-input {
+    background: #111;
+    border: 1px solid #333;
+    color: #ddd;
+    padding: 10px 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    width: 260px;
+    outline: none;
+  }
+  .auth-input:focus { border-color: #cc2200; }
+  #auth-error {
+    color: #cc2200;
+    font-size: 11px;
+    letter-spacing: 1px;
+    min-height: 16px;
+  }
+  #user-display {
+    font-size: 10px;
+    color: #555;
+    letter-spacing: 2px;
+  }
   @keyframes pulse { from { opacity:1; } to { opacity:0.5; } }
 </style>
 </head>
@@ -146,9 +206,26 @@
     <div id="reload-bar-bg"><div id="reload-bar"></div></div>
   </div>
 
-  <div id="overlay">
+  <div id="auth-screen">
+    <div class="sub" style="color:#555;font-size:11px;letter-spacing:3px">TOP-DOWN SURVIVAL</div>
+    <h1>DEAD ZONE</h1>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">LOGIN</button>
+      <button class="auth-tab" onclick="switchAuthTab('register')">REGISTRIEREN</button>
+    </div>
+    <input class="auth-input" id="auth-name" placeholder="Name" autocomplete="off">
+    <input class="auth-input" id="auth-pass" type="password" placeholder="Passwort">
+    <div id="auth-error"></div>
+    <button class="start-btn" id="auth-btn" onclick="doAuth()">LOGIN</button>
+    <div id="logout-hint" style="color:#333;font-size:10px;margin-top:20px;letter-spacing:1px;display:none">
+      Eingeloggt als <span id="logged-name"></span> — <a href="#" onclick="doLogout();return false" style="color:#cc2200">Abmelden</a>
+    </div>
+  </div>
+
+  <div id="overlay" style="display:none">
     <div class="sub">TOP-DOWN SURVIVAL</div>
     <h1>DEAD ZONE</h1>
+    <div id="user-display"></div>
     <div class="hint">
       WASD — Bewegen &nbsp;|&nbsp; MAUS — Zielen &nbsp;|&nbsp; LINKSKLICK — Schießen<br>
       R — Nachladen &nbsp;|&nbsp; Überlebe so lange wie möglich
@@ -158,6 +235,79 @@
 </div>
 
 <script>
+// auth state
+let authToken = localStorage.getItem('dz_token');
+let currentUser = localStorage.getItem('dz_user');
+let authMode = 'login';
+
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.auth-tab:${mode === 'login' ? 'first' : 'last'}-child`).classList.add('active');
+  document.getElementById('auth-btn').textContent = mode === 'login' ? 'LOGIN' : 'REGISTRIEREN';
+  document.getElementById('auth-error').textContent = '';
+}
+
+async function doAuth() {
+  const name = document.getElementById('auth-name').value.trim();
+  const password = document.getElementById('auth-pass').value;
+  const errEl = document.getElementById('auth-error');
+  if (!name || !password) { errEl.textContent = 'Name und Passwort eingeben'; return; }
+
+  const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error; return; }
+
+    authToken = data.token;
+    currentUser = data.name;
+    localStorage.setItem('dz_token', authToken);
+    localStorage.setItem('dz_user', currentUser);
+    showGameMenu();
+  } catch (e) {
+    errEl.textContent = 'Server nicht erreichbar';
+  }
+}
+
+function doLogout() {
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem('dz_token');
+  localStorage.removeItem('dz_user');
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('overlay').style.display = 'none';
+}
+
+function showGameMenu() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('overlay').style.display = 'flex';
+  document.getElementById('user-display').textContent = currentUser.toUpperCase();
+}
+
+// auto-login if token exists
+async function checkToken() {
+  if (!authToken) return;
+  try {
+    const res = await fetch('/api/profile', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentUser = data.name;
+      showGameMenu();
+      return;
+    }
+  } catch {}
+  doLogout();
+}
+
+checkToken();
+
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
@@ -219,7 +369,7 @@ let player, bullets, zombies, particles, bloodDecals;
 let wave, waveKills, waveTotal, waveActive;
 let reloading, reloadStart;
 let hurtFlash, mouseX, mouseY, running;
-let score, frameCount;
+let score, frameCount, sessionXp;
 let keys = {};
 
 function init() {
@@ -234,7 +384,7 @@ function init() {
   bullets = []; zombies = []; particles = []; bloodDecals = [];
   wave = 0; waveKills = 0; waveTotal = 0; waveActive = false;
   reloading = false; reloadStart = 0;
-  hurtFlash = 0; score = 0; frameCount = 0;
+  hurtFlash = 0; score = 0; frameCount = 0; sessionXp = 0;
   mouseX = W/2; mouseY = H/2;
   running = true;
   updateHUD();
@@ -460,6 +610,7 @@ function updateBullets() {
         if (z.hp <= 0) {
           z.alive = false;
           score += 100 * wave;
+          sessionXp += 10 * wave;
           waveKills++;
           spawnBlood(z.x, z.y, 16);
           updateHUD();
@@ -749,13 +900,26 @@ function updateHUD() {
 // ── GAME OVER ────────────────────────────────────────
 function gameOver() {
   running = false;
+
+  // send xp to backend
+  if (authToken && sessionXp > 0) {
+    fetch('/api/xp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
+      },
+      body: JSON.stringify({ xp: sessionXp })
+    }).catch(() => {});
+  }
+
   const ov = document.getElementById('overlay');
   ov.style.display = 'flex';
   ov.innerHTML = `
     <div class="sub">GAME OVER</div>
     <h1>YOU DIED</h1>
-    <p style="color:#666;font-size:13px;letter-spacing:2px">Wave ${wave} &nbsp;|&nbsp; Score: ${score}</p>
-    <button class="start-btn" onclick="location.reload()">NOCHMAL</button>
+    <p style="color:#666;font-size:13px;letter-spacing:2px">Wave ${wave} &nbsp;|&nbsp; +${sessionXp} XP</p>
+    <button class="start-btn" onclick="showGameMenu()">NOCHMAL</button>
   `;
 }
 
