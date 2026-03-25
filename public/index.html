@@ -75,19 +75,36 @@
   }
   #overlay .sub { color: #555; font-size: 12px; letter-spacing: 3px; }
   #overlay .hint { color: #444; font-size: 11px; line-height: 2.2; text-align: center; }
-  #overlay .start-btn {
-    margin-top: 16px;
+  .start-btn {
+    margin-top: 12px;
     border: 1px solid #cc2200;
     color: #cc2200;
-    padding: 10px 40px;
+    padding: 12px 48px;
     font-family: 'Bebas Neue', sans-serif;
     font-size: 22px;
     letter-spacing: 6px;
     cursor: pointer;
     background: transparent;
-    transition: background 0.2s, color 0.2s;
+    transition: all 0.2s;
   }
-  #overlay .start-btn:hover { background: #cc2200; color: #000; }
+  .start-btn:hover {
+    background: #cc2200;
+    color: #000;
+    box-shadow: 0 0 20px #cc220066;
+    transform: scale(1.03);
+  }
+  .start-btn:active {
+    transform: scale(0.97);
+  }
+  .btn-secondary {
+    border-color: #555;
+    color: #555;
+  }
+  .btn-secondary:hover {
+    background: #555;
+    color: #000;
+    box-shadow: 0 0 20px #55555566;
+  }
   #wave-banner {
     position: absolute;
     top: 50%;
@@ -287,8 +304,8 @@
   <div id="pause-screen" style="display:none">
     <div class="sub" style="color:#555;letter-spacing:4px">PAUSE</div>
     <h1 style="font-family:'Bebas Neue',sans-serif;font-size:60px;color:#cc2200;letter-spacing:10px">DEAD ZONE</h1>
-    <button class="start-btn" id="resume-btn" style="margin-top:12px">WEITER</button>
-    <button class="start-btn" id="quit-btn" style="margin-top:8px;border-color:#555;color:#555">ZUR LOBBY</button>
+    <button class="start-btn" id="resume-btn">WEITER</button>
+    <button class="start-btn btn-secondary" id="quit-btn">ZUR LOBBY</button>
   </div>
 </div>
 
