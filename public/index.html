@@ -601,10 +601,35 @@ function updateZombies() {
 
     if (!(z.type === 'spitter' && dist <= 200) && dist > 1) {
       const spd = z.speed;
-      const nx = z.x + (dx/dist) * spd;
-      const ny = z.y + (dy/dist) * spd;
-      if (!wallCollide(nx, z.y, ZOMBIE_R - 2)) z.x = nx;
-      if (!wallCollide(z.x, ny, ZOMBIE_R - 2)) z.y = ny;
+      // aggression: faster when player is low HP
+      const aggroMult = player.hp < player.maxHp * 0.3 ? 1.2 : 1.0;
+      let moveX = (dx/dist) * spd * aggroMult;
+      let moveY = (dy/dist) * spd * aggroMult;
+
+      const canX = !wallCollide(z.x + moveX, z.y, z.radius - 2);
+      const canY = !wallCollide(z.x, z.y + moveY, z.radius - 2);
+
+      if (canX) {
+        z.x += moveX;
+      } else {
+        // wall ahead on X, try sliding on Y
+        if (!z.avoidDir) z.avoidDir = Math.random() < 0.5 ? 1 : -1;
+        const slideY = z.avoidDir * spd * aggroMult;
+        if (!wallCollide(z.x, z.y + slideY, z.radius - 2)) z.y += slideY;
+        else z.avoidDir = -z.avoidDir;
+      }
+
+      if (canY) {
+        z.y += moveY;
+      } else {
+        if (!z.avoidDir) z.avoidDir = Math.random() < 0.5 ? 1 : -1;
+        const slideX = z.avoidDir * spd * aggroMult;
+        if (!wallCollide(z.x + slideX, z.y, z.radius - 2)) z.x += slideX;
+        else z.avoidDir = -z.avoidDir;
+      }
+
+      // reset avoidDir when path is clear
+      if (canX && canY) z.avoidDir = 0;
     }
 
     // spitter shooting
