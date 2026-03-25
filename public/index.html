@@ -1214,10 +1214,16 @@ function drawMinimap() {
     }
   }
   // Zombies
-  ctx.fillStyle = '#aa2200';
+  const minimapColors = { normal: '#aa2200', runner: '#cc6600', tank: '#661111', spitter: '#663399' };
   for (const z of zombies) {
     if (!z.alive) continue;
+    ctx.fillStyle = minimapColors[z.type] || '#aa2200';
     ctx.fillRect(ox + (z.x/TILE)*S - 1, oy + (z.y/TILE)*S - 1, 3, 3);
+  }
+  // Healthpacks
+  ctx.fillStyle = '#33cc44';
+  for (const h of healthpacks) {
+    ctx.fillRect(ox + (h.x/TILE)*S - 1, oy + (h.y/TILE)*S - 1, 3, 3);
   }
   // Player
   ctx.fillStyle = '#00ff88';
