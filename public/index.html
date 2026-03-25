@@ -425,11 +425,12 @@ const BULLET_SPD = 9;
 const MAX_AMMO = 30;
 const RELOAD_MS = 1800;
 
+const PICKUP_LIFETIME = 600; // 10s at 60fps
+const PICKUP_BLINK = 180; // blink last 3s
+const PICKUP_MAX = 3; // max pro typ
 const HEALTHPACK_HEAL = 25;
-const HEALTHPACK_LIFETIME = 600; // 10s at 60fps
-const HEALTHPACK_BLINK = 180; // blink last 3s
-const HEALTHPACK_MAX = 3;
 const HEALTHPACK_INTERVAL = [900, 1200]; // 15-20s at 60fps
+const AMMOPACK_INTERVAL = [1100, 1500]; // 18-25s at 60fps
 
 const ZOMBIE_CONFIGS = {
   normal:  { hpBase: [2, 3], hpScale: 1, speedMult: 1.0, xp: 10, radius: ZOMBIE_R },
@@ -546,9 +547,9 @@ let player, bullets, zombies, particles, bloodDecals;
 let spitterProjectiles;
 let wave, waveKills, waveTotal, waveActive;
 let reloading, reloadStart;
-let healthpacks;
-let lastHealthpackSpawn;
-let nextHealthpackAt;
+let healthpacks, ammopacks;
+let lastHealthpackSpawn, lastAmmopackSpawn;
+let nextHealthpackAt, nextAmmopackAt;
 let hurtFlash, mouseX, mouseY, running;
 let score, frameCount, sessionXp;
 let currentLevel;
@@ -571,9 +572,10 @@ function init() {
     recoil: 0,
   };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
-  healthpacks = [];
-  lastHealthpackSpawn = 0;
+  healthpacks = []; ammopacks = [];
+  lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
+  nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
   wave = 0; waveKills = 0; waveTotal = 0; waveActive = false;
   reloading = false; reloadStart = 0;
   hurtFlash = 0; score = 0; frameCount = 0; sessionXp = 0; currentLevel = 1;
@@ -940,6 +942,7 @@ function updateBullets() {
           z.alive = false;
           z.deathTimer = 30;
           tryDropHealthpack(z.x, z.y);
+          tryDropAmmopack(z.x, z.y);
           score += z.xp;
           sessionXp += z.xp;
           updateXpBar();
@@ -1050,10 +1053,10 @@ function findFreeSpawnTile() {
 }
 
 function spawnHealthpack() {
-  if (healthpacks.length >= HEALTHPACK_MAX) return;
+  if (healthpacks.length >= PICKUP_MAX) return;
   const pos = findFreeSpawnTile();
   if (!pos) return;
-  healthpacks.push({ x: pos.x, y: pos.y, life: HEALTHPACK_LIFETIME });
+  healthpacks.push({ x: pos.x, y: pos.y, life: PICKUP_LIFETIME });
 }
 
 function tryTimerHealthpack() {
@@ -1066,8 +1069,8 @@ function tryTimerHealthpack() {
 }
 
 function tryDropHealthpack(x, y) {
-  if (Math.random() < 0.15 && healthpacks.length < HEALTHPACK_MAX) {
-    healthpacks.push({ x, y, life: HEALTHPACK_LIFETIME });
+  if (Math.random() < 0.15 && healthpacks.length < PICKUP_MAX) {
+    healthpacks.push({ x, y, life: PICKUP_LIFETIME });
   }
 }
 
@@ -1097,7 +1100,7 @@ function updateHealthpacks() {
 
 function drawHealthpacks() {
   for (const h of healthpacks) {
-    if (h.life < HEALTHPACK_BLINK && Math.floor(h.life / 8) % 2 === 0) continue;
+    if (h.life < PICKUP_BLINK && Math.floor(h.life / 8) % 2 === 0) continue;
 
     ctx.save();
     ctx.translate(h.x, h.y);
@@ -1115,6 +1118,87 @@ function drawHealthpacks() {
     ctx.globalAlpha = pulse * 0.6;
     ctx.fillRect(-1.5, -5, 3, 10);
     ctx.fillRect(-5, -1.5, 10, 3);
+
+    ctx.restore();
+  }
+}
+
+// ammo pickups
+function spawnAmmopack() {
+  if (ammopacks.length >= PICKUP_MAX) return;
+  const pos = findFreeSpawnTile();
+  if (!pos) return;
+  ammopacks.push({ x: pos.x, y: pos.y, life: PICKUP_LIFETIME });
+}
+
+function tryTimerAmmopack() {
+  lastAmmopackSpawn++;
+  if (lastAmmopackSpawn >= nextAmmopackAt) {
+    spawnAmmopack();
+    lastAmmopackSpawn = 0;
+    nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
+  }
+}
+
+function tryDropAmmopack(x, y) {
+  if (Math.random() < 0.1 && ammopacks.length < PICKUP_MAX) {
+    ammopacks.push({ x, y, life: PICKUP_LIFETIME });
+  }
+}
+
+function updateAmmopacks() {
+  for (let i = ammopacks.length - 1; i >= 0; i--) {
+    const a = ammopacks[i];
+    a.life--;
+    if (a.life <= 0) { ammopacks.splice(i, 1); continue; }
+
+    const dx = a.x - player.x, dy = a.y - player.y;
+    if (dx*dx + dy*dy < (PLAYER_R + 10)**2) {
+      player.ammo = MAX_AMMO;
+      if (reloading) {
+        reloading = false;
+        document.getElementById('reload-bar-wrap').style.display = 'none';
+      }
+      ammopacks.splice(i, 1);
+      updateHUD();
+      for (let j = 0; j < 8; j++) {
+        const ang = Math.random() * Math.PI * 2;
+        particles.push({
+          x: player.x, y: player.y,
+          dx: Math.cos(ang)*2, dy: Math.sin(ang)*2 - 1,
+          life: 15, maxLife: 15,
+          color: '#ccaa00', r: 3,
+        });
+      }
+    }
+  }
+}
+
+function drawAmmopacks() {
+  for (const a of ammopacks) {
+    if (a.life < PICKUP_BLINK && Math.floor(a.life / 8) % 2 === 0) continue;
+
+    ctx.save();
+    ctx.translate(a.x, a.y);
+
+    const pulse = 0.8 + Math.sin(frameCount * 0.1) * 0.2;
+    ctx.globalAlpha = pulse;
+
+    // gelbes Munitions-Symbol (Patrone)
+    ctx.fillStyle = '#ccaa00';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#ccaa0088';
+    ctx.fillRect(-2, -8, 4, 12); // hülse
+    ctx.fillStyle = '#aa7700';
+    ctx.beginPath();
+    ctx.arc(0, -8, 3, Math.PI, 0); // spitze
+    ctx.fill();
+    ctx.fillStyle = '#886600';
+    ctx.fillRect(-3, 4, 6, 3); // boden
+
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = pulse * 0.4;
+    ctx.fillRect(-0.5, -6, 1, 8);
 
     ctx.restore();
   }
@@ -1348,6 +1432,11 @@ function drawMinimap() {
   for (const h of healthpacks) {
     ctx.fillRect(ox + (h.x/TILE)*S - 1, oy + (h.y/TILE)*S - 1, 3, 3);
   }
+  // Ammopacks
+  ctx.fillStyle = '#ccaa00';
+  for (const a of ammopacks) {
+    ctx.fillRect(ox + (a.x/TILE)*S - 1, oy + (a.y/TILE)*S - 1, 3, 3);
+  }
   // Player
   ctx.fillStyle = '#00ff88';
   ctx.fillRect(ox + (player.x/TILE)*S - 2, oy + (player.y/TILE)*S - 2, 4, 4);
@@ -1411,7 +1500,9 @@ function loop(now) {
   updateParticles();
   updateReload(now);
   tryTimerHealthpack();
+  tryTimerAmmopack();
   updateHealthpacks();
+  updateAmmopacks();
 
   // death animations
   for (let i = zombies.length - 1; i >= 0; i--) {
@@ -1427,6 +1518,7 @@ function loop(now) {
   drawMap();
   drawBloodDecals();
   drawHealthpacks();
+  drawAmmopacks();
   drawParticles();
   drawBullets();
   drawSpitterProjectiles();
