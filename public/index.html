@@ -19,10 +19,10 @@
   }
   #wrapper {
     position: relative;
-    width: 800px;
-    height: 600px;
+    width: 100vw;
+    height: 100vh;
   }
-  canvas { display: block; cursor: crosshair; }
+  canvas { display: block; cursor: crosshair; width: 100%; height: 100%; }
   #hud {
     position: absolute;
     top: 0; left: 0; right: 0;
@@ -224,7 +224,7 @@
 </head>
 <body>
 <div id="wrapper">
-  <canvas id="c" width="800" height="600"></canvas>
+  <canvas id="c"></canvas>
 
   <div id="hud">
     <div class="hud-box">
@@ -373,10 +373,21 @@ checkToken();
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
+
+// dynamische Canvas-Größe
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  W = canvas.width;
+  H = canvas.height;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+let W = canvas.width, H = canvas.height;
 
 // ── CONFIG ──────────────────────────────────────────
-const TILE = 40;
+let TILE = 40;
 const PLAYER_R = 12;
 const ZOMBIE_R = 13;
 const BULLET_R = 4;
@@ -416,25 +427,63 @@ function pickZombieType(wave) {
 }
 
 // ── MAP ─────────────────────────────────────────────
-// 0=floor, 1=wall
-const COLS = 20, ROWS = 15;
-const MAP = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0,0,1],
-  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1],
-  [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
-  [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
-  [1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1],
-  [1,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1],
-  [1,0,0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-];
+// 0=floor, 1=wall — dynamisch generiert
+let COLS, ROWS, MAP;
+
+function generateMap() {
+  COLS = Math.floor(W / TILE);
+  ROWS = Math.floor(H / TILE);
+  if (COLS < 10) COLS = 10;
+  if (ROWS < 8) ROWS = 8;
+
+  MAP = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) {
+      if (r === 0 || r === ROWS-1 || c === 0 || c === COLS-1) {
+        row.push(1); // rand
+      } else {
+        row.push(0);
+      }
+    }
+    MAP.push(row);
+  }
+
+  // symmetrische Hindernisse platzieren
+  const midC = Math.floor(COLS / 2);
+  const midR = Math.floor(ROWS / 2);
+
+  // ecken-cluster (oben-links + gespiegelt)
+  const cx1 = Math.floor(COLS * 0.22);
+  const cy1 = Math.floor(ROWS * 0.2);
+  placeWall(cx1, cy1); placeWall(cx1+1, cy1);
+  placeWall(cx1, cy1+1);
+  placeWall(COLS-1-cx1, cy1); placeWall(COLS-2-cx1, cy1);
+  placeWall(COLS-1-cx1, cy1+1);
+  placeWall(cx1, ROWS-1-cy1); placeWall(cx1+1, ROWS-1-cy1);
+  placeWall(cx1, ROWS-2-cy1);
+  placeWall(COLS-1-cx1, ROWS-1-cy1); placeWall(COLS-2-cx1, ROWS-1-cy1);
+  placeWall(COLS-1-cx1, ROWS-2-cy1);
+
+  // mitte-pillar
+  const px = Math.floor(COLS * 0.4);
+  const py = Math.floor(ROWS * 0.33);
+  placeWall(px, py); placeWall(px, py+1);
+  placeWall(COLS-1-px, py); placeWall(COLS-1-px, py+1);
+  placeWall(px, ROWS-1-py); placeWall(px, ROWS-2-py);
+  placeWall(COLS-1-px, ROWS-1-py); placeWall(COLS-1-px, ROWS-2-py);
+
+  // seiten-blocker
+  const sy = midR;
+  placeWall(2, sy); placeWall(2, sy-1);
+  placeWall(COLS-3, sy); placeWall(COLS-3, sy-1);
+}
+
+function placeWall(c, r) {
+  if (r > 0 && r < ROWS-1 && c > 0 && c < COLS-1) MAP[r][c] = 1;
+}
+
+generateMap();
 
 function isWall(x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
@@ -448,15 +497,19 @@ function wallCollide(x, y, r) {
 }
 
 // ── SPAWNING ────────────────────────────────────────
-const SPAWN_EDGES = [];
-for (let col = 1; col < COLS-1; col++) {
-  SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: TILE+TILE/2 });
-  SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: (ROWS-2)*TILE+TILE/2 });
+let SPAWN_EDGES = [];
+function rebuildSpawnEdges() {
+  SPAWN_EDGES = [];
+  for (let col = 1; col < COLS-1; col++) {
+    SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: TILE+TILE/2 });
+    SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: (ROWS-2)*TILE+TILE/2 });
+  }
+  for (let row = 1; row < ROWS-1; row++) {
+    SPAWN_EDGES.push({ x: TILE+TILE/2, y: row*TILE+TILE/2 });
+    SPAWN_EDGES.push({ x: (COLS-2)*TILE+TILE/2, y: row*TILE+TILE/2 });
+  }
 }
-for (let row = 1; row < ROWS-1; row++) {
-  SPAWN_EDGES.push({ x: TILE+TILE/2, y: row*TILE+TILE/2 });
-  SPAWN_EDGES.push({ x: (COLS-2)*TILE+TILE/2, y: row*TILE+TILE/2 });
-}
+rebuildSpawnEdges();
 
 // ── STATE ───────────────────────────────────────────
 let player, bullets, zombies, particles, bloodDecals;
@@ -472,8 +525,14 @@ let currentLevel;
 let keys = {};
 
 function init() {
+  // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
+  generateMap();
+  rebuildSpawnEdges();
+
+  const mapW = COLS * TILE;
+  const mapH = ROWS * TILE;
   player = {
-    x: W/2, y: H/2,
+    x: mapW/2, y: mapH/2,
     hp: 100, maxHp: 100,
     ammo: MAX_AMMO,
     speed: 2.8,
@@ -547,6 +606,7 @@ function showWaveBanner(txt) {
 
 // ── INPUT ────────────────────────────────────────────
 document.addEventListener('keydown', e => {
+  if (document.activeElement.tagName === 'INPUT') return;
   keys[e.code] = true;
   if (e.code === 'KeyR' && !reloading && player.ammo < MAX_AMMO) startReload();
   e.preventDefault();
