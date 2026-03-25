@@ -703,89 +703,102 @@ function drawBullets() {
   }
 }
 
+const ZOMBIE_TYPES = {
+  normal:  { body: '#2d4a1e', skin: '#8aaa60', arm: '#3a5528', leg: '#2a3a1a', scale: 1.0 },
+  runner:  { body: '#cc6600', skin: '#ffaa44', arm: '#aa5500', leg: '#884400', scale: 0.85 },
+  tank:    { body: '#661111', skin: '#aa4444', arm: '#551111', leg: '#440000', scale: 1.5 },
+  spitter: { body: '#663399', skin: '#9966cc', arm: '#552288', leg: '#441177', scale: 1.0 },
+};
+
 function drawZombie(z) {
-  if (!z.alive) return;
+  if (!z.alive && !z.deathTimer) return;
+
+  const t = ZOMBIE_TYPES[z.type] || ZOMBIE_TYPES.normal;
+  const s = t.scale;
+
   ctx.save();
   ctx.translate(z.x, z.y);
-  ctx.rotate(z.angle + Math.PI/2);
 
-  const wobble = Math.sin(z.wobble) * 0.12;
+  // death animation
+  if (!z.alive && z.deathTimer > 0) {
+    const prog = 1 - z.deathTimer / 30;
+    ctx.globalAlpha = 1 - prog;
+    ctx.rotate(prog * 1.5);
+  }
+
+  // shadow
+  ctx.save();
+  ctx.globalAlpha *= 0.25;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 10*s, 6*s, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.rotate(z.angle);
+
+  const wobble = Math.sin(z.wobble) * 0.1;
   ctx.rotate(wobble);
 
-  // Shadow
-  ctx.save();
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = '#000';
-  ctx.scale(1, 0.5);
-  ctx.beginPath();
-  ctx.ellipse(0, 16, 10, 6, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-
-  // Legs (walking animation)
+  // legs
   const legSwing = Math.sin(z.frame * 0.18) * 5;
-  ctx.fillStyle = '#2a3a1a';
-  // Left leg
+  ctx.fillStyle = t.leg;
   ctx.save();
-  ctx.translate(-5, 8);
-  ctx.rotate(legSwing * 0.1);
-  ctx.fillRect(-3, 0, 6, 10);
+  ctx.translate(-3*s, -5*s);
+  ctx.rotate(legSwing * 0.08);
+  ctx.fillRect(-2*s, 0, 5*s, 8*s);
   ctx.restore();
-  // Right leg
   ctx.save();
-  ctx.translate(5, 8);
-  ctx.rotate(-legSwing * 0.1);
-  ctx.fillRect(-3, 0, 6, 10);
+  ctx.translate(-3*s, 5*s);
+  ctx.rotate(-legSwing * 0.08);
+  ctx.fillRect(-2*s, 0, 5*s, 8*s);
   ctx.restore();
 
-  // Body
-  ctx.fillStyle = '#2d4a1e';
+  // body
+  ctx.fillStyle = t.body;
   ctx.beginPath();
-  ctx.roundRect(-8, -4, 16, 16, 2);
+  ctx.roundRect(-6*s, -8*s, 12*s, 16*s, 2*s);
   ctx.fill();
 
-  // Arms (outstretched)
-  ctx.fillStyle = '#3a5528';
-  const armSwing = Math.sin(z.wobble * 0.5) * 4;
-  // Left arm
+  // arms (outstretched forward)
+  ctx.fillStyle = t.arm;
+  const armSwing = Math.sin(z.wobble * 0.5) * 3;
   ctx.save();
-  ctx.translate(-10, 2 + armSwing);
-  ctx.rotate(-0.4);
-  ctx.fillRect(-3, -3, 6, 12);
+  ctx.translate(4*s, (-6 + armSwing)*s);
+  ctx.fillRect(0, -2*s, 10*s, 4*s);
   ctx.restore();
-  // Right arm
   ctx.save();
-  ctx.translate(10, 2 - armSwing);
-  ctx.rotate(0.4);
-  ctx.fillRect(-3, -3, 6, 12);
+  ctx.translate(4*s, (6 - armSwing)*s);
+  ctx.fillRect(0, -2*s, 10*s, 4*s);
   ctx.restore();
 
-  // Head
-  ctx.fillStyle = '#8aaa60';
+  // head
+  ctx.fillStyle = t.skin;
   ctx.beginPath();
-  ctx.ellipse(0, -10, 9, 10, 0, 0, Math.PI*2);
+  ctx.arc(0, 0, 7*s, 0, Math.PI*2);
   ctx.fill();
 
-  // Eyes (glowing red)
+  // eyes
   ctx.save();
-  ctx.shadowBlur = 8;
+  ctx.shadowBlur = 6;
   ctx.shadowColor = '#ff2200';
   ctx.fillStyle = '#ff3300';
   ctx.beginPath();
-  ctx.arc(-3.5, -11, 2.5, 0, Math.PI*2);
+  ctx.arc(4*s, -2.5*s, 2*s, 0, Math.PI*2);
   ctx.fill();
   ctx.beginPath();
-  ctx.arc(3.5, -11, 2.5, 0, Math.PI*2);
+  ctx.arc(4*s, 2.5*s, 2*s, 0, Math.PI*2);
   ctx.fill();
   ctx.restore();
 
-  // HP bar (only if damaged)
+  // hp bar (only if damaged)
   if (z.hp < z.maxHp) {
-    const bw = 20, bh = 3;
+    ctx.rotate(-z.angle - wobble); // undo rotation so bar is horizontal
+    const bw = 20*s, bh = 3;
     ctx.fillStyle = '#400';
-    ctx.fillRect(-bw/2, 14, bw, bh);
+    ctx.fillRect(-bw/2, -14*s, bw, bh);
     ctx.fillStyle = '#0f0';
-    ctx.fillRect(-bw/2, 14, bw * (z.hp / z.maxHp), bh);
+    ctx.fillRect(-bw/2, -14*s, bw * (z.hp / z.maxHp), bh);
   }
 
   ctx.restore();
@@ -795,56 +808,59 @@ function drawPlayer() {
   ctx.save();
   ctx.translate(player.x, player.y);
 
-  // Shadow
+  // shadow (before rotation)
   ctx.save();
   ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#000';
-  ctx.scale(1, 0.5);
   ctx.beginPath();
-  ctx.ellipse(0, 18, 12, 6, 0, 0, Math.PI*2);
+  ctx.ellipse(0, 2, 12, 7, 0, 0, Math.PI*2);
   ctx.fill();
   ctx.restore();
 
-  // Body
-  ctx.rotate(player.angle + Math.PI/2);
+  ctx.rotate(player.angle);
 
-  // Boots
-  ctx.fillStyle = '#333';
-  ctx.fillRect(-7, 10, 5, 8);
-  ctx.fillRect(2, 10, 5, 8);
-
-  // Pants
+  // legs (behind body)
+  const legSwing = Math.sin(frameCount * 0.15) * 4;
   ctx.fillStyle = '#445566';
-  ctx.fillRect(-7, 4, 14, 8);
+  ctx.save();
+  ctx.translate(-2, -5);
+  ctx.rotate(legSwing * 0.08);
+  ctx.fillRect(-3, 0, 5, 9);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-2, 5);
+  ctx.rotate(-legSwing * 0.08);
+  ctx.fillRect(-3, 0, 5, 9);
+  ctx.restore();
 
-  // Torso
+  // boots
+  ctx.fillStyle = '#333';
+  ctx.fillRect(-5, -6, 4, 4);
+  ctx.fillRect(-5, 4, 4, 4);
+
+  // torso
   ctx.fillStyle = '#556644';
   ctx.beginPath();
-  ctx.roundRect(-8, -6, 16, 12, 2);
+  ctx.roundRect(-6, -8, 12, 16, 2);
   ctx.fill();
 
-  // Gun arm
+  // gun arm + barrel
   ctx.fillStyle = '#445533';
-  ctx.save();
-  ctx.translate(8, 0);
-  ctx.fillRect(0, -3, 14, 5);
-  // Gun barrel
+  ctx.fillRect(4, -2, 12, 4);
   ctx.fillStyle = '#222';
-  ctx.fillRect(10, -2, 8, 3);
-  ctx.restore();
+  ctx.fillRect(14, -1.5, 8, 3);
 
-  // Head
+  // head
   ctx.fillStyle = '#c8a070';
   ctx.beginPath();
-  ctx.ellipse(0, -12, 8, 9, 0, 0, Math.PI*2);
+  ctx.arc(0, 0, 7, 0, Math.PI*2);
   ctx.fill();
 
-  // Helmet
+  // helmet
   ctx.fillStyle = '#445533';
   ctx.beginPath();
-  ctx.ellipse(0, -15, 9, 7, 0, 0, Math.PI*2, true, false);
+  ctx.arc(1, 0, 8, -Math.PI*0.45, Math.PI*0.45);
   ctx.fill();
-  ctx.fillRect(-9, -15, 18, 4);
 
   ctx.restore();
 }
