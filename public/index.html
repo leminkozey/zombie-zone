@@ -375,6 +375,7 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 // dynamische Canvas-Größe
+let W, H;
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -383,8 +384,6 @@ function resizeCanvas() {
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
-
-let W = canvas.width, H = canvas.height;
 
 // ── CONFIG ──────────────────────────────────────────
 let TILE = 40;
