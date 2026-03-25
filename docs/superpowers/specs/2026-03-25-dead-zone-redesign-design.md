@@ -51,9 +51,25 @@ CREATE TABLE users (
 ### Auth-Flow
 
 1. User registriert/loggt ein im Hauptmenü
-2. JWT wird im localStorage gespeichert
-3. Jeder API-Call schickt JWT im Authorization-Header
+2. JWT wird im localStorage gespeichert (24h Gültigkeit)
+3. Jeder API-Call schickt JWT im Authorization-Header (`Bearer <token>`)
 4. Nach Game-Over wird gesammelte XP ans Backend gesendet
+5. Bei abgelaufenem Token: automatisch zum Login-Screen zurück
+
+### JWT Secret
+
+Wird beim ersten Serverstart zufällig generiert und in `data/secret.key` gespeichert. Beim nächsten Start wiederverwendet.
+
+### Error Responses
+
+Alle API-Fehler als JSON: `{ "error": "Fehlermeldung" }`
+
+| Situation | Status Code | Error |
+|-----------|-------------|-------|
+| Username existiert schon | 409 | "Name already taken" |
+| Falsches Passwort | 401 | "Invalid credentials" |
+| Token abgelaufen/ungültig | 401 | "Token expired" |
+| Fehlende Felder | 400 | "Name and password required" |
 
 ## Frontend
 
@@ -74,7 +90,8 @@ Fix:
 - Sprites komplett neu zeichnen — Kopf oben (negatives Y), Füße unten (positives Y)
 - `+Math.PI/2` Offset entfernen
 - Proportionen korrigieren: Kopf kleiner als Körper, Arme seitlich
-- Player und alle Zombie-Typen konsistent zeichnen
+- Bestehende `drawZombie()` ersetzen durch typ-basiertes Rendering (`drawZombie(z)` liest `z.type` und rendert entsprechend)
+- Jeder Zombie-Typ hat eigene Farben und Größe, aber gleiche Grundstruktur (Kopf, Körper, Arme, Beine)
 
 ### Zombie-Typen
 
@@ -89,7 +106,7 @@ HP skaliert weiterhin mit Wave-Nummer.
 
 Spawn-Gewichtung pro Wave:
 - Wave 1: 100% Normal
-- Wave 2-3: 70% Normal, 30% Runner
+- Wave 2: 70% Normal, 30% Runner
 - Wave 3-4: 50% Normal, 25% Runner, 25% Tank
 - Wave 5+: 40% Normal, 25% Runner, 20% Tank, 15% Spitter
 
@@ -97,14 +114,16 @@ Spawn-Gewichtung pro Wave:
 
 - Minecraft-Style XP-Bar: grüner Balken am unteren Bildschirmrand
 - XP-Anzeige: aktuelles Level + XP-Bar-Fortschritt
-- Level-Schwellen (exponentiell steigend):
+- Level-Schwellen (feste Tabelle):
   - Level 1: 0 XP
   - Level 2: 50 XP
-  - Level 3: 120 XP
-  - Level 4: 220 XP
-  - Level N: `floor(30 * N^1.5)` XP kumulativ
+  - Level 3: 150 XP
+  - Level 4: 300 XP
+  - Level 5: 500 XP
+  - Danach: +250 XP pro Level
 - Level-Up Effekt: kurzer Flash + Text "LEVEL UP!"
-- XP wird lokal im Spiel gesammelt und bei Game-Over ans Backend gesendet (addiert)
+- XP wird lokal im Spiel gesammelt und bei Game-Over ans Backend gesendet (addiert auf bestehende XP)
+- HP-Cap: Heilung kann nicht über maxHp (100) hinausgehen
 
 ### Heilungs-Items
 
@@ -115,6 +134,14 @@ Spawn-Gewichtung pro Wave:
 - **Despawn:** Nach 10 Sekunden, blinkt in den letzten 3 Sekunden
 - **Limit:** Max 3 gleichzeitig auf dem Spielfeld
 - **Pickup-Radius:** Spieler muss drüberlaufen (Collision mit Player-Radius)
+- **Spawn-Logik:** Zufällige freie Bodenkachel wählen, Mindestabstand 3 Tiles zum Spieler
+- **Drop-Timing:** Healthpack erscheint sofort bei Zombie-Kill (nicht nach Tod-Animation)
+
+### Zombie-Tod
+
+- Zombie wird sofort als `alive = false` markiert (keine Kollision mehr, zählt als Kill)
+- Tod-Animation ist rein visuell (Rotation + Fade über 0.5s), blockiert nichts
+- Spitter-Projektile die bereits fliegen bleiben aktiv nach Spitter-Tod
 
 ### Animationen (verbessert)
 
@@ -127,9 +154,9 @@ Spawn-Gewichtung pro Wave:
 
 ### Zombie-Logik (verbessert)
 
-- **Wand-Ausweichen:** Raycast in Bewegungsrichtung. Bei Wand: seitlich ausweichen (zufällige Seite wählen, dann beibehalten bis frei)
+- **Wand-Ausweichen:** Einfache Voraus-Prüfung (1 Tile voraus checken). Bei Wand: seitlich ausweichen (zufällige Seite wählen, dann beibehalten bis frei)
 - **Aggression:** Zombie-Speed erhöht sich um 20% wenn Spieler unter 30% HP
-- **Spitter-KI:** Hält 150-200px Abstand zum Spieler, schießt Projektile (langsamer als Spieler-Kugeln, machen 10 Schaden)
+- **Spitter-KI:** Hält 150-200px Abstand zum Spieler, schießt Projektile alle 2.5 Sekunden (Speed: 5px/frame, 10 Schaden)
 - **Spitter-Projektile:** Grün/lila Kugeln, werden durch Wände blockiert
 
 ## Nicht im Scope
