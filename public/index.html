@@ -321,6 +321,31 @@ const BULLET_SPD = 9;
 const MAX_AMMO = 30;
 const RELOAD_MS = 1800;
 
+const ZOMBIE_CONFIGS = {
+  normal:  { hpBase: [2, 3], hpScale: 1, speedMult: 1.0, xp: 10, radius: ZOMBIE_R },
+  runner:  { hpBase: [1, 2], hpScale: 0.5, speedMult: 2.0, xp: 25, radius: ZOMBIE_R * 0.85 },
+  tank:    { hpBase: [8, 10], hpScale: 2, speedMult: 0.5, xp: 50, radius: ZOMBIE_R * 1.5 },
+  spitter: { hpBase: [3, 4], hpScale: 1, speedMult: 0.7, xp: 40, radius: ZOMBIE_R },
+};
+
+function getSpawnWeights(wave) {
+  if (wave <= 1) return { normal: 1 };
+  if (wave <= 2) return { normal: 0.7, runner: 0.3 };
+  if (wave <= 4) return { normal: 0.5, runner: 0.25, tank: 0.25 };
+  return { normal: 0.4, runner: 0.25, tank: 0.2, spitter: 0.15 };
+}
+
+function pickZombieType(wave) {
+  const weights = getSpawnWeights(wave);
+  const roll = Math.random();
+  let cumulative = 0;
+  for (const [type, weight] of Object.entries(weights)) {
+    cumulative += weight;
+    if (roll < cumulative) return type;
+  }
+  return 'normal';
+}
+
 // ── MAP ─────────────────────────────────────────────
 // 0=floor, 1=wall
 const COLS = 20, ROWS = 15;
@@ -411,16 +436,26 @@ function startNextWave() {
 
 function spawnZombie() {
   const edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
-  const spd = 0.7 + wave * 0.12 + Math.random() * 0.3;
+  const type = pickZombieType(wave);
+  const cfg = ZOMBIE_CONFIGS[type];
+  const baseSpd = 0.7 + wave * 0.12 + Math.random() * 0.3;
+  const baseHp = cfg.hpBase[0] + Math.floor(Math.random() * (cfg.hpBase[1] - cfg.hpBase[0] + 1));
+  const hp = baseHp + Math.floor(wave / 3) * cfg.hpScale;
+
   zombies.push({
     x: edge.x, y: edge.y,
-    hp: 2 + Math.floor(wave / 3),
-    maxHp: 2 + Math.floor(wave / 3),
-    speed: Math.min(spd, 2.5),
+    type,
+    hp, maxHp: hp,
+    speed: Math.min(baseSpd * cfg.speedMult, 3.5),
+    radius: cfg.radius,
+    xp: cfg.xp,
     angle: 0,
     wobble: Math.random() * Math.PI * 2,
     frame: 0,
     alive: true,
+    deathTimer: 0,
+    avoidDir: 0,
+    shootCooldown: type === 'spitter' ? 150 : 0,
   });
 }
 
@@ -558,7 +593,7 @@ function updateZombies() {
     }
 
     // Zombie hits player
-    if (dist < PLAYER_R + ZOMBIE_R - 2) {
+    if (dist < PLAYER_R + z.radius - 2) {
       if (!z.hitting || frameCount - z.lastHit > 40) {
         player.hp -= 8;
         hurtFlash = 18;
@@ -577,8 +612,8 @@ function updateZombies() {
       if (z2 === z || !z2.alive) continue;
       const ex = z.x - z2.x, ey = z.y - z2.y;
       const ed = Math.sqrt(ex*ex+ey*ey);
-      if (ed < ZOMBIE_R * 2 && ed > 0) {
-        const push = (ZOMBIE_R * 2 - ed) / 2 * 0.3;
+      if (ed < z.radius + z2.radius && ed > 0) {
+        const push = (z.radius + z2.radius - ed) / 2 * 0.3;
         z.x += (ex/ed)*push; z.y += (ey/ed)*push;
         z2.x -= (ex/ed)*push; z2.y -= (ey/ed)*push;
       }
@@ -602,15 +637,16 @@ function updateBullets() {
     for (const z of zombies) {
       if (!z.alive) continue;
       const dx = b.x - z.x, dy = b.y - z.y;
-      if (dx*dx + dy*dy < (BULLET_R + ZOMBIE_R)**2) {
+      if (dx*dx + dy*dy < (BULLET_R + z.radius)**2) {
         z.hp--;
         spawnBlood(z.x, z.y, 6);
         bullets.splice(i, 1);
         hit = true;
         if (z.hp <= 0) {
           z.alive = false;
-          score += 100 * wave;
-          sessionXp += 10 * wave;
+          z.deathTimer = 30;
+          score += z.xp;
+          sessionXp += z.xp;
           waveKills++;
           spawnBlood(z.x, z.y, 16);
           updateHUD();
@@ -950,6 +986,15 @@ function loop(now) {
   updateBullets();
   updateParticles();
   updateReload(now);
+
+  // death animations
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const z = zombies[i];
+    if (!z.alive && z.deathTimer > 0) {
+      z.deathTimer--;
+      if (z.deathTimer <= 0) zombies.splice(i, 1);
+    }
+  }
 
   // Draw
   ctx.clearRect(0, 0, W, H);
