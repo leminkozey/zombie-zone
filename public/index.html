@@ -235,6 +235,7 @@
     <div class="hud-box" style="text-align:center">
       <div id="wave-info">WAVE 1</div>
       <div class="hud-label" style="margin-top:2px" id="kill-count">0 / 0</div>
+      <div class="hud-label" id="hud-username" style="margin-top:4px;color:#666"></div>
     </div>
     <div class="hud-box" style="text-align:right">
       <div class="hud-label">Ammo</div>
@@ -330,10 +331,25 @@ function doLogout() {
   document.getElementById('overlay').style.display = 'none';
 }
 
-function showGameMenu() {
+async function showGameMenu() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('overlay').style.display = 'flex';
-  document.getElementById('user-display').textContent = currentUser.toUpperCase();
+  document.getElementById('user-display').textContent = currentUser ? currentUser.toUpperCase() : '';
+
+  // fetch total xp
+  if (authToken) {
+    try {
+      const res = await fetch('/api/profile', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const totalLevel = getLevelFromXp(data.xp);
+        document.getElementById('user-display').textContent =
+          (currentUser ? currentUser.toUpperCase() : '') + ' — LVL ' + totalLevel + ' (' + data.xp + ' XP)';
+      }
+    } catch {}
+  }
 }
 
 // auto-login if token exists
@@ -650,6 +666,7 @@ function showLevelUp() {
 
 // ── PARTICLES ────────────────────────────────────────
 function spawnBlood(x, y, count = 8) {
+  if (bloodDecals.length > 200) bloodDecals.shift();
   bloodDecals.push({ x, y, r: 6 + Math.random()*6, alpha: 0.55 });
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
@@ -1336,6 +1353,7 @@ function loop(now) {
 }
 
 document.getElementById('start-btn').addEventListener('click', () => {
+  document.getElementById('hud-username').textContent = currentUser ? currentUser.toUpperCase() : '';
   document.getElementById('overlay').style.display = 'none';
   init();
   requestAnimationFrame(loop);
