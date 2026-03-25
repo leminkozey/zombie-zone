@@ -391,6 +391,7 @@ for (let row = 1; row < ROWS-1; row++) {
 
 // ── STATE ───────────────────────────────────────────
 let player, bullets, zombies, particles, bloodDecals;
+let spitterProjectiles;
 let wave, waveKills, waveTotal, waveActive;
 let reloading, reloadStart;
 let hurtFlash, mouseX, mouseY, running;
@@ -406,7 +407,7 @@ function init() {
     angle: 0,
     shootCooldown: 0,
   };
-  bullets = []; zombies = []; particles = []; bloodDecals = [];
+  bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   wave = 0; waveKills = 0; waveTotal = 0; waveActive = false;
   reloading = false; reloadStart = 0;
   hurtFlash = 0; score = 0; frameCount = 0; sessionXp = 0;
@@ -584,12 +585,41 @@ function updateZombies() {
     const dist = Math.sqrt(dx*dx + dy*dy);
     z.angle = Math.atan2(dy, dx);
 
-    if (dist > 1) {
+    // spitter distance-keeping
+    if (z.type === 'spitter' && dist > 1) {
+      if (dist < 150) {
+        // flee from player
+        const spd = z.speed;
+        const fleeX = z.x - (dx/dist) * spd;
+        const fleeY = z.y - (dy/dist) * spd;
+        if (!wallCollide(fleeX, z.y, z.radius - 2)) z.x = fleeX;
+        if (!wallCollide(z.x, fleeY, z.radius - 2)) z.y = fleeY;
+      }
+      // if dist 150-200, do nothing (hold position)
+      // if dist > 200, fall through to normal movement below
+    }
+
+    if (!(z.type === 'spitter' && dist <= 200) && dist > 1) {
       const spd = z.speed;
       const nx = z.x + (dx/dist) * spd;
       const ny = z.y + (dy/dist) * spd;
       if (!wallCollide(nx, z.y, ZOMBIE_R - 2)) z.x = nx;
       if (!wallCollide(z.x, ny, ZOMBIE_R - 2)) z.y = ny;
+    }
+
+    // spitter shooting
+    if (z.type === 'spitter' && z.alive) {
+      z.shootCooldown--;
+      if (z.shootCooldown <= 0 && dist < 300) {
+        z.shootCooldown = 150; // ~2.5s at 60fps
+        const shootAngle = Math.atan2(player.y - z.y, player.x - z.x);
+        spitterProjectiles.push({
+          x: z.x, y: z.y,
+          dx: Math.cos(shootAngle) * 5,
+          dy: Math.sin(shootAngle) * 5,
+          life: 80,
+        });
+      }
     }
 
     // Zombie hits player
@@ -670,6 +700,43 @@ function updateParticles() {
     p.dx *= 0.88; p.dy *= 0.88;
     p.life--;
     if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function updateSpitterProjectiles() {
+  for (let i = spitterProjectiles.length - 1; i >= 0; i--) {
+    const p = spitterProjectiles[i];
+    p.x += p.dx; p.y += p.dy;
+    p.life--;
+
+    if (p.life <= 0 || wallCollide(p.x, p.y, 3)) {
+      spitterProjectiles.splice(i, 1);
+      continue;
+    }
+
+    // hit player
+    const dx = p.x - player.x, dy = p.y - player.y;
+    if (dx*dx + dy*dy < (6 + PLAYER_R)**2) {
+      player.hp -= 10;
+      hurtFlash = 18;
+      spawnBlood(player.x, player.y, 4);
+      spitterProjectiles.splice(i, 1);
+      if (player.hp <= 0) { player.hp = 0; gameOver(); }
+      updateHUD();
+    }
+  }
+}
+
+function drawSpitterProjectiles() {
+  for (const p of spitterProjectiles) {
+    ctx.save();
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#663399';
+    ctx.fillStyle = '#99ff66';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -984,6 +1051,7 @@ function loop(now) {
   if (mouseDown) tryShoot();
   updateZombies();
   updateBullets();
+  updateSpitterProjectiles();
   updateParticles();
   updateReload(now);
 
@@ -1002,6 +1070,7 @@ function loop(now) {
   drawBloodDecals();
   drawParticles();
   drawBullets();
+  drawSpitterProjectiles();
   zombies.forEach(drawZombie);
   drawPlayer();
   drawMinimap();
