@@ -772,10 +772,7 @@ function generateMap() {
   placeWall(px, ROWS-1-py); placeWall(px, ROWS-2-py);
   placeWall(COLS-1-px, ROWS-1-py); placeWall(COLS-1-px, ROWS-2-py);
 
-  // seiten-blocker
-  const sy = midR;
-  placeWall(2, sy); placeWall(2, sy-1);
-  placeWall(COLS-3, sy); placeWall(COLS-3, sy-1);
+  // seiten-blocker entfernt — Zombies blieben dort stecken
 }
 
 function placeWall(c, r) {
@@ -2811,18 +2808,7 @@ function updateHUD() {
     document.getElementById('shield-bar').style.width = (shieldPct * 100) + '%';
   }
 
-  const dashEl = document.getElementById('dash-display');
-  if (getPlayerStat('dashUnlocked')) {
-    dashEl.style.display = 'flex';
-    dashEl.innerHTML = '';
-    for (const c of dashCharges) {
-      const pip = document.createElement('div');
-      pip.style.cssText = 'width:8px;height:20px;margin:0 2px;border:1px solid ' + (c.ready ? '#33aaff' : '#333') + ';background:' + (c.ready ? '#33aaff44' : 'transparent');
-      dashEl.appendChild(pip);
-    }
-  } else {
-    dashEl.style.display = 'none';
-  }
+  // Dash display is updated in updateDash() every frame
 }
 
 // ── XP SYNC ─────────────────────────────────────────
@@ -2960,6 +2946,25 @@ function updateDash() {
   }
 
   if (bulletTimeTimer > 0) bulletTimeTimer--;
+
+  // Update dash HUD every frame
+  const dashEl = document.getElementById('dash-display');
+  if (getPlayerStat('dashUnlocked') && dashCharges.length > 0) {
+    dashEl.style.display = 'flex';
+    for (let i = 0; i < dashCharges.length; i++) {
+      let pip = dashEl.children[i];
+      if (!pip) {
+        pip = document.createElement('div');
+        dashEl.appendChild(pip);
+      }
+      const ready = dashCharges[i].ready;
+      pip.style.cssText = 'width:8px;height:16px;border:1px solid ' + (ready ? '#33aaff' : '#333') + ';background:' + (ready ? '#33aaff44' : 'transparent');
+    }
+    // Remove extra pips
+    while (dashEl.children.length > dashCharges.length) dashEl.removeChild(dashEl.lastChild);
+  } else {
+    dashEl.style.display = 'none';
+  }
 }
 
 function drawDashAfterimage() {
