@@ -38,8 +38,8 @@
     clip-path: polygon(0 0, 100% 0, 100% 100%, 6px 100%, 0 calc(100% - 6px));
     backdrop-filter: blur(4px);
   }
-  .hud-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #505060; letter-spacing: 3px; text-transform: uppercase; }
-  .hud-val { font-family: 'Bebas Neue', sans-serif; font-size: 34px; color: #e0e0e8; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+  .hud-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #505060; letter-spacing: 3px; text-transform: uppercase; }
+  .hud-val { font-family: 'Bebas Neue', sans-serif; font-size: 40px; color: #e0e0e8; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
   .hud-val.danger { color: #ee2200; animation: pulse 0.4s infinite alternate; text-shadow: 0 0 8px rgba(238,34,0,0.4); }
   #hp-bar-wrap { width: 100%; height: 5px; background: #1a1a22; margin-top: 5px; clip-path: polygon(0 0, 100% 0, calc(100% - 3px) 100%, 0 100%); position: relative; }
   #hp-bar { height: 5px; background: #33cc44; transition: width 0.2s, background 0.3s; }
@@ -98,12 +98,12 @@
   #overlay .hint { color: #404050; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 2.4; text-align: center; letter-spacing: 1px; }
   .start-btn {
     margin-top: 12px;
-    border: 1px solid #ee2200;
+    border: 2px solid #ee2200;
     color: #ee2200;
-    padding: 12px 48px;
+    padding: 16px 56px;
     font-family: 'Oswald', 'Bebas Neue', sans-serif;
     font-weight: 600;
-    font-size: 18px;
+    font-size: 22px;
     letter-spacing: 6px;
     cursor: pointer;
     background: transparent;
@@ -296,17 +296,17 @@
     transition: opacity 0.3s;
   }
   .menu-tab {
-    background: transparent; border: none; border-bottom: 2px solid transparent;
-    font-family: 'Oswald', sans-serif; font-size: 12px; font-weight: 600;
-    letter-spacing: 3px; color: #404855; cursor: pointer; padding: 12px 20px;
+    background: transparent; border: none; border-bottom: 3px solid transparent;
+    font-family: 'Oswald', sans-serif; font-size: 15px; font-weight: 600;
+    letter-spacing: 4px; color: #404855; cursor: pointer; padding: 16px 28px;
     transition: all 0.15s; position: relative;
   }
   .menu-tab:hover { color: #8090a0; }
   .menu-tab.active { color: #ee2200; border-bottom-color: #ee2200; }
   .menu-tab.blink-notify { animation: blink-border 1.2s ease-in-out infinite; }
   .soon-badge {
-    font-size: 8px; background: #1a1e24; color: #556070; padding: 1px 5px;
-    border-radius: 3px; margin-left: 4px; letter-spacing: 1px; vertical-align: middle;
+    font-size: 9px; background: #1a1e24; color: #556070; padding: 2px 6px;
+    border-radius: 3px; margin-left: 6px; letter-spacing: 1px; vertical-align: middle;
   }
   .menu-panel { flex-direction: column; align-items: center; justify-content: center; }
   #panel-lobby { gap: 8px; }
@@ -318,17 +318,17 @@
     display: flex; align-items: center; gap: 8px;
   }
   #panel-lobby .lobby-header .player-name {
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #b0b8c4;
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #b0b8c4;
     letter-spacing: 2px;
   }
   #panel-lobby .lobby-header .level-badge {
-    font-family: 'Oswald', sans-serif; font-size: 10px; color: #33cc44;
+    font-family: 'Oswald', sans-serif; font-size: 12px; color: #33cc44;
     background: rgba(51,204,68,0.1); border: 1px solid rgba(51,204,68,0.25);
     padding: 2px 8px; border-radius: 3px; letter-spacing: 2px;
   }
   #panel-lobby .lobby-header .currency-info {
     display: flex; align-items: center; gap: 14px;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1px;
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; letter-spacing: 1px;
   }
   .currency-gold { color: #ddaa00; }
   .currency-diamonds { color: #44ddff; }
@@ -379,11 +379,11 @@
         <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
       </div>
     </div>
-    <div id="gold-display" style="position:absolute;bottom:55px;right:16px;font-size:11px;color:#ddaa00;font-family:'JetBrains Mono',monospace;pointer-events:none;z-index:5;text-align:right"></div>
+    <div id="gold-display" style="position:absolute;bottom:60px;right:16px;font-size:14px;color:#ddaa00;font-family:'JetBrains Mono',monospace;pointer-events:none;z-index:5;text-align:right"></div>
     <!-- Bottom-right: Dash + Ammo (no box) -->
     <div style="position:absolute;bottom:16px;right:16px;text-align:right;pointer-events:none">
       <div id="dash-display" style="display:none;justify-content:flex-end;gap:3px;margin-bottom:6px"></div>
-      <div class="hud-val" id="ammo-val" style="font-size:28px;color:#ddaa00">30</div>
+      <div class="hud-val" id="ammo-val" style="font-size:36px;color:#ddaa00">30</div>
       <div id="ammo-display"></div>
     </div>
     <!-- Top-left: Username -->
@@ -457,7 +457,7 @@
           <div class="map-option">CITY <span class="lock-label">COMING SOON</span></div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <button class="start-btn" id="start-btn">STARTEN</button>
+          <button class="start-btn" id="start-btn" style="font-size:30px;padding:18px 70px;letter-spacing:8px;border-width:2px">STARTEN</button>
           <a href="#" onclick="doLogout();return false" style="color:#404050;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;transition:color 0.2s" onmouseover="this.style.color='#ee2200'" onmouseout="this.style.color='#404050'">ABMELDEN</a>
         </div>
         <div style="width:120px"></div>
@@ -482,21 +482,21 @@
     <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:row">
       <!-- Left: Weapon list -->
       <div id="arsenal-sidebar" style="width:220px;background:#0a0d10;border-right:1px solid #141a20;padding:16px 0;overflow-y:auto">
-        <div style="font-size:8px;letter-spacing:3px;color:#3a4450;padding:0 16px;margin-bottom:10px">WAFFENLAGER</div>
+        <div style="font-size:10px;letter-spacing:3px;color:#3a4450;padding:0 16px;margin-bottom:12px">WAFFENLAGER</div>
         <div id="weapon-list"></div>
       </div>
       <!-- Center: Weapon display -->
       <div style="flex:1;display:flex;align-items:center;justify-content:center">
         <div style="text-align:center">
-          <div id="arsenal-wpn-name" style="font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:8px;color:#c0ccd8"></div>
-          <div id="arsenal-wpn-type" style="font-size:9px;letter-spacing:3px;color:#3a4450;margin-bottom:20px"></div>
-          <div id="arsenal-wpn-icon" style="font-size:72px;margin-bottom:16px"></div>
+          <div id="arsenal-wpn-name" style="font-family:'Bebas Neue',sans-serif;font-size:52px;letter-spacing:10px;color:#c0ccd8"></div>
+          <div id="arsenal-wpn-type" style="font-size:12px;letter-spacing:3px;color:#3a4450;margin-bottom:24px"></div>
+          <canvas id="arsenal-wpn-canvas" width="320" height="180" style="border:1px solid #141a20;background:#08090c;margin-bottom:20px"></canvas>
           <div id="arsenal-wpn-action"></div>
         </div>
       </div>
       <!-- Right: Stats -->
-      <div id="arsenal-stats" style="width:280px;background:#0a0d10;border-left:1px solid #141a20;padding:20px;overflow-y:auto">
-        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">WAFFENDATEN</div>
+      <div id="arsenal-stats" style="width:320px;background:#0a0d10;border-left:1px solid #141a20;padding:24px;overflow-y:auto">
+        <div style="font-family:'Oswald',sans-serif;font-size:15px;font-weight:600;letter-spacing:3px;color:#8090a0;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid #141a20">WAFFENDATEN</div>
         <div id="stats-container"></div>
       </div>
     </div>
@@ -3818,6 +3818,189 @@ document.getElementById('st-survival').addEventListener('click', () => stSelectP
 document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
 document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
 
+// ── WEAPON PREVIEW DRAWING ──────────────────────────────
+function drawWeaponPreview(ctx, weaponId, scale) {
+  ctx.save();
+  const s = scale || 1;
+  ctx.strokeStyle = '#3a4440';
+  ctx.fillStyle = '#2a2e28';
+  ctx.lineWidth = 1.5;
+
+  const metal = '#3a3e38';
+  const metalDark = '#222624';
+  const metalLight = '#4a5048';
+  const wood = '#3d3525';
+  const woodLight = '#4a3e2e';
+
+  if (weaponId === 'pistol') {
+    // Grip
+    ctx.fillStyle = wood;
+    ctx.fillRect(-8*s, 2*s, 10*s, 14*s);
+    ctx.fillStyle = woodLight;
+    ctx.fillRect(-6*s, 4*s, 2*s, 10*s);
+    // Body/slide
+    ctx.fillStyle = metal;
+    ctx.fillRect(-10*s, -4*s, 28*s, 8*s);
+    ctx.fillStyle = metalLight;
+    ctx.fillRect(-8*s, -4*s, 24*s, 2*s);
+    // Barrel
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(18*s, -2*s, 12*s, 4*s);
+    // Trigger guard
+    ctx.strokeStyle = metal;
+    ctx.lineWidth = 1.5*s;
+    ctx.beginPath();
+    ctx.moveTo(-2*s, 2*s); ctx.lineTo(2*s, 8*s); ctx.lineTo(6*s, 2*s);
+    ctx.stroke();
+    // Sight
+    ctx.fillStyle = '#ee2200';
+    ctx.fillRect(28*s, -3*s, 2*s, 1.5*s);
+
+  } else if (weaponId === 'smg') {
+    // Stock (folded)
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(-22*s, -3*s, 14*s, 6*s);
+    // Body
+    ctx.fillStyle = metal;
+    ctx.fillRect(-8*s, -5*s, 30*s, 10*s);
+    ctx.fillStyle = metalLight;
+    ctx.fillRect(-6*s, -5*s, 26*s, 2.5*s);
+    // Magazine (extends down)
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(4*s, 5*s, 6*s, 14*s);
+    // Barrel
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(22*s, -2.5*s, 14*s, 5*s);
+    // Foregrip
+    ctx.fillStyle = wood;
+    ctx.fillRect(14*s, 5*s, 6*s, 8*s);
+    // Sight
+    ctx.fillStyle = '#ee2200';
+    ctx.fillRect(34*s, -3.5*s, 2*s, 1.5*s);
+
+  } else if (weaponId === 'shotgun') {
+    // Stock
+    ctx.fillStyle = wood;
+    ctx.fillRect(-30*s, -4*s, 20*s, 8*s);
+    ctx.fillStyle = woodLight;
+    ctx.fillRect(-28*s, -4*s, 4*s, 8*s);
+    // Receiver
+    ctx.fillStyle = metal;
+    ctx.fillRect(-10*s, -5*s, 22*s, 10*s);
+    // Pump
+    ctx.fillStyle = wood;
+    ctx.fillRect(12*s, -4*s, 10*s, 8*s);
+    ctx.strokeStyle = woodLight; ctx.lineWidth = 0.8*s;
+    ctx.beginPath();
+    ctx.moveTo(14*s, -2*s); ctx.lineTo(20*s, -2*s);
+    ctx.moveTo(14*s, 2*s); ctx.lineTo(20*s, 2*s);
+    ctx.stroke();
+    // Wide barrel
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(22*s, -4*s, 18*s, 8*s);
+    ctx.fillStyle = '#1a1c1a';
+    ctx.beginPath(); ctx.arc(40*s, 0, 4*s, 0, Math.PI*2); ctx.fill();
+
+  } else if (weaponId === 'assault_rifle') {
+    // Stock
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(-34*s, -3*s, 18*s, 6*s);
+    ctx.fillStyle = metal;
+    ctx.fillRect(-36*s, -5*s, 6*s, 10*s);
+    // Body
+    ctx.fillStyle = metal;
+    ctx.fillRect(-16*s, -6*s, 38*s, 12*s);
+    ctx.fillStyle = metalLight;
+    ctx.fillRect(-14*s, -6*s, 34*s, 3*s);
+    // Magazine (curved)
+    ctx.fillStyle = metalDark;
+    ctx.save();
+    ctx.translate(2*s, 6*s); ctx.rotate(0.1);
+    ctx.fillRect(0, 0, 7*s, 16*s);
+    ctx.restore();
+    // Barrel + handguard
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(22*s, -3*s, 22*s, 6*s);
+    // Barrel tip
+    ctx.fillStyle = '#1a1c1a';
+    ctx.fillRect(42*s, -2*s, 6*s, 4*s);
+    // Scope rail
+    ctx.fillStyle = metalLight;
+    ctx.fillRect(-8*s, -8*s, 28*s, 2*s);
+    // Sight dot
+    ctx.fillStyle = '#ee2200';
+    ctx.fillRect(16*s, -9*s, 2*s, 1.5*s);
+
+  } else if (weaponId === 'sniper') {
+    // Stock (adjustable)
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(-44*s, -3*s, 22*s, 6*s);
+    ctx.fillStyle = metal;
+    ctx.fillRect(-46*s, -6*s, 6*s, 12*s);
+    // Body
+    ctx.fillStyle = metal;
+    ctx.fillRect(-22*s, -5*s, 30*s, 10*s);
+    // Scope
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(-14*s, -12*s, 24*s, 5*s);
+    ctx.fillStyle = '#112233';
+    ctx.beginPath(); ctx.arc(-14*s, -9.5*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(10*s, -9.5*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+    // Magazine
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(-4*s, 5*s, 8*s, 10*s);
+    // Very long barrel
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(8*s, -2.5*s, 40*s, 5*s);
+    // Muzzle brake
+    ctx.fillStyle = metal;
+    ctx.fillRect(46*s, -3.5*s, 8*s, 7*s);
+    ctx.fillStyle = '#1a1c1a';
+    ctx.fillRect(48*s, -2*s, 1.5*s, 4*s);
+    ctx.fillRect(51*s, -2*s, 1.5*s, 4*s);
+    // Bipod (folded)
+    ctx.strokeStyle = metal; ctx.lineWidth = 1.5*s;
+    ctx.beginPath();
+    ctx.moveTo(14*s, 5*s); ctx.lineTo(10*s, 12*s);
+    ctx.moveTo(18*s, 5*s); ctx.lineTo(22*s, 12*s);
+    ctx.stroke();
+
+  } else if (weaponId === 'minigun') {
+    // Motor housing (back)
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(-24*s, -8*s, 16*s, 16*s);
+    ctx.fillStyle = metal;
+    ctx.beginPath(); ctx.arc(-24*s, 0, 8*s, 0, Math.PI*2); ctx.fill();
+    // Handle grips
+    ctx.fillStyle = wood;
+    ctx.fillRect(-18*s, 8*s, 8*s, 10*s);
+    ctx.fillRect(2*s, 8*s, 8*s, 10*s);
+    // Body/receiver
+    ctx.fillStyle = metal;
+    ctx.fillRect(-8*s, -6*s, 24*s, 12*s);
+    // Barrel cluster (6 barrels in circle)
+    ctx.fillStyle = metalDark;
+    ctx.fillRect(16*s, -10*s, 30*s, 20*s);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const bx = 36*s + Math.cos(a) * 6*s;
+      const by = Math.sin(a) * 6*s;
+      ctx.fillStyle = '#1a1c1a';
+      ctx.beginPath(); ctx.arc(bx, by, 2*s, 0, Math.PI*2); ctx.fill();
+    }
+    // Barrel shroud
+    ctx.strokeStyle = metal; ctx.lineWidth = 1.5*s;
+    ctx.beginPath(); ctx.arc(36*s, 0, 9*s, 0, Math.PI*2); ctx.stroke();
+    // Ammo belt hint
+    ctx.fillStyle = '#ddaa00'; ctx.globalAlpha = 0.3;
+    ctx.fillRect(-20*s, -12*s, 12*s, 3*s);
+    ctx.fillRect(-14*s, -15*s, 8*s, 3*s);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
 // Arsenal UI
 function renderArsenal() {
   const weaponList = document.getElementById('weapon-list');
@@ -3834,18 +4017,18 @@ function renderArsenal() {
     const isActive = id === activeWeaponId;
 
     const item = document.createElement('div');
-    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-left:2px solid transparent;transition:all 0.1s;';
+    item.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;border-left:3px solid transparent;transition:all 0.1s;';
     if (isActive) item.style.borderLeftColor = '#ee2200';
     if (isActive) item.style.background = 'rgba(238,34,0,0.04)';
     if (id === selectedArsenalWeapon) item.style.background = 'rgba(255,255,255,0.03)';
     if (!owned && !canBuy) item.style.opacity = '0.35';
 
     item.innerHTML = `
-      <div style="width:32px;height:32px;border:1px solid ${owned ? '#141a20' : '#111418'};background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;font-size:16px">${owned ? wpn.icon : '\u{1F512}'}</div>
+      <div style="width:40px;height:40px;border:1px solid ${owned ? '#1e2228' : '#111418'};background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;font-size:20px">${owned ? wpn.icon : '\u{1F512}'}</div>
       <div style="flex:1">
-        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:500;letter-spacing:2px;color:${owned ? '#c0ccd8' : '#3a4450'}">${wpn.name}</div>
-        <div style="font-size:8px;color:#3a4450;letter-spacing:1px">${wpn.type}</div>
-        ${!owned ? '<div style="font-size:8px;letter-spacing:1px;color:#661100;margin-top:2px">LVL ' + wpn.unlockLevel + ' // ' + wpn.cost + 'G</div>' : ''}
+        <div style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:500;letter-spacing:2px;color:${owned ? '#c0ccd8' : '#3a4450'}">${wpn.name}</div>
+        <div style="font-size:10px;color:#3a4450;letter-spacing:1px">${wpn.type}</div>
+        ${!owned ? '<div style="font-size:10px;letter-spacing:1px;color:#661100;margin-top:2px">LVL ' + wpn.unlockLevel + ' // ' + wpn.cost + 'G</div>' : ''}
       </div>
     `;
 
@@ -3862,7 +4045,16 @@ function renderArsenal() {
   const selOwned = ownedWeaponIds.includes(selectedArsenalWeapon);
   document.getElementById('arsenal-wpn-name').textContent = sel.name;
   document.getElementById('arsenal-wpn-type').textContent = sel.type + (sel.special ? ' // ' + sel.special.toUpperCase() : '');
-  document.getElementById('arsenal-wpn-icon').textContent = sel.icon;
+  // Draw weapon preview on canvas
+  const wpnCanvas = document.getElementById('arsenal-wpn-canvas');
+  if (wpnCanvas) {
+    const wCtx = wpnCanvas.getContext('2d');
+    wCtx.clearRect(0, 0, wpnCanvas.width, wpnCanvas.height);
+    wCtx.save();
+    wCtx.translate(wpnCanvas.width / 2, wpnCanvas.height / 2);
+    drawWeaponPreview(wCtx, selectedArsenalWeapon, 2.2);
+    wCtx.restore();
+  }
 
   const actionDiv = document.getElementById('arsenal-wpn-action');
   if (selOwned) {
@@ -3931,17 +4123,17 @@ function renderArsenal() {
     barPct = Math.min(100, Math.max(5, barPct));
 
     const row = document.createElement('div');
-    row.style.marginBottom = '14px';
+    row.style.marginBottom = '18px';
     row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:9px;letter-spacing:2px;color:#3a4450">${sd.name}</span>
-        <span style="font-size:8px;color:#556070;letter-spacing:1px">LVL ${currentLvl}/${maxLvl}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:11px;letter-spacing:2px;color:#4a5460">${sd.name}</span>
+        <span style="font-size:10px;color:#556070;letter-spacing:1px">LVL ${currentLvl}/${maxLvl}</span>
       </div>
-      <div style="height:4px;background:#111418;position:relative">
-        <div style="height:100%;width:${barPct}%;background:${sd.color}"></div>
+      <div style="height:6px;background:#111418;position:relative;border-radius:1px">
+        <div style="height:100%;width:${barPct}%;background:${sd.color};border-radius:1px"></div>
       </div>
-      ${selOwned ? `<div style="display:flex;justify-content:flex-end;margin-top:3px">
-        <button class="upgrade-stat-btn" data-stat="${sd.key}" style="font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:1px;color:${canUpgrade ? '#ddaa00' : '#333'};background:transparent;border:1px solid ${canUpgrade ? '#665500' : '#1a1a1a'};padding:2px 8px;cursor:${canUpgrade ? 'pointer' : 'default'}">${currentLvl >= maxLvl ? 'MAX' : cost + 'G \u25B2'}</button>
+      ${selOwned ? `<div style="display:flex;justify-content:flex-end;margin-top:5px">
+        <button class="upgrade-stat-btn" data-stat="${sd.key}" style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;color:${canUpgrade ? '#ddaa00' : '#333'};background:transparent;border:1px solid ${canUpgrade ? '#665500' : '#1a1a1a'};padding:4px 12px;cursor:${canUpgrade ? 'pointer' : 'default'}">${currentLvl >= maxLvl ? 'MAX' : cost + 'G \u25B2'}</button>
       </div>` : ''}
     `;
     statsContainer.appendChild(row);
