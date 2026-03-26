@@ -45,23 +45,6 @@
   #hp-bar-wrap { width: 100%; height: 5px; background: #1a1a22; margin-top: 5px; clip-path: polygon(0 0, 100% 0, calc(100% - 3px) 100%, 0 100%); position: relative; }
   #hp-bar { height: 5px; background: #33cc44; transition: width 0.2s, background 0.3s; }
   #hp-bar-wrap::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(90deg, transparent 0, transparent 9px, rgba(0,0,0,0.3) 9px, rgba(0,0,0,0.3) 10px); pointer-events: none; }
-  #wave-info {
-    text-align: center;
-    font-family: 'Oswald', 'Bebas Neue', sans-serif;
-    font-size: 22px;
-    font-weight: 600;
-    color: #888890;
-    letter-spacing: 5px;
-    text-transform: uppercase;
-    position: relative;
-  }
-  #wave-info::before, #wave-info::after {
-    content: '//';
-    color: #333340;
-    font-size: 14px;
-    vertical-align: middle;
-    margin: 0 6px;
-  }
   #ammo-display { display: flex; gap: 2px; flex-wrap: wrap; max-width: 120px; margin-top: 5px; justify-content: flex-end; }
   .bullet-pip { width: 4px; height: 10px; background: linear-gradient(180deg, #ddaa00 0%, #aa7700 70%, #886600 100%); border-radius: 1px 1px 0 0; transition: background 0.15s; }
   .bullet-pip.empty { background: #181822; border: 1px solid #252530; border-radius: 1px; }
@@ -382,7 +365,6 @@
         <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
       </div>
     </div>
-    <div id="gold-display" style="display:none"></div>
     <!-- Bottom-right: Dash + Ammo (no box) -->
     <div style="position:absolute;bottom:16px;right:16px;text-align:right;pointer-events:none">
       <div id="dash-display" style="display:none;justify-content:flex-end;gap:3px;margin-bottom:6px"></div>
@@ -1102,6 +1084,7 @@ rebuildSpawnEdges();
 
 // ── FLOWFIELD PATHFINDING ──────────────────────────────
 let flowfield = null; // 2D array of {dx, dy} directions
+let mapCacheCanvas = null; // pre-rendered map for perf
 
 function computeFlowfield() {
   const pTileX = Math.floor(player.x / TILE);
@@ -1279,6 +1262,7 @@ async function init() {
   generateMap();
   rebuildSpawnEdges();
   flowfield = null;
+  mapCacheCanvas = null; // force map re-render
   lastFlowfieldUpdate = 0;
 
   const mapW = COLS * TILE;
@@ -1297,7 +1281,7 @@ async function init() {
     shieldRegenTimer: 0,
     secondWindUsed: false,
     ironSkinReady: hasSkill('iron_skin'),
-    ironSkinCooldown: 0,
+    ironSkinCooldownTime: 0,
     killRushTimer: 0,
     killRushBoost: 0,
     dashCharges: [],
@@ -1586,6 +1570,20 @@ async function rescueSuccess() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
           body: JSON.stringify({ xp: xpToSync })
+        });
+      } catch {}
+    }
+
+    // Sync gold before rescue
+    if (pendingGold > 0 || pendingDiamonds > 0) {
+      const g = pendingGold, d = pendingDiamonds;
+      pendingGold = 0; pendingDiamonds = 0;
+      globalGold += g; globalDiamonds += d;
+      try {
+        await fetch('/api/gold', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ gold: g, diamonds: d })
         });
       } catch {}
     }
@@ -2211,7 +2209,7 @@ function damagePlayer(rawDamage, source) {
   // Iron Skin — block next hit every 60s
   if (hasSkill('iron_skin') && player.ironSkinReady) {
     player.ironSkinReady = false;
-    player.ironSkinCooldown = 3600; // 60s at 60fps
+    player.ironSkinCooldownTime = performance.now() + 60000; // 60s
     showWaveBanner('IRON SKIN!');
     return;
   }
@@ -2753,6 +2751,16 @@ function getFloorNoise(col, row) {
 }
 
 function drawMap() {
+  if (mapCacheCanvas) {
+    ctx.drawImage(mapCacheCanvas, 0, 0);
+    return;
+  }
+  // Create off-screen cache — render map once
+  mapCacheCanvas = document.createElement('canvas');
+  mapCacheCanvas.width = COLS * TILE;
+  mapCacheCanvas.height = ROWS * TILE;
+  const mctx = mapCacheCanvas.getContext('2d');
+
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const cell = MAP[row][col];
@@ -2760,8 +2768,8 @@ function drawMap() {
       if (cell === 1) {
         // Wall — 3D beveled concrete block
         // Side face (darker)
-        ctx.fillStyle = '#141418';
-        ctx.fillRect(x, y, TILE, TILE);
+        mctx.fillStyle = '#141418';
+        mctx.fillRect(x, y, TILE, TILE);
 
         // Top face (lighter, gives depth)
         ctx.fillStyle = '#2a2a30';
@@ -3772,8 +3780,6 @@ function updateHUD() {
     document.getElementById('shield-bar').style.width = (shieldPct * 100) + '%';
   }
 
-  document.getElementById('gold-display').textContent = (globalGold + pendingGold) + 'G';
-
   // Dash display is updated in updateDash() every frame
 }
 
@@ -4002,6 +4008,9 @@ function drawDashAfterimage() {
 // ── MAIN LOOP ────────────────────────────────────────
 function loop(now) {
   if (!running) return;
+  if (!player._lastFrameTime) player._lastFrameTime = now;
+  const dt = Math.min((now - player._lastFrameTime) / 1000, 0.05); // seconds, capped at 50ms
+  player._lastFrameTime = now;
   frameCount++;
 
   movePlayer();
@@ -4039,12 +4048,12 @@ function loop(now) {
   // Shield regen
   if (player.maxShield > 0) {
     if (player.shield < player.maxShield) {
-      player.shieldRegenTimer += 1/60;
+      player.shieldRegenTimer += dt;
       const delay = getPlayerStat('shieldRegenDelay');
       if (player.shieldRegenTimer >= delay) {
         let rate = getPlayerStat('shieldRegenRate');
         if (hasSkill('fortress')) rate *= 2;
-        player.shield = Math.min(player.shield + rate / 60, player.maxShield);
+        player.shield = Math.min(player.shield + rate * dt, player.maxShield);
       }
     }
   }
@@ -4055,16 +4064,14 @@ function loop(now) {
   if (regenRate > 0 && player.hp < getPlayerStat('maxHp')) {
     const timeSinceDamage = (frameCount - player.lastDamageTime) / 60;
     if (timeSinceDamage > 3) {
-      player.hp = Math.min(Math.round((player.hp + regenRate / 60) * 10) / 10, getPlayerStat('maxHp'));
+      player.hp = Math.min(Math.round((player.hp + regenRate * dt) * 10) / 10, getPlayerStat('maxHp'));
     }
   }
 
-  // Iron Skin cooldown
-  if (player.ironSkinCooldown > 0) {
-    player.ironSkinCooldown--;
-    if (player.ironSkinCooldown <= 0 && hasSkill('iron_skin')) {
-      player.ironSkinReady = true;
-    }
+  // Iron Skin cooldown (time-based)
+  if (player.ironSkinCooldownTime && now >= player.ironSkinCooldownTime) {
+    player.ironSkinReady = true;
+    player.ironSkinCooldownTime = 0;
   }
 
   if (pendingXp > 0 && now - lastXpSync > XP_SYNC_INTERVAL) {
@@ -4928,14 +4935,13 @@ function renderArsenal() {
     // What the next upgrade gives
     let nextVal = '';
     if (currentLvl < maxLvl) {
-      const nextWpnVal = getWeaponStat(selectedArsenalWeapon, sd.key);
       // Simulate +1 level
       const base = WEAPONS[selectedArsenalWeapon];
       const nl = currentLvl + 1;
       let nv;
       if (sd.key === 'dmg') nv = base.damage * (1 + nl * 0.1);
       else if (sd.key === 'range') nv = base.range + nl * 5;
-      else if (sd.key === 'rate') nv = Math.max(1, base.fireRate - nl * 0.5);
+      else if (sd.key === 'rate') nv = Math.max(Math.ceil(base.fireRate * 0.4), base.fireRate - nl * 0.3);
       else if (sd.key === 'reload') nv = base.reloadMs * (1 - nl * 0.08);
       else if (sd.key === 'mag') nv = Math.round(base.magSize * (1 + nl * 0.1));
       else if (sd.key === 'acc') nv = base.spread * (1 - nl * 0.08);
