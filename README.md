@@ -11,6 +11,11 @@ Top-Down Zombie Survival Shooter im Browser. Welle um Welle Zombies abknallen, X
 - **Dynamische Map** — Passt sich an die Bildschirmgröße an
 - **Lobby** — Stats-Anzeige, letzte Runde, Account-Wechsel
 - **Pause** — ESC zum Pausieren
+- **Skill Tree** — 3 Pfade (Survival, Mobility, Rescue) mit 24 Skills
+- **Dash** — Kurzer Sprint in Blickrichtung (Leertaste)
+- **Shield** — Schutzschild das Schaden absorbiert
+- **Rescue Mission** — Evakuierung anfordern um XP zu retten
+- **Tod-Strafe** — 75% XP Verlust bei Tod, Skills resettet
 
 ## Schnellstart
 
@@ -30,6 +35,8 @@ Dann im Browser: **http://localhost:4444**
 | Linksklick | Schießen |
 | R | Nachladen |
 | ESC | Pause |
+| Leertaste | Dash (wenn freigeschaltet) |
+| F halten | Rescue Mission anfordern |
 
 ## Tech Stack
 
