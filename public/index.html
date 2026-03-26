@@ -554,8 +554,6 @@ const PLAYER_R = 12;
 const ZOMBIE_R = 13;
 const BULLET_R = 4;
 const BULLET_SPD = 9;
-const MAX_AMMO = 30;
-const RELOAD_MS = 1800;
 
 const PICKUP_LIFETIME = 600; // 10s at 60fps
 const PICKUP_BLINK = 180; // blink last 3s
@@ -568,8 +566,6 @@ const AMMOPACK_INTERVAL = [1100, 1500]; // 18-25s at 60fps
 const BASE_STATS = {
   maxHp: 100,
   moveSpeed: 2.8,
-  shootCooldown: 8,
-  reloadMs: 1800,
   healthpackHealPct: 0,
   damageReductionPct: 0,
   shieldHp: 0,
@@ -646,9 +642,6 @@ const SKILLS = [
   { id: 'swift', path: 'mobility', req: 'mob_start', tier: 1, maxLvl: 5,
     icon: '👟', name: 'SWIFT', desc: 'Erhoehte Laufgeschwindigkeit.',
     x: -100, y: -130, r: 22, effect: (lvl) => ({ moveSpeedPct: 0.08 * lvl }) },
-  { id: 'quick_reload', path: 'mobility', req: 'mob_start', tier: 1, maxLvl: 3,
-    icon: '🔄', name: 'QUICK RELOAD', desc: 'Schnelleres Nachladen.',
-    x: 130, y: -100, r: 20, effect: (lvl) => ({ reloadPct: -0.15 * lvl }) },
   // MOBILITY — Tier 2
   { id: 'dash', path: 'mobility', req: 'swift', tier: 2, maxLvl: 1,
     icon: '💨', name: 'DASH', desc: 'Schaltet Dash frei. Leertaste.',
@@ -662,16 +655,13 @@ const SKILLS = [
   { id: 'dash_charges', path: 'mobility', req: 'dash', tier: 2, maxLvl: 2,
     icon: '⚡', name: 'DASH CHARGES', desc: 'Mehrfach hintereinander dashen.',
     x: 130, y: -370, r: 20, effect: (lvl) => ({ dashCharges: 1 * lvl }) },
-  { id: 'trigger_finger', path: 'mobility', req: 'quick_reload', tier: 2, maxLvl: 3,
-    icon: '🔫', name: 'TRIGGER FINGER', desc: 'Erhoehte Feuerrate.',
-    x: 250, y: -240, r: 20, effect: (lvl) => ({ shootCooldown: -1 * lvl }) },
   // MOBILITY — Tier 3
   { id: 'phantom_dash', path: 'mobility', req: 'dash_cd', tier: 3, maxLvl: 1,
     icon: '👻', name: 'PHANTOM DASH', desc: 'Unverwundbar beim Dash. Nachbild verwirrt Zombies.',
     x: -40, y: -560, r: 28, effect: () => ({}) },
-  { id: 'bullet_time', path: 'mobility', req: 'trigger_finger', tier: 3, maxLvl: 1,
+  { id: 'bullet_time', path: 'mobility', req: 'swift', tier: 3, maxLvl: 1,
     icon: '🕶', name: 'BULLET TIME', desc: 'Nach Dash: 50% Zombie-Slow fuer 2s.',
-    x: 200, y: -400, r: 28, effect: () => ({}) },
+    x: 100, y: -300, r: 28, effect: () => ({}) },
   // RESCUE — Start
   { id: 'resc_start', path: 'rescue', req: null, tier: 0, maxLvl: 0,
     icon: '📡', name: 'RESCUE', desc: 'Startknoten des Rescue-Pfads.',
