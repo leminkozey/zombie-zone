@@ -202,9 +202,9 @@ app.post('/api/weapons/upgrade', auth, (req, res) => {
 
   setGold.run(user.gold - cost, req.user.id);
   upgradeWeaponStat(req.user.id, weaponId, stat);
-  const updated = getWeapon.get(req.user.id, weaponId);
+  const weapons = getUserWeapons.all(req.user.id);
   const updatedUser = getUser.get(req.user.id);
-  res.json({ weapon: updated, gold: updatedUser.gold });
+  res.json({ weapons, gold: updatedUser.gold });
 });
 
 // POST /api/gold
