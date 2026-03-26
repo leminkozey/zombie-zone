@@ -236,6 +236,11 @@
     opacity: 0;
     transition: opacity 0.3s;
   }
+  #skill-tree-screen { position: absolute; inset: 0; background: #050510; z-index: 25; }
+  #skill-tree-canvas { width: 100%; height: 100%; }
+  #st-survival:not(.btn-secondary) { border-color: #33cc44; color: #33cc44; }
+  #st-mobility:not(.btn-secondary) { border-color: #33aaff; color: #33aaff; }
+  #st-rescue:not(.btn-secondary) { border-color: #ffaa00; color: #ffaa00; }
   @keyframes pulse { from { opacity:1; } to { opacity:0.5; } }
 </style>
 </head>
@@ -303,6 +308,7 @@
       R — Nachladen &nbsp;|&nbsp; ESC — Pause
     </div>
     <button class="start-btn" id="start-btn">STARTEN</button>
+    <button class="start-btn btn-secondary" id="skilltree-btn" style="margin-top:4px">SKILL TREE</button>
     <div style="margin-top:16px"><a href="#" onclick="doLogout();return false" style="color:#444;font-size:10px;letter-spacing:2px">ABMELDEN</a></div>
   </div>
 
@@ -312,6 +318,18 @@
     <button class="start-btn" id="resume-btn">WEITER</button>
     <button class="start-btn btn-secondary" id="quit-btn">ZUR LOBBY</button>
     <div style="color:#cc2200;font-size:10px;letter-spacing:1px;margin-top:8px">ACHTUNG: VERLASSEN = TOD-STRAFE</div>
+  </div>
+
+  <div id="skill-tree-screen" style="display:none">
+    <canvas id="skill-tree-canvas" style="position:absolute;inset:0;cursor:grab"></canvas>
+    <div id="st-hud-top" style="position:absolute;top:12px;left:0;right:0;display:flex;justify-content:center;gap:0;z-index:10">
+      <button class="start-btn" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:4px 0 0 4px" id="st-survival">SURVIVAL</button>
+      <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0" id="st-mobility">MOBILITY</button>
+      <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0 4px 4px 0" id="st-rescue">RESCUE</button>
+    </div>
+    <div id="st-points" style="position:absolute;bottom:12px;left:20px;font-size:12px;color:#888;letter-spacing:2px;z-index:10;font-family:'Share Tech Mono',monospace"></div>
+    <button class="start-btn btn-secondary" id="st-back" style="position:absolute;bottom:12px;right:20px;font-size:12px;padding:6px 20px;z-index:10">ZURUECK</button>
+    <div id="st-tooltip" style="display:none;position:absolute;background:rgba(8,8,20,0.95);border:1px solid #333;padding:14px 18px;max-width:260px;z-index:200;pointer-events:none;font-family:'Share Tech Mono',monospace"></div>
   </div>
 </div>
 
@@ -2288,6 +2306,313 @@ function loop(now) {
 
   requestAnimationFrame(loop);
 }
+
+// ── SKILL TREE UI ──────────────────────────────────────
+const stCanvas = document.getElementById('skill-tree-canvas');
+const stCtx = stCanvas.getContext('2d');
+let stActive = false;
+let stActivePath = 'survival';
+let stCamX = 0, stCamY = 0, stZoom = 1;
+let stTargetCamX = 0, stTargetCamY = 0, stTargetZoom = 1;
+let stDragStart = null, stCamStart = null;
+let stHovered = null;
+let stTime = 0;
+
+const ST_COLORS = {
+  survival: { main: '#33cc44', dim: '#1a6622', glow: 'rgba(51,204,68,0.25)', bg: 'rgba(51,204,68,0.08)', nebula: 'rgba(51,204,68,0.03)' },
+  mobility: { main: '#33aaff', dim: '#1a5580', glow: 'rgba(51,170,255,0.25)', bg: 'rgba(51,170,255,0.08)', nebula: 'rgba(51,170,255,0.03)' },
+  rescue:   { main: '#ffaa00', dim: '#805500', glow: 'rgba(255,170,0,0.25)',  bg: 'rgba(255,170,0,0.08)',  nebula: 'rgba(255,170,0,0.03)' },
+};
+
+const stStars = [];
+for (let i = 0; i < 400; i++) {
+  stStars.push({ x: (Math.random()-0.5)*2000, y: (Math.random()-0.5)*2000, r: Math.random()*1.2, a: 0.15+Math.random()*0.35, tw: Math.random()*Math.PI*2 });
+}
+
+function stWorldToScreen(wx, wy) {
+  return { x: (wx - stCamX) * stZoom + stCanvas.width/2, y: (wy - stCamY) * stZoom + stCanvas.height/2 };
+}
+function stScreenToWorld(sx, sy) {
+  return { x: (sx - stCanvas.width/2) / stZoom + stCamX, y: (sy - stCanvas.height/2) / stZoom + stCamY };
+}
+
+function getAvailableSkillPoints() {
+  const level = getLevelFromXp(globalXp);
+  const total = level - 1;
+  const used = activeSkills.reduce((sum, s) => sum + s.level, 0);
+  return total - used;
+}
+
+function isSkillUnlockable(skill) {
+  if (skill.tier === 0 || skill.maxLvl === 0) return false;
+  const currentLvl = getSkillLevel(skill.id);
+  if (currentLvl >= skill.maxLvl) return false;
+  if (getAvailableSkillPoints() <= 0) return false;
+  if (skill.req) {
+    const reqSkill = SKILL_MAP[skill.req];
+    if (reqSkill.tier > 0 && getSkillLevel(skill.req) <= 0) return false;
+  }
+  return true;
+}
+
+async function investSkillPoint(skillId) {
+  if (!authToken) return;
+  try {
+    const res = await fetch('/api/skills/invest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ skillId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      activeSkills = data.skills.map(s => ({ skillId: s.skill_id, level: s.level }));
+    }
+  } catch {}
+}
+
+function drawSkillTree() {
+  if (!stActive) return;
+  stTime += 0.016;
+  const sw = stCanvas.width, sh = stCanvas.height;
+
+  stCamX += (stTargetCamX - stCamX) * 0.08;
+  stCamY += (stTargetCamY - stCamY) * 0.08;
+  stZoom += (stTargetZoom - stZoom) * 0.08;
+
+  stCtx.clearRect(0, 0, sw, sh);
+
+  // Background
+  const grad = stCtx.createRadialGradient(sw/2, sh/2, 0, sw/2, sh/2, sw*0.7);
+  grad.addColorStop(0, '#0a0a18'); grad.addColorStop(1, '#040410');
+  stCtx.fillStyle = grad;
+  stCtx.fillRect(0, 0, sw, sh);
+
+  // Stars
+  for (const s of stStars) {
+    const p = stWorldToScreen(s.x, s.y);
+    if (p.x < -10 || p.x > sw+10 || p.y < -10 || p.y > sh+10) continue;
+    stCtx.globalAlpha = s.a * (0.5 + 0.5 * Math.sin(stTime * 1.5 + s.tw));
+    stCtx.fillStyle = '#fff';
+    stCtx.beginPath();
+    stCtx.arc(p.x, p.y, s.r * Math.min(stZoom, 1.5), 0, Math.PI * 2);
+    stCtx.fill();
+  }
+  stCtx.globalAlpha = 1;
+
+  const col = ST_COLORS[stActivePath];
+  const activeSkillDefs = SKILLS.filter(s => s.path === stActivePath);
+  const activeConns = SKILL_CONNECTIONS.filter(c => c.path === stActivePath);
+
+  // Nebula
+  const center = stWorldToScreen(0, -200);
+  stCtx.beginPath();
+  stCtx.ellipse(center.x, center.y, 350*stZoom, 300*stZoom, 0, 0, Math.PI*2);
+  stCtx.fillStyle = col.nebula;
+  stCtx.fill();
+
+  // Connections
+  for (const c of activeConns) {
+    const from = SKILL_MAP[c.from], to = SKILL_MAP[c.to];
+    const p1 = stWorldToScreen(from.x, from.y), p2 = stWorldToScreen(to.x, to.y);
+    stCtx.save();
+    stCtx.strokeStyle = col.glow; stCtx.lineWidth = 5 * stZoom;
+    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
+    stCtx.strokeStyle = col.dim; stCtx.lineWidth = 1.5 * stZoom;
+    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
+    for (let i = 0; i < 2; i++) {
+      const t = ((stTime * 0.3 + i / 2) % 1);
+      stCtx.beginPath();
+      stCtx.arc(p1.x + (p2.x-p1.x)*t, p1.y + (p2.y-p1.y)*t, 1.5*stZoom, 0, Math.PI*2);
+      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.4; stCtx.fill(); stCtx.globalAlpha = 1;
+    }
+    stCtx.restore();
+  }
+
+  // Nodes
+  for (const s of activeSkillDefs) {
+    const p = stWorldToScreen(s.x, s.y);
+    const isHovered = stHovered === s;
+    const r = s.r * stZoom;
+    const invested = getSkillLevel(s.id);
+    const unlockable = isSkillUnlockable(s);
+    const hasInvestment = invested > 0;
+
+    if (isHovered || s.tier === 3 || hasInvestment) {
+      stCtx.save();
+      stCtx.shadowBlur = isHovered ? 35 : hasInvestment ? 20 : 15;
+      stCtx.shadowColor = col.main;
+      stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI*2);
+      stCtx.fillStyle = 'rgba(0,0,0,0.01)'; stCtx.fill();
+      stCtx.restore();
+    }
+
+    if (s.tier === 3) {
+      const pulseR = r + 6*stZoom + Math.sin(stTime*2)*3*stZoom;
+      stCtx.save();
+      stCtx.beginPath(); stCtx.arc(p.x, p.y, pulseR, 0, Math.PI*2);
+      stCtx.strokeStyle = col.dim; stCtx.lineWidth = stZoom;
+      stCtx.globalAlpha = 0.4 + Math.sin(stTime*2)*0.2;
+      stCtx.setLineDash([4*stZoom, 4*stZoom]); stCtx.stroke();
+      stCtx.restore();
+    }
+
+    stCtx.save();
+    stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI*2);
+    stCtx.fillStyle = hasInvestment ? col.bg : isHovered ? 'rgba(20,20,40,0.9)' : 'rgba(10,10,20,0.85)';
+    stCtx.fill();
+    stCtx.strokeStyle = hasInvestment ? col.main : unlockable ? col.dim : '#222';
+    stCtx.lineWidth = (isHovered ? 2.5 : hasInvestment ? 2 : 1.5) * stZoom;
+    stCtx.stroke();
+    stCtx.restore();
+
+    if (s.tier === 0) {
+      stCtx.save(); stCtx.beginPath(); stCtx.arc(p.x, p.y, r*0.5, 0, Math.PI*2);
+      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.3; stCtx.fill(); stCtx.restore();
+    }
+
+    if (stZoom > 0.35) {
+      stCtx.save();
+      stCtx.font = Math.max(12, r*0.75) + 'px serif';
+      stCtx.textAlign = 'center'; stCtx.textBaseline = 'middle';
+      stCtx.globalAlpha = hasInvestment || s.tier === 0 ? 1 : unlockable ? 0.7 : 0.3;
+      stCtx.fillText(s.icon, p.x, p.y + 1);
+      stCtx.restore();
+    }
+
+    if (stZoom > 0.55) {
+      stCtx.save();
+      stCtx.font = Math.max(8, 10*stZoom) + "px 'Share Tech Mono', monospace";
+      stCtx.textAlign = 'center';
+      stCtx.fillStyle = hasInvestment ? col.main : isHovered ? '#888' : '#444';
+      stCtx.fillText(s.name, p.x, p.y + r + 14*stZoom);
+      stCtx.restore();
+    }
+
+    if (s.maxLvl > 0 && stZoom > 0.5) {
+      const pipW = 6*stZoom, pipH = 3*stZoom, gap = 3*stZoom;
+      const totalW = s.maxLvl * (pipW + gap) - gap;
+      const startX = p.x - totalW/2;
+      const pipY = p.y - r - 8*stZoom;
+      for (let i = 0; i < s.maxLvl; i++) {
+        stCtx.fillStyle = i < invested ? col.main : col.dim;
+        stCtx.globalAlpha = i < invested ? 1 : 0.3;
+        stCtx.fillRect(startX + i*(pipW+gap), pipY, pipW, pipH);
+      }
+      stCtx.globalAlpha = 1;
+    }
+  }
+
+  document.getElementById('st-points').textContent = 'VERFUEGBARE PUNKTE: ' + getAvailableSkillPoints();
+
+  requestAnimationFrame(drawSkillTree);
+}
+
+// Skill tree input handlers
+stCanvas.addEventListener('mousedown', e => {
+  stDragStart = { x: e.clientX, y: e.clientY };
+  stCamStart = { x: stTargetCamX, y: stTargetCamY };
+});
+
+stCanvas.addEventListener('mousemove', e => {
+  if (stDragStart) {
+    stTargetCamX = stCamStart.x - (e.clientX - stDragStart.x) / stZoom;
+    stTargetCamY = stCamStart.y - (e.clientY - stDragStart.y) / stZoom;
+    document.getElementById('st-tooltip').style.display = 'none';
+    stHovered = null;
+    return;
+  }
+
+  const world = stScreenToWorld(e.clientX, e.clientY);
+  stHovered = null;
+  for (const s of SKILLS.filter(sk => sk.path === stActivePath)) {
+    const ddx = world.x - s.x, ddy = world.y - s.y;
+    if (ddx*ddx + ddy*ddy < (s.r+8)*(s.r+8)) { stHovered = s; break; }
+  }
+
+  const tt = document.getElementById('st-tooltip');
+  if (stHovered) {
+    const s = stHovered;
+    const c = ST_COLORS[s.path];
+    const lvl = getSkillLevel(s.id);
+    let html = '<h3 style="font-family:Bebas Neue;font-size:20px;letter-spacing:3px;color:' + c.main + ';margin-bottom:4px">' + s.name + '</h3>';
+    html += '<div style="font-size:10px;color:#888;line-height:1.6;margin-bottom:8px">' + s.desc + '</div>';
+    if (s.maxLvl > 0) {
+      html += '<div style="font-size:10px;color:#666;margin-bottom:4px">Level: ' + lvl + ' / ' + s.maxLvl + '</div>';
+      if (s.effect && lvl > 0) {
+        const fx = s.effect(lvl);
+        const entries = Object.entries(fx).filter(([k,v]) => v !== 0);
+        if (entries.length > 0) {
+          html += '<div style="font-size:10px;color:#aaa;border-top:1px solid #222;padding-top:6px">';
+          for (const [k, v] of entries) html += k + ': <span style="color:#55cc33">' + (v > 0 ? '+' : '') + v + '</span><br>';
+          html += '</div>';
+        }
+      }
+      if (s.req) html += '<div style="font-size:9px;color:#cc2200;margin-top:6px">Braucht: ' + SKILL_MAP[s.req].name + '</div>';
+    }
+    tt.innerHTML = html;
+    let tx = e.clientX + 16, ty = e.clientY - 10;
+    if (tx + 270 > stCanvas.width) tx = e.clientX - 270;
+    if (ty < 10) ty = 10;
+    tt.style.left = tx + 'px'; tt.style.top = ty + 'px';
+    tt.style.display = 'block';
+    stCanvas.style.cursor = isSkillUnlockable(s) ? 'pointer' : 'default';
+  } else {
+    tt.style.display = 'none';
+    stCanvas.style.cursor = 'grab';
+  }
+});
+
+stCanvas.addEventListener('mouseup', e => {
+  if (stDragStart && Math.abs(e.clientX - stDragStart.x) < 5 && Math.abs(e.clientY - stDragStart.y) < 5) {
+    if (stHovered && isSkillUnlockable(stHovered)) {
+      investSkillPoint(stHovered.id);
+    }
+  }
+  stDragStart = null; stCamStart = null;
+});
+
+stCanvas.addEventListener('mouseleave', () => {
+  stDragStart = null; stHovered = null;
+  document.getElementById('st-tooltip').style.display = 'none';
+});
+
+stCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const delta = -e.deltaY * 0.0008;
+  stTargetZoom = Math.max(0.4, Math.min(2.5, stTargetZoom * (1 + delta)));
+  const wx = (e.clientX - stCanvas.width/2) / stZoom + stCamX;
+  const wy = (e.clientY - stCanvas.height/2) / stZoom + stCamY;
+  stTargetCamX = wx - (e.clientX - stCanvas.width/2) / stTargetZoom;
+  stTargetCamY = wy - (e.clientY - stCanvas.height/2) / stTargetZoom;
+}, { passive: false });
+
+function stSelectPath(p) {
+  stActivePath = p;
+  document.getElementById('st-survival').className = 'start-btn' + (p === 'survival' ? '' : ' btn-secondary');
+  document.getElementById('st-mobility').className = 'start-btn' + (p === 'mobility' ? '' : ' btn-secondary');
+  document.getElementById('st-rescue').className = 'start-btn' + (p === 'rescue' ? '' : ' btn-secondary');
+  stTargetCamX = 0; stTargetCamY = -200; stTargetZoom = 1;
+}
+
+document.getElementById('st-survival').addEventListener('click', () => stSelectPath('survival'));
+document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
+document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
+
+document.getElementById('skilltree-btn').addEventListener('click', () => {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('skill-tree-screen').style.display = 'block';
+  stCanvas.width = window.innerWidth;
+  stCanvas.height = window.innerHeight;
+  stActive = true;
+  stSelectPath('survival');
+  requestAnimationFrame(drawSkillTree);
+});
+
+document.getElementById('st-back').addEventListener('click', () => {
+  stActive = false;
+  document.getElementById('skill-tree-screen').style.display = 'none';
+  showGameMenu();
+});
 
 document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('hud-username').textContent = currentUser ? currentUser.toUpperCase() : '';
