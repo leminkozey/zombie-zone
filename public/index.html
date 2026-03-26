@@ -67,11 +67,13 @@
   #overlay, #pause-screen {
     position: absolute;
     inset: 0;
+    z-index: 20;
+  }
+  #pause-screen {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 20;
     gap: 10px;
   }
   #overlay {
@@ -293,7 +295,57 @@
     opacity: 0;
     transition: opacity 0.3s;
   }
-  #skill-tree-screen { position: absolute; inset: 0; background: #06080a; z-index: 25; }
+  .menu-tab {
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    font-family: 'Oswald', sans-serif; font-size: 12px; font-weight: 600;
+    letter-spacing: 3px; color: #404855; cursor: pointer; padding: 12px 20px;
+    transition: all 0.15s; position: relative;
+  }
+  .menu-tab:hover { color: #8090a0; }
+  .menu-tab.active { color: #ee2200; border-bottom-color: #ee2200; }
+  .menu-tab.blink-notify { animation: blink-border 1.2s ease-in-out infinite; }
+  .soon-badge {
+    font-size: 8px; background: #1a1e24; color: #556070; padding: 1px 5px;
+    border-radius: 3px; margin-left: 4px; letter-spacing: 1px; vertical-align: middle;
+  }
+  .menu-panel { flex-direction: column; align-items: center; justify-content: center; }
+  #panel-lobby { gap: 8px; }
+  #panel-lobby .lobby-header {
+    position: absolute; top: 16px; left: 0; right: 0; display: flex;
+    justify-content: space-between; padding: 0 24px; z-index: 2;
+  }
+  #panel-lobby .lobby-header .player-info {
+    display: flex; align-items: center; gap: 8px;
+  }
+  #panel-lobby .lobby-header .player-name {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #b0b8c4;
+    letter-spacing: 2px;
+  }
+  #panel-lobby .lobby-header .level-badge {
+    font-family: 'Oswald', sans-serif; font-size: 10px; color: #33cc44;
+    background: rgba(51,204,68,0.1); border: 1px solid rgba(51,204,68,0.25);
+    padding: 2px 8px; border-radius: 3px; letter-spacing: 2px;
+  }
+  #panel-lobby .lobby-header .currency-info {
+    display: flex; align-items: center; gap: 14px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1px;
+  }
+  .currency-gold { color: #ddaa00; }
+  .currency-diamonds { color: #44ddff; }
+  #panel-lobby .lobby-footer {
+    position: absolute; bottom: 24px; left: 0; right: 0; display: flex;
+    justify-content: space-between; align-items: flex-end; padding: 0 24px;
+  }
+  .map-select { display: flex; flex-direction: column; gap: 6px; }
+  .map-option {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 2px;
+    padding: 6px 16px; border: 1px solid #1a2030; color: #404855; cursor: default;
+    background: transparent; text-align: left; transition: all 0.15s;
+  }
+  .map-option.active { border-color: #ee2200; color: #ee2200; cursor: pointer; }
+  .map-option .lock-label { font-size: 8px; color: #303840; margin-left: 6px; }
+  #panel-skilltree { position: relative; background: #06080a; }
+  #panel-skilltree #skill-tree-canvas { position: absolute; inset: 0; cursor: grab; width: 100%; height: 100%; }
   #skill-tree-canvas { width: 100%; height: 100%; }
   #st-scanline { position: absolute; inset: 0; pointer-events: none; z-index: 1;
     background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 4px); }
@@ -368,18 +420,77 @@
   </div>
 
   <div id="overlay" style="display:none">
-    <div class="sub">TOP-DOWN SURVIVAL</div>
-    <h1>DEAD ZONE</h1>
-    <div id="user-display"></div>
-    <div id="lobby-stats" style="color:#606070;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:2px;margin:8px 0"></div>
-    <div id="last-run" style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;min-height:18px"></div>
-    <div class="hint">
-      WASD — Bewegen &nbsp;|&nbsp; MAUS — Zielen &nbsp;|&nbsp; LINKSKLICK — Schie&szlig;en<br>
-      R — Nachladen &nbsp;|&nbsp; SPACE — Dash &nbsp;|&nbsp; F halten — Rescue &nbsp;|&nbsp; ESC — Pause
+    <!-- Tab bar -->
+    <div id="menu-tabs" style="position:absolute;top:0;left:0;right:0;display:flex;justify-content:center;background:rgba(6,8,10,0.9);border-bottom:1px solid #141a20;z-index:5">
+      <button class="menu-tab active" data-tab="lobby">LOBBY</button>
+      <button class="menu-tab" data-tab="skilltree">SKILL TREE</button>
+      <button class="menu-tab" data-tab="arsenal">ARSENAL</button>
+      <button class="menu-tab" data-tab="shop">SHOP <span class="soon-badge">SOON</span></button>
+      <button class="menu-tab" data-tab="skins">SKINS <span class="soon-badge">SOON</span></button>
     </div>
-    <button class="start-btn" id="start-btn">STARTEN</button>
-    <button class="start-btn btn-secondary" id="skilltree-btn" style="margin-top:4px">SKILL TREE</button>
-    <div style="margin-top:16px"><a href="#" onclick="doLogout();return false" style="color:#404050;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;transition:color 0.2s" onmouseover="this.style.color='#ee2200'" onmouseout="this.style.color='#404050'">ABMELDEN</a></div>
+
+    <!-- LOBBY panel -->
+    <div class="menu-panel" id="panel-lobby" style="position:absolute;inset:0;top:44px;display:flex">
+      <div class="lobby-header">
+        <div class="player-info">
+          <span class="player-name" id="lobby-player-name"></span>
+          <span class="level-badge" id="lobby-level-badge"></span>
+        </div>
+        <div class="currency-info">
+          <span class="currency-gold" id="lobby-gold">0 G</span>
+          <span class="currency-diamonds" id="lobby-diamonds">0 D</span>
+        </div>
+      </div>
+      <div class="sub">TOP-DOWN SURVIVAL</div>
+      <h1>DEAD ZONE</h1>
+      <div id="user-display"></div>
+      <div id="lobby-stats" style="color:#606070;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:2px;margin:8px 0"></div>
+      <div id="last-run" style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;min-height:18px"></div>
+      <div class="hint">
+        WASD — Bewegen &nbsp;|&nbsp; MAUS — Zielen &nbsp;|&nbsp; LINKSKLICK — Schie&szlig;en<br>
+        R — Nachladen &nbsp;|&nbsp; SPACE — Dash &nbsp;|&nbsp; F halten — Rescue &nbsp;|&nbsp; ESC — Pause
+      </div>
+      <div class="lobby-footer">
+        <div class="map-select">
+          <div class="map-option active">WAREHOUSE</div>
+          <div class="map-option">BUNKER <span class="lock-label">COMING SOON</span></div>
+          <div class="map-option">CITY <span class="lock-label">COMING SOON</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+          <button class="start-btn" id="start-btn">STARTEN</button>
+          <a href="#" onclick="doLogout();return false" style="color:#404050;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;transition:color 0.2s" onmouseover="this.style.color='#ee2200'" onmouseout="this.style.color='#404050'">ABMELDEN</a>
+        </div>
+        <div style="width:120px"></div>
+      </div>
+    </div>
+
+    <!-- SKILL TREE panel -->
+    <div class="menu-panel" id="panel-skilltree" style="position:absolute;inset:0;top:44px;display:none">
+      <canvas id="skill-tree-canvas" style="position:absolute;inset:0;cursor:grab"></canvas>
+      <div id="st-scanline"></div>
+      <div id="st-hud-top" style="position:absolute;top:12px;left:0;right:0;display:flex;justify-content:center;gap:0;z-index:10">
+        <button class="start-btn" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:4px 0 0 4px" id="st-survival">SURVIVAL</button>
+        <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0" id="st-mobility">MOBILITY</button>
+        <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0 4px 4px 0" id="st-rescue">RESCUE</button>
+      </div>
+      <div id="st-points" style="position:absolute;bottom:12px;left:20px;font-size:12px;color:#888;letter-spacing:2px;z-index:10;font-family:'Share Tech Mono',monospace"></div>
+      <button class="start-btn btn-secondary" id="st-back" style="position:absolute;bottom:12px;right:20px;font-size:12px;padding:6px 20px;z-index:10">ZURUECK</button>
+      <div id="st-tooltip" style="display:none;position:absolute;background:rgba(8,8,20,0.95);border:1px solid #333;padding:14px 18px;max-width:260px;z-index:200;pointer-events:none;font-family:'Share Tech Mono',monospace"></div>
+    </div>
+
+    <!-- ARSENAL panel -->
+    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
+    </div>
+
+    <!-- SHOP panel -->
+    <div class="menu-panel" id="panel-shop" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
+      <span style="font-family:'Oswald',sans-serif;font-size:18px;color:#404855;letter-spacing:6px">COMING SOON</span>
+    </div>
+
+    <!-- SKINS panel -->
+    <div class="menu-panel" id="panel-skins" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
+      <span style="font-family:'Oswald',sans-serif;font-size:18px;color:#404855;letter-spacing:6px">COMING SOON</span>
+    </div>
   </div>
 
   <div id="pause-screen" style="display:none">
@@ -388,19 +499,6 @@
     <button class="start-btn" id="resume-btn">WEITER</button>
     <button class="start-btn btn-secondary" id="quit-btn">ZUR LOBBY</button>
     <div style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;margin-top:10px;opacity:0.7">ACHTUNG: VERLASSEN = TOD-STRAFE</div>
-  </div>
-
-  <div id="skill-tree-screen" style="display:none">
-    <canvas id="skill-tree-canvas" style="position:absolute;inset:0;cursor:grab"></canvas>
-    <div id="st-scanline"></div>
-    <div id="st-hud-top" style="position:absolute;top:12px;left:0;right:0;display:flex;justify-content:center;gap:0;z-index:10">
-      <button class="start-btn" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:4px 0 0 4px" id="st-survival">SURVIVAL</button>
-      <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0" id="st-mobility">MOBILITY</button>
-      <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0 4px 4px 0" id="st-rescue">RESCUE</button>
-    </div>
-    <div id="st-points" style="position:absolute;bottom:12px;left:20px;font-size:12px;color:#888;letter-spacing:2px;z-index:10;font-family:'Share Tech Mono',monospace"></div>
-    <button class="start-btn btn-secondary" id="st-back" style="position:absolute;bottom:12px;right:20px;font-size:12px;padding:6px 20px;z-index:10">ZURUECK</button>
-    <div id="st-tooltip" style="display:none;position:absolute;background:rgba(8,8,20,0.95);border:1px solid #333;padding:14px 18px;max-width:260px;z-index:200;pointer-events:none;font-family:'Share Tech Mono',monospace"></div>
   </div>
 </div>
 
@@ -458,10 +556,19 @@ let lastRunText = '';
 async function showGameMenu() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('pause-screen').style.display = 'none';
-  document.getElementById('overlay').style.display = 'flex';
+  document.getElementById('overlay').style.display = 'block';
+  stActive = false;
+
+  // Reset to lobby tab
+  switchMenuTab('lobby');
+
   document.getElementById('user-display').textContent = currentUser ? currentUser.toUpperCase() : '';
   document.getElementById('last-run').textContent = lastRunText;
   document.getElementById('lobby-stats').textContent = '';
+  document.getElementById('lobby-player-name').textContent = currentUser ? currentUser.toUpperCase() : '';
+  document.getElementById('lobby-level-badge').textContent = '';
+  document.getElementById('lobby-gold').textContent = '0 G';
+  document.getElementById('lobby-diamonds').textContent = '0 D';
 
   if (authToken) {
     try {
@@ -477,6 +584,9 @@ async function showGameMenu() {
         const skillPoints = totalLevel - 1;
         document.getElementById('lobby-stats').textContent =
           'LVL ' + totalLevel + '  |  ' + globalXp + ' XP  |  ' + skillPoints + ' SKILL PUNKTE';
+        document.getElementById('lobby-level-badge').textContent = 'LVL ' + totalLevel;
+        document.getElementById('lobby-gold').textContent = globalGold + ' G';
+        document.getElementById('lobby-diamonds').textContent = globalDiamonds + ' D';
       }
     } catch {}
 
@@ -500,17 +610,17 @@ async function showGameMenu() {
       }
     } catch {}
 
-    // Blink skill tree button if points available
+    // Blink skill tree tab if points available
     const totalLevel = getLevelFromXp(globalXp);
     const totalPoints = totalLevel - 1;
     const usedPoints = activeSkills.reduce((sum, s) => sum + s.level, 0);
-    const btn = document.getElementById('skilltree-btn');
+    const stTab = document.querySelector('.menu-tab[data-tab="skilltree"]');
     if (totalPoints - usedPoints > 0) {
-      btn.classList.add('blink-notify');
-      btn.textContent = 'SKILL TREE (' + (totalPoints - usedPoints) + ')';
+      stTab.classList.add('blink-notify');
+      stTab.textContent = 'SKILL TREE (' + (totalPoints - usedPoints) + ')';
     } else {
-      btn.classList.remove('blink-notify');
-      btn.textContent = 'SKILL TREE';
+      stTab.classList.remove('blink-notify');
+      stTab.textContent = 'SKILL TREE';
     }
   }
 }
@@ -3573,6 +3683,11 @@ function drawSkillTree() {
 }
 
 // Skill tree input handlers
+function stMousePos(e) {
+  const r = stCanvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
 stCanvas.addEventListener('mousedown', e => {
   stDragStart = { x: e.clientX, y: e.clientY };
   stCamStart = { x: stTargetCamX, y: stTargetCamY };
@@ -3587,7 +3702,8 @@ stCanvas.addEventListener('mousemove', e => {
     return;
   }
 
-  const world = stScreenToWorld(e.clientX, e.clientY);
+  const mp = stMousePos(e);
+  const world = stScreenToWorld(mp.x, mp.y);
   stHovered = null;
   for (const s of SKILLS.filter(sk => sk.path === stActivePath)) {
     const ddx = world.x - s.x, ddy = world.y - s.y;
@@ -3621,8 +3737,9 @@ stCanvas.addEventListener('mousemove', e => {
       if (s.req) html += '<div style="font-size:8px;color:#cc2200;margin-top:6px;letter-spacing:1px">REQ: ' + SKILL_MAP[s.req].name + '</div>';
     }
     tt.innerHTML = html;
-    let tx = e.clientX + 16, ty = e.clientY - 10;
-    if (tx + 270 > stCanvas.width) tx = e.clientX - 270;
+    const panelRect = stCanvas.parentElement.getBoundingClientRect();
+    let tx = e.clientX - panelRect.left + 16, ty = e.clientY - panelRect.top - 10;
+    if (tx + 270 > stCanvas.width) tx = e.clientX - panelRect.left - 270;
     if (ty < 10) ty = 10;
     tt.style.left = tx + 'px'; tt.style.top = ty + 'px';
     tt.style.display = 'block';
@@ -3651,10 +3768,11 @@ stCanvas.addEventListener('wheel', e => {
   e.preventDefault();
   const delta = -e.deltaY * 0.0008;
   stTargetZoom = Math.max(0.4, Math.min(2.5, stTargetZoom * (1 + delta)));
-  const wx = (e.clientX - stCanvas.width/2) / stZoom + stCamX;
-  const wy = (e.clientY - stCanvas.height/2) / stZoom + stCamY;
-  stTargetCamX = wx - (e.clientX - stCanvas.width/2) / stTargetZoom;
-  stTargetCamY = wy - (e.clientY - stCanvas.height/2) / stTargetZoom;
+  const mp = stMousePos(e);
+  const wx = (mp.x - stCanvas.width/2) / stZoom + stCamX;
+  const wy = (mp.y - stCanvas.height/2) / stZoom + stCamY;
+  stTargetCamX = wx - (mp.x - stCanvas.width/2) / stTargetZoom;
+  stTargetCamY = wy - (mp.y - stCanvas.height/2) / stTargetZoom;
 }, { passive: false });
 
 function stSelectPath(p) {
@@ -3669,20 +3787,33 @@ document.getElementById('st-survival').addEventListener('click', () => stSelectP
 document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
 document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
 
-document.getElementById('skilltree-btn').addEventListener('click', () => {
-  document.getElementById('overlay').style.display = 'none';
-  document.getElementById('skill-tree-screen').style.display = 'block';
-  stCanvas.width = window.innerWidth;
-  stCanvas.height = window.innerHeight;
-  stActive = true;
-  stSelectPath('survival');
-  requestAnimationFrame(drawSkillTree);
+// Tab switching
+function switchMenuTab(tabName) {
+  document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.menu-panel').forEach(p => { p.style.display = 'none'; });
+  const activeTab = document.querySelector('.menu-tab[data-tab="' + tabName + '"]');
+  if (activeTab) activeTab.classList.add('active');
+  const panel = document.getElementById('panel-' + tabName);
+  if (panel) panel.style.display = 'flex';
+
+  if (tabName === 'skilltree') {
+    const panelRect = panel.getBoundingClientRect();
+    stCanvas.width = panelRect.width;
+    stCanvas.height = panelRect.height;
+    stActive = true;
+    stSelectPath(stActivePath);
+    requestAnimationFrame(drawSkillTree);
+  } else {
+    stActive = false;
+  }
+}
+
+document.querySelectorAll('.menu-tab').forEach(tab => {
+  tab.addEventListener('click', () => switchMenuTab(tab.dataset.tab));
 });
 
 document.getElementById('st-back').addEventListener('click', () => {
-  stActive = false;
-  document.getElementById('skill-tree-screen').style.display = 'none';
-  showGameMenu();
+  switchMenuTab('lobby');
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
