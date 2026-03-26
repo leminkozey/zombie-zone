@@ -3,7 +3,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
-const { createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath } = require('./database');
+const {
+  createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath,
+  getUserWeapons, getWeapon, buyWeapon, addGold, setGold, addDiamonds, upgradeWeaponStat,
+} = require('./database');
 
 const app = express();
 app.use(express.json());
@@ -32,6 +35,18 @@ function auth(req, res, next) {
   }
 }
 
+// weapon definitions
+const WEAPON_DEFS = {
+  pistol: { unlockLevel: 0, cost: 0 },
+  smg: { unlockLevel: 8, cost: 800 },
+  shotgun: { unlockLevel: 20, cost: 4000 },
+  assault_rifle: { unlockLevel: 35, cost: 12000 },
+  sniper: { unlockLevel: 55, cost: 30000 },
+  minigun: { unlockLevel: 75, cost: 60000 },
+};
+const UPGRADE_BASE_COSTS = { dmg: 100, range: 80, rate: 120, reload: 80, mag: 100, acc: 60 };
+const MAX_UPGRADE_LEVEL = 10;
+
 // register
 app.post('/api/register', (req, res) => {
   const { name, password } = req.body;
@@ -59,7 +74,7 @@ app.post('/api/login', (req, res) => {
 app.get('/api/profile', auth, (req, res) => {
   const user = getUser.get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json({ name: user.name, xp: user.xp });
+  res.json({ name: user.name, xp: user.xp, gold: user.gold, diamonds: user.diamonds });
 });
 
 // add xp
@@ -107,7 +122,7 @@ app.post('/api/skills/invest', auth, (req, res) => {
 
   const SKILL_MAX_LEVELS = {
     vitality: 5, field_medic: 3, shield: 5, regen: 3, thick_skin: 3, fortress: 1, second_wind: 1,
-    swift: 5, quick_reload: 3, dash: 1, dash_range: 3, dash_cd: 3, dash_charges: 2, trigger_finger: 3, phantom_dash: 1, bullet_time: 1,
+    swift: 5, dash: 1, dash_range: 3, dash_cd: 3, dash_charges: 2, phantom_dash: 1, bullet_time: 1,
     quick_call: 5, fast_extract: 4, survival_instinct: 5, rapid_redial: 3, ext_window: 3, safe_zone: 3, steady_hands: 3, evac_chopper: 1, fortified_lz: 1,
   };
   const maxLvl = SKILL_MAX_LEVELS[skillId];
@@ -120,6 +135,86 @@ app.post('/api/skills/invest', auth, (req, res) => {
   upsertSkill.run(req.user.id, skillId);
   const skills = getUserSkills.all(req.user.id);
   res.json({ skills });
+});
+
+// GET /api/weapons
+app.get('/api/weapons', auth, (req, res) => {
+  const weapons = getUserWeapons.all(req.user.id);
+  res.json({ weapons });
+});
+
+// POST /api/weapons/buy
+app.post('/api/weapons/buy', auth, (req, res) => {
+  const { weaponId } = req.body;
+  if (!weaponId) return res.status(400).json({ error: 'weaponId required' });
+
+  const def = WEAPON_DEFS[weaponId];
+  if (!def) return res.status(400).json({ error: 'Unknown weapon' });
+
+  const user = getUser.get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const level = getLevelFromXp(user.xp);
+  if (level < def.unlockLevel) {
+    return res.status(400).json({ error: `Requires level ${def.unlockLevel}` });
+  }
+
+  const existing = getWeapon.get(req.user.id, weaponId);
+  if (existing) return res.status(400).json({ error: 'Weapon already owned' });
+
+  if (user.gold < def.cost) {
+    return res.status(400).json({ error: 'Not enough gold' });
+  }
+
+  setGold.run(user.gold - def.cost, req.user.id);
+  buyWeapon.run(req.user.id, weaponId);
+  const weapons = getUserWeapons.all(req.user.id);
+  const updated = getUser.get(req.user.id);
+  res.json({ weapons, gold: updated.gold });
+});
+
+// POST /api/weapons/upgrade
+app.post('/api/weapons/upgrade', auth, (req, res) => {
+  const { weaponId, stat } = req.body;
+  if (!weaponId || !stat) return res.status(400).json({ error: 'weaponId and stat required' });
+
+  const baseCost = UPGRADE_BASE_COSTS[stat];
+  if (!baseCost) return res.status(400).json({ error: 'Invalid stat' });
+
+  const weapon = getWeapon.get(req.user.id, weaponId);
+  if (!weapon) return res.status(400).json({ error: 'Weapon not owned' });
+
+  const currentLevel = weapon[`${stat}_level`];
+  if (currentLevel >= MAX_UPGRADE_LEVEL) {
+    return res.status(400).json({ error: 'Stat already at max level' });
+  }
+
+  const cost = baseCost * (currentLevel + 1);
+  const user = getUser.get(req.user.id);
+  if (user.gold < cost) {
+    return res.status(400).json({ error: 'Not enough gold' });
+  }
+
+  setGold.run(user.gold - cost, req.user.id);
+  upgradeWeaponStat(req.user.id, weaponId, stat);
+  const updated = getWeapon.get(req.user.id, weaponId);
+  const updatedUser = getUser.get(req.user.id);
+  res.json({ weapon: updated, gold: updatedUser.gold });
+});
+
+// POST /api/gold
+app.post('/api/gold', auth, (req, res) => {
+  const { gold, diamonds } = req.body;
+  if (gold !== undefined) {
+    if (typeof gold !== 'number' || gold < 0) return res.status(400).json({ error: 'Invalid gold value' });
+    addGold.run(gold, req.user.id);
+  }
+  if (diamonds !== undefined) {
+    if (typeof diamonds !== 'number' || diamonds < 0) return res.status(400).json({ error: 'Invalid diamonds value' });
+    addDiamonds.run(diamonds, req.user.id);
+  }
+  const user = getUser.get(req.user.id);
+  res.json({ gold: user.gold, diamonds: user.diamonds });
 });
 
 // POST /api/death
