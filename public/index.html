@@ -484,7 +484,7 @@ const BASE_STATS = {
   dashDistance: 120,
   dashCooldown: 5,
   dashCharges: 1,
-  rescueActivationTime: 240,
+  rescueActivationTime: 30,
   rescueSurvivalTime: 90,
   rescueStandTime: 20,
   rescueCooldown: 30,
@@ -582,7 +582,7 @@ const SKILLS = [
   // RESCUE — Tier 1
   { id: 'quick_call', path: 'rescue', req: 'resc_start', tier: 1, maxLvl: 5,
     icon: '⏳', name: 'QUICK CALL', desc: 'Rescue frueher verfuegbar.',
-    x: -140, y: -130, r: 22, effect: (lvl) => ({ rescueActivationTime: -20 * lvl }) },
+    x: -140, y: -130, r: 22, effect: (lvl) => ({ rescueActivationTime: -4 * lvl }) },
   { id: 'fast_extract', path: 'rescue', req: 'resc_start', tier: 1, maxLvl: 4,
     icon: '🎯', name: 'FAST EXTRACT', desc: 'Weniger Stehzeit im Kreis.',
     x: 140, y: -130, r: 22, effect: (lvl) => ({ rescueStandTime: -3 * lvl }) },
@@ -732,6 +732,52 @@ function rebuildSpawnEdges() {
 }
 rebuildSpawnEdges();
 
+// ── FLOWFIELD PATHFINDING ──────────────────────────────
+let flowfield = null; // 2D array of {dx, dy} directions
+
+function computeFlowfield() {
+  const pTileX = Math.floor(player.x / TILE);
+  const pTileY = Math.floor(player.y / TILE);
+
+  // BFS from player position
+  flowfield = [];
+  for (let r = 0; r < ROWS; r++) {
+    flowfield[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      flowfield[r][c] = { dx: 0, dy: 0, dist: Infinity };
+    }
+  }
+
+  if (pTileY >= 0 && pTileY < ROWS && pTileX >= 0 && pTileX < COLS) {
+    flowfield[pTileY][pTileX].dist = 0;
+  }
+
+  const queue = [{ x: pTileX, y: pTileY }];
+  const neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    const curDist = flowfield[cur.y][cur.x].dist;
+
+    for (const [nx, ny] of neighbors) {
+      const tx = cur.x + nx;
+      const ty = cur.y + ny;
+      if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
+      if (MAP[ty][tx] === 1) continue; // wall
+      const newDist = curDist + 1;
+      if (newDist < flowfield[ty][tx].dist) {
+        flowfield[ty][tx].dist = newDist;
+        // Direction points BACK toward where we came from (toward player)
+        flowfield[ty][tx].dx = -nx;
+        flowfield[ty][tx].dy = -ny;
+        queue.push({ x: tx, y: ty });
+      }
+    }
+  }
+}
+
+let lastFlowfieldUpdate = 0;
+
 // ── STATE ───────────────────────────────────────────
 let player, bullets, zombies, particles, bloodDecals;
 let spitterProjectiles;
@@ -771,6 +817,8 @@ async function init() {
   // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
   generateMap();
   rebuildSpawnEdges();
+  flowfield = null;
+  lastFlowfieldUpdate = 0;
 
   const mapW = COLS * TILE;
   const mapH = ROWS * TILE;
@@ -1369,17 +1417,15 @@ function updateZombies() {
   for (const z of zombies) {
     if (!z.alive) continue;
 
-    // Push out of walls
+    // Gentle push out of walls
     if (wallCollide(z.x, z.y, z.radius)) {
-      const tx = Math.floor(z.x / TILE);
-      const ty = Math.floor(z.y / TILE);
-      const dirs = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
-      for (const [dx, dy] of dirs) {
-        const nx = (tx + dx) * TILE + TILE / 2;
-        const ny = (ty + dy) * TILE + TILE / 2;
-        if (!wallCollide(nx, ny, z.radius)) {
-          z.x = nx;
-          z.y = ny;
+      const pushDirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [pdx, pdy] of pushDirs) {
+        const testX = z.x + pdx * 2;
+        const testY = z.y + pdy * 2;
+        if (!wallCollide(testX, testY, z.radius)) {
+          z.x = testX;
+          z.y = testY;
           break;
         }
       }
@@ -1423,7 +1469,6 @@ function updateZombies() {
 
     if (!(z.type === 'spitter' && dist <= 200) && dist > 1) {
       const spd = z.speed;
-      // aggression: faster when player is low HP
       const aggroMult = player.hp < player.maxHp * 0.3 ? 1.2 : 1.0;
       let bulletTimeMult = 1.0;
       if (bulletTimeTimer > 0) {
@@ -1432,33 +1477,51 @@ function updateZombies() {
           bulletTimeMult = 0.5;
         }
       }
-      let moveX = (dx/dist) * spd * aggroMult * bulletTimeMult;
-      let moveY = (dy/dist) * spd * aggroMult * bulletTimeMult;
 
-      const canX = !wallCollide(z.x + moveX, z.y, z.radius - 2);
-      const canY = !wallCollide(z.x, z.y + moveY, z.radius - 2);
+      const finalSpeed = spd * aggroMult * bulletTimeMult;
 
-      if (canX) {
+      // Use flowfield for pathfinding when far from player, direct chase when close
+      let moveX, moveY;
+      if (dist < TILE * 2.5) {
+        // Close enough — go directly at player
+        moveX = (dx/dist) * finalSpeed;
+        moveY = (dy/dist) * finalSpeed;
+      } else if (flowfield) {
+        // Use flowfield
+        const ztx = Math.floor(z.x / TILE);
+        const zty = Math.floor(z.y / TILE);
+        if (ztx >= 0 && ztx < COLS && zty >= 0 && zty < ROWS && flowfield[zty][ztx].dist < Infinity) {
+          const ff = flowfield[zty][ztx];
+          // Blend flowfield direction with direct direction for smoother movement
+          const ffWeight = 0.7;
+          const directWeight = 0.3;
+          const dirX = ff.dx * ffWeight + (dx/dist) * directWeight;
+          const dirY = ff.dy * ffWeight + (dy/dist) * directWeight;
+          const dirLen = Math.sqrt(dirX*dirX + dirY*dirY);
+          if (dirLen > 0) {
+            moveX = (dirX/dirLen) * finalSpeed;
+            moveY = (dirY/dirLen) * finalSpeed;
+          } else {
+            moveX = (dx/dist) * finalSpeed;
+            moveY = (dy/dist) * finalSpeed;
+          }
+        } else {
+          // No flowfield data, go direct
+          moveX = (dx/dist) * finalSpeed;
+          moveY = (dy/dist) * finalSpeed;
+        }
+      } else {
+        moveX = (dx/dist) * finalSpeed;
+        moveY = (dy/dist) * finalSpeed;
+      }
+
+      // Apply movement with wall collision
+      if (!wallCollide(z.x + moveX, z.y, z.radius - 2)) {
         z.x += moveX;
-      } else {
-        // wall ahead on X, try sliding on Y
-        if (!z.avoidDir) z.avoidDir = Math.random() < 0.5 ? 1 : -1;
-        const slideY = z.avoidDir * spd * aggroMult;
-        if (!wallCollide(z.x, z.y + slideY, z.radius - 2)) z.y += slideY;
-        else z.avoidDir = -z.avoidDir;
       }
-
-      if (canY) {
+      if (!wallCollide(z.x, z.y + moveY, z.radius - 2)) {
         z.y += moveY;
-      } else {
-        if (!z.avoidDir) z.avoidDir = Math.random() < 0.5 ? 1 : -1;
-        const slideX = z.avoidDir * spd * aggroMult;
-        if (!wallCollide(z.x + slideX, z.y, z.radius - 2)) z.x += slideX;
-        else z.avoidDir = -z.avoidDir;
       }
-
-      // reset avoidDir when path is clear
-      if (canX && canY) z.avoidDir = 0;
     }
 
     // spitter shooting
@@ -2221,6 +2284,13 @@ function loop(now) {
   frameCount++;
 
   movePlayer();
+
+  // Update flowfield every 15 frames
+  if (frameCount - lastFlowfieldUpdate > 15) {
+    computeFlowfield();
+    lastFlowfieldUpdate = frameCount;
+  }
+
   updateDash();
   updateRescue(performance.now());
   if (mouseDown) tryShoot();
