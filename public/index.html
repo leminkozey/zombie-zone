@@ -1263,14 +1263,16 @@ function drawRescueCircle() {
   ctx.fillStyle = 'rgba(100, 255, 150, ' + (pulse * 0.08) + ')';
   ctx.fill();
 
-  if (rescueState === 'extracting') {
+  // Show progress bar whenever there's progress (extracting OR decaying)
+  if ((rescueState === 'extracting' || rescueState === 'circle_spawned') && rescueExtractProgress > 0) {
     const barW = rescueCircle.radius * 2;
     const barH = 6;
     const barX = rescueCircle.x - barW/2;
     const barY = rescueCircle.y - rescueCircle.radius - 20;
     ctx.fillStyle = '#222';
     ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = '#66ff99';
+    // Green when extracting, orange-fading when decaying
+    ctx.fillStyle = rescueState === 'extracting' ? '#66ff99' : '#aa8833';
     ctx.fillRect(barX, barY, barW * rescueExtractProgress, barH);
   }
   ctx.restore();
