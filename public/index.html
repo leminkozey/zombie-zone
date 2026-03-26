@@ -1203,6 +1203,7 @@ let pendingDiamonds = 0;
 let lastGoldSync = 0;
 const GOLD_SYNC_INTERVAL = 10000;
 let floatingTexts = [];
+let hitTrails = []; // { x1, y1, x2, y2, life, maxLife } — hitscan visual trails
 let minigunSpinup = 0;
 
 async function init() {
@@ -1256,7 +1257,7 @@ async function init() {
 
   runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
-  healthpacks = []; ammopacks = []; floatingTexts = [];
+  healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
@@ -1720,8 +1721,74 @@ function tryShoot() {
   updateHUD();
 
   const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+  const useHitscan = wpn.type === 'Auto'; // SMG, AR, Minigun = hitscan
 
-  if (wpn.special === 'shotgun') {
+  if (useHitscan) {
+    // Hitscan — instant ray, no bullet object
+    const bulletSpread = (Math.random() - 0.5) * spread;
+    const rayAngle = angle + bulletSpread;
+    const rayDx = Math.cos(rayAngle);
+    const rayDy = Math.sin(rayAngle);
+    const maxDist = range * BULLET_SPD; // convert frame-life to pixel distance
+
+    // Find closest zombie along ray
+    let hitZombie = null;
+    let hitDist = maxDist;
+    let hitX = player.x + rayDx * maxDist;
+    let hitY = player.y + rayDy * maxDist;
+
+    // Check wall hit first (step along ray)
+    for (let d = 0; d < maxDist; d += TILE * 0.5) {
+      const wx = player.x + rayDx * d;
+      const wy = player.y + rayDy * d;
+      if (wallCollide(wx, wy, 2)) {
+        hitDist = d;
+        hitX = wx; hitY = wy;
+        break;
+      }
+    }
+
+    // Check zombies within ray distance
+    for (const z of zombies) {
+      if (!z.alive) continue;
+      // Point-to-line distance
+      const zx = z.x - player.x, zy = z.y - player.y;
+      const proj = zx * rayDx + zy * rayDy; // projection along ray
+      if (proj < 0 || proj > hitDist) continue; // behind player or beyond wall
+      const perpX = zx - rayDx * proj;
+      const perpY = zy - rayDy * proj;
+      const perpDist = Math.sqrt(perpX * perpX + perpY * perpY);
+      if (perpDist < z.radius + BULLET_R) {
+        if (proj < hitDist) {
+          hitZombie = z;
+          hitDist = proj;
+          hitX = player.x + rayDx * proj;
+          hitY = player.y + rayDy * proj;
+        }
+      }
+    }
+
+    // Apply damage
+    if (hitZombie) {
+      hitZombie.hp -= dmg;
+      runStats.damageDealt += dmg;
+      spawnBlood(hitZombie.x, hitZombie.y, 6, rayAngle);
+      if (hitZombie.hp <= 0) {
+        hitZombie.alive = false;
+        hitZombie.deathTimer = 30;
+        onZombieKill(hitZombie);
+      }
+    }
+
+    // Visual trail (cosmetic only, no physics)
+    hitTrails.push({
+      x1: player.x, y1: player.y,
+      x2: hitX, y2: hitY,
+      life: 4, maxLife: 4,
+    });
+
+  } else if (wpn.special === 'shotgun') {
+    // Shotgun keeps projectiles (5 pellets, short range — few objects)
     for (let p = 0; p < 5; p++) {
       const pelletSpread = (p - 2) * 0.12 + (Math.random() - 0.5) * spread;
       bullets.push({
@@ -1732,6 +1799,7 @@ function tryShoot() {
       });
     }
   } else {
+    // Pistol, Sniper — keep projectiles (low fire rate, few objects)
     const bulletSpread = (Math.random() - 0.5) * spread;
     bullets.push({
       x: player.x, y: player.y,
@@ -1741,13 +1809,14 @@ function tryShoot() {
     });
   }
 
-  for (let i = 0; i < 4; i++) {
+  // Muzzle particles
+  for (let i = 0; i < (useHitscan ? 2 : 4); i++) {
     const a = angle + (Math.random()-0.5)*0.4;
     particles.push({
       x: player.x, y: player.y,
       dx: Math.cos(a)*3*(Math.random()+0.5),
       dy: Math.sin(a)*3*(Math.random()+0.5),
-      life: 8, maxLife: 8, color: '#ffcc00', r: 2,
+      life: 6, maxLife: 6, color: '#ffcc00', r: 2,
     });
   }
 
@@ -2168,6 +2237,50 @@ function updateZombies() {
 }
 
 // ── BULLET UPDATE ────────────────────────────────────
+function onZombieKill(z) {
+  runStats.kills++;
+  runStats[z.type + 'Kills']++;
+  tryDropHealthpack(z.x, z.y);
+  tryDropAmmopack(z.x, z.y);
+  score += z.xp;
+  runStats.xpEarned += z.xp;
+  pendingXp += z.xp;
+
+  // Gold drop with wave multiplier
+  const goldDef = { normal: [5,10,2], runner: [10,15,3], tank: [25,40,5], spitter: [15,25,4] };
+  const gd = goldDef[z.type] || goldDef.normal;
+  let goldAmount = gd[0] + Math.floor(Math.random() * (gd[1] - gd[0] + 1)) + gd[2] * wave;
+  const goldMultiplier = wave >= 5 ? 1 + (wave - 5) * 0.5 : 1;
+  goldAmount = Math.round(goldAmount * goldMultiplier);
+  const isGoldHaufen = Math.random() < 0.05;
+  if (isGoldHaufen) goldAmount *= 3;
+  pendingGold += goldAmount;
+
+  // Diamond drop (wave 10+)
+  if (wave >= 10) {
+    const diaChance = z.type === 'tank' ? 0.02 : z.type === 'spitter' ? 0.01 : 0;
+    if (Math.random() < diaChance) {
+      pendingDiamonds += 1;
+      showWaveBanner('+1 DIAMANT!');
+    }
+  }
+
+  // Floating gold text
+  let goldText = '+' + goldAmount + 'G';
+  let goldColor = '#ddaa00';
+  if (isGoldHaufen) { goldText += ' x3!'; goldColor = '#ffdd44'; }
+  else if (goldMultiplier > 1) { goldText += ' x' + goldMultiplier.toFixed(1); goldColor = '#eecc22'; }
+  floatingTexts.push({ x: z.x, y: z.y - 10, text: goldText, life: 45, maxLife: 45, color: goldColor });
+
+  updateXpBar();
+  waveKills++;
+  spawnBlood(z.x, z.y, 16);
+  updateHUD();
+  if (waveKills >= waveTotal && zombies.filter(zz => zz.alive).length === 0) {
+    setTimeout(() => startNextWave(), 2000);
+  }
+}
+
 function updateBullets() {
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
@@ -2195,53 +2308,7 @@ function updateBullets() {
         if (z.hp <= 0) {
           z.alive = false;
           z.deathTimer = 30;
-          runStats.kills++;
-          runStats[z.type + 'Kills']++;
-          tryDropHealthpack(z.x, z.y);
-          tryDropAmmopack(z.x, z.y);
-          score += z.xp;
-          runStats.xpEarned += z.xp;
-          pendingXp += z.xp;
-
-          // Gold drop with wave multiplier (1.5x per wave above 5)
-          const goldDef = { normal: [5,10,2], runner: [10,15,3], tank: [25,40,5], spitter: [15,25,4] };
-          const gd = goldDef[z.type] || goldDef.normal;
-          let goldAmount = gd[0] + Math.floor(Math.random() * (gd[1] - gd[0] + 1)) + gd[2] * wave;
-          const goldMultiplier = wave >= 5 ? 1 + (wave - 5) * 0.5 : 1;
-          goldAmount = Math.round(goldAmount * goldMultiplier);
-          const isGoldHaufen = Math.random() < 0.05;
-          if (isGoldHaufen) goldAmount *= 3;
-          pendingGold += goldAmount;
-
-          // Diamond drop (wave 10+)
-          if (wave >= 10) {
-            const diaChance = z.type === 'tank' ? 0.02 : z.type === 'spitter' ? 0.01 : 0;
-            if (Math.random() < diaChance) {
-              pendingDiamonds += 1;
-              showWaveBanner('+1 DIAMANT!');
-            }
-          }
-
-          // Floating gold text
-          let goldText = '+' + goldAmount + 'G';
-          let goldColor = '#ddaa00';
-          if (isGoldHaufen) { goldText += ' x3!'; goldColor = '#ffdd44'; }
-          else if (goldMultiplier > 1) { goldText += ' x' + goldMultiplier.toFixed(1); goldColor = '#eecc22'; }
-          floatingTexts.push({
-            x: z.x, y: z.y - 10,
-            text: goldText,
-            life: 45, maxLife: 45,
-            color: goldColor,
-          });
-
-          updateXpBar();
-          waveKills++;
-          spawnBlood(z.x, z.y, 16, bulletDir);
-          updateHUD();
-          // Wave clear?
-          if (waveKills >= waveTotal && zombies.filter(z=>z.alive).length === 0) {
-            setTimeout(() => startNextWave(), 2000);
-          }
+          onZombieKill(z);
         }
         if (!b.pierce) break;
       }
@@ -2691,6 +2758,27 @@ function drawBullets() {
     ctx.beginPath();
     ctx.arc(b.x, b.y, BULLET_R - 1, 0, Math.PI*2);
     ctx.fill();
+    ctx.restore();
+  }
+}
+
+function updateHitTrails() {
+  for (let i = hitTrails.length - 1; i >= 0; i--) {
+    hitTrails[i].life--;
+    if (hitTrails[i].life <= 0) hitTrails.splice(i, 1);
+  }
+}
+
+function drawHitTrails() {
+  for (const t of hitTrails) {
+    ctx.save();
+    ctx.globalAlpha = t.life / t.maxLife * 0.6;
+    ctx.strokeStyle = '#ffee88';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(t.x1, t.y1);
+    ctx.lineTo(t.x2, t.y2);
+    ctx.stroke();
     ctx.restore();
   }
 }
@@ -3535,6 +3623,7 @@ function loop(now) {
   updateSpitterProjectiles();
   updateParticles();
   updateFloatingTexts();
+  updateHitTrails();
   updateReload(now);
 
   // Shield regen
@@ -3593,6 +3682,7 @@ function loop(now) {
   drawRescueCircle();
   drawParticles();
   drawFloatingTexts();
+  drawHitTrails();
   drawBullets();
   drawSpitterProjectiles();
   zombies.forEach(drawZombie);
