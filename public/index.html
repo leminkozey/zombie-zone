@@ -327,6 +327,7 @@
         <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
       </div>
     </div>
+    <div id="gold-display" style="position:absolute;bottom:55px;right:16px;font-size:11px;color:#ddaa00;font-family:'JetBrains Mono',monospace;pointer-events:none;z-index:5;text-align:right"></div>
     <!-- Bottom-right: Dash + Ammo (no box) -->
     <div style="position:absolute;bottom:16px;right:16px;text-align:right;pointer-events:none">
       <div id="dash-display" style="display:none;justify-content:flex-end;gap:3px;margin-bottom:6px"></div>
@@ -470,6 +471,8 @@ async function showGameMenu() {
       if (res.ok) {
         const data = await res.json();
         globalXp = data.xp;
+        globalGold = data.gold || 0;
+        globalDiamonds = data.diamonds || 0;
         const totalLevel = getLevelFromXp(globalXp);
         const skillPoints = totalLevel - 1;
         document.getElementById('lobby-stats').textContent =
@@ -484,6 +487,16 @@ async function showGameMenu() {
       if (skillRes.ok) {
         const skillData = await skillRes.json();
         activeSkills = skillData.skills.map(s => ({ skillId: s.skill_id, level: s.level }));
+      }
+    } catch {}
+
+    try {
+      const wpnRes = await fetch('/api/weapons', { headers: { 'Authorization': 'Bearer ' + authToken } });
+      if (wpnRes.ok) {
+        const wpnData = await wpnRes.json();
+        playerWeapons = wpnData.weapons;
+        ownedWeaponIds = ['pistol', ...wpnData.weapons.map(w => w.weapon_id)];
+        if (!ownedWeaponIds.includes(activeWeaponId)) activeWeaponId = 'pistol';
       }
     } catch {}
 
@@ -1016,6 +1029,7 @@ let pendingGold = 0;
 let pendingDiamonds = 0;
 let lastGoldSync = 0;
 const GOLD_SYNC_INTERVAL = 10000;
+let floatingTexts = [];
 let minigunSpinup = 0;
 
 async function init() {
@@ -1068,7 +1082,7 @@ async function init() {
   rescueRunTime = 0;
 
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
-  healthpacks = []; ammopacks = [];
+  healthpacks = []; ammopacks = []; floatingTexts = [];
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
@@ -1987,6 +2001,31 @@ function updateBullets() {
           tryDropAmmopack(z.x, z.y);
           score += z.xp;
           pendingXp += z.xp;
+
+          // Gold drop
+          const goldDef = { normal: [5,10,2], runner: [10,15,3], tank: [25,40,5], spitter: [15,25,4] };
+          const gd = goldDef[z.type] || goldDef.normal;
+          let goldAmount = gd[0] + Math.floor(Math.random() * (gd[1] - gd[0] + 1)) + gd[2] * wave;
+          if (Math.random() < 0.05) goldAmount *= 3; // Gold Haufen
+          pendingGold += goldAmount;
+
+          // Diamond drop (wave 10+)
+          if (wave >= 10) {
+            const diaChance = z.type === 'tank' ? 0.02 : z.type === 'spitter' ? 0.01 : 0;
+            if (Math.random() < diaChance) {
+              pendingDiamonds += 1;
+              showWaveBanner('+1 DIAMANT!');
+            }
+          }
+
+          // Floating gold text
+          floatingTexts.push({
+            x: z.x, y: z.y - 10,
+            text: '+' + goldAmount + 'G',
+            life: 40, maxLife: 40,
+            color: '#ddaa00',
+          });
+
           updateXpBar();
           waveKills++;
           spawnBlood(z.x, z.y, 16, bulletDir);
@@ -2011,6 +2050,28 @@ function updateParticles() {
     p.dx *= 0.88; p.dy *= 0.88;
     p.life--;
     if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ── FLOATING TEXTS ──────────────────────────────────
+function updateFloatingTexts() {
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i];
+    ft.y -= 0.5;
+    ft.life--;
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
+  }
+}
+
+function drawFloatingTexts() {
+  for (const ft of floatingTexts) {
+    ctx.save();
+    ctx.globalAlpha = ft.life / ft.maxLife;
+    ctx.font = "bold 11px 'JetBrains Mono', monospace";
+    ctx.fillStyle = ft.color;
+    ctx.textAlign = 'center';
+    ctx.fillText(ft.text, ft.x, ft.y);
+    ctx.restore();
   }
 }
 
@@ -2889,6 +2950,8 @@ function updateHUD() {
     document.getElementById('shield-bar').style.width = (shieldPct * 100) + '%';
   }
 
+  document.getElementById('gold-display').textContent = (globalGold + pendingGold) + 'G';
+
   // Dash display is updated in updateDash() every frame
 }
 
@@ -2905,6 +2968,27 @@ function syncXp() {
   }).catch(() => {
     pendingXp += xpToSync;
     globalXp -= xpToSync;
+  });
+}
+
+// ── GOLD SYNC ────────────────────────────────────────
+function syncGold() {
+  if (!authToken || (pendingGold <= 0 && pendingDiamonds <= 0)) return;
+  const goldToSync = pendingGold;
+  const diaToSync = pendingDiamonds;
+  pendingGold = 0;
+  pendingDiamonds = 0;
+  globalGold += goldToSync;
+  globalDiamonds += diaToSync;
+  fetch('/api/gold', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    body: JSON.stringify({ gold: goldToSync, diamonds: diaToSync })
+  }).catch(() => {
+    pendingGold += goldToSync;
+    pendingDiamonds += diaToSync;
+    globalGold -= goldToSync;
+    globalDiamonds -= diaToSync;
   });
 }
 
@@ -2926,6 +3010,19 @@ async function gameOver() {
       } catch {}
     }
 
+    if (pendingGold > 0 || pendingDiamonds > 0) {
+      const g = pendingGold, d = pendingDiamonds;
+      pendingGold = 0; pendingDiamonds = 0;
+      globalGold += g; globalDiamonds += d;
+      try {
+        await fetch('/api/gold', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ gold: g, diamonds: d })
+        });
+      } catch {}
+    }
+
     try {
       const res = await fetch('/api/death', {
         method: 'POST',
@@ -2934,6 +3031,8 @@ async function gameOver() {
       if (res.ok) {
         const data = await res.json();
         globalXp = data.xp;
+        globalGold = 0;
+        // globalDiamonds stays — diamonds persist through death
       }
     } catch {}
   }
@@ -3082,6 +3181,7 @@ function loop(now) {
   updateBullets();
   updateSpitterProjectiles();
   updateParticles();
+  updateFloatingTexts();
   updateReload(now);
 
   // Shield regen
@@ -3112,6 +3212,11 @@ function loop(now) {
     lastXpSync = now;
   }
 
+  if ((pendingGold > 0 || pendingDiamonds > 0) && now - lastGoldSync > GOLD_SYNC_INTERVAL) {
+    syncGold();
+    lastGoldSync = now;
+  }
+
   tryTimerHealthpack();
   tryTimerAmmopack();
   updateHealthpacks();
@@ -3134,6 +3239,7 @@ function loop(now) {
   drawAmmopacks();
   drawRescueCircle();
   drawParticles();
+  drawFloatingTexts();
   drawBullets();
   drawSpitterProjectiles();
   zombies.forEach(drawZombie);
@@ -3620,6 +3726,20 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
         });
       } catch {}
     }
+
+    if (pendingGold > 0 || pendingDiamonds > 0) {
+      const g = pendingGold, d = pendingDiamonds;
+      pendingGold = 0; pendingDiamonds = 0;
+      globalGold += g; globalDiamonds += d;
+      try {
+        await fetch('/api/gold', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ gold: g, diamonds: d })
+        });
+      } catch {}
+    }
+
     try {
       const res = await fetch('/api/death', {
         method: 'POST',
@@ -3628,6 +3748,8 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
       if (res.ok) {
         const data = await res.json();
         globalXp = data.xp;
+        globalGold = 0;
+        // globalDiamonds stays — diamonds persist through death
       }
     } catch {}
   }
