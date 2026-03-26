@@ -248,6 +248,9 @@
       <div class="hud-label">Health</div>
       <div class="hud-val" id="hp-val">100</div>
       <div id="hp-bar-wrap"><div id="hp-bar" style="width:100%"></div></div>
+      <div id="shield-bar-wrap" style="width:100%;height:3px;background:#111;margin-top:2px;display:none">
+        <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
+      </div>
     </div>
     <div class="hud-box" style="text-align:center">
       <div id="wave-info">WAVE 1</div>
@@ -750,6 +753,10 @@ async function init() {
     dashCharges: [],
     dashInvulnerable: false,
   };
+  const shieldWrap = document.getElementById('shield-bar-wrap');
+  shieldWrap.style.display = player.maxShield > 0 ? 'block' : 'none';
+  player.lastDamageTime = 0;
+
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = [];
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
@@ -1000,7 +1007,10 @@ function movePlayer() {
 
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
 
-  const speed = getPlayerStat('moveSpeed');
+  let speed = getPlayerStat('moveSpeed');
+  if (hasSkill('fortress') && player.shield >= player.maxShield && player.maxShield > 0) {
+    speed *= 1.10;
+  }
   const nx = player.x + dx * speed;
   const ny = player.y + dy * speed;
 
@@ -1010,6 +1020,54 @@ function movePlayer() {
   player.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
   if (player.shootCooldown > 0) player.shootCooldown--;
   if (player.recoil > 0) player.recoil -= 0.5;
+}
+
+// ── DAMAGE PIPELINE ─────────────────────────────────
+function damagePlayer(rawDamage) {
+  const reduction = getPlayerStat('damageReductionPct');
+  let damage = Math.round(rawDamage * (1 - reduction));
+
+  if (typeof rescueState !== 'undefined' && rescueState === 'extracting' && hasSkill('fortified_lz')) {
+    damage = Math.round(damage * 0.5);
+  }
+
+  if (player.dashInvulnerable) return;
+
+  if (player.shield > 0) {
+    if (damage <= player.shield) {
+      player.shield -= damage;
+      damage = 0;
+    } else {
+      damage -= player.shield;
+      player.shield = 0;
+    }
+  }
+
+  player.hp -= damage;
+  player.shieldRegenTimer = 0;
+  player.lastDamageTime = frameCount;
+
+  hurtFlash = 18;
+  spawnBlood(player.x, player.y, 4);
+
+  if (player.hp <= 0 && hasSkill('second_wind') && !player.secondWindUsed) {
+    player.secondWindUsed = true;
+    player.hp = Math.round(getPlayerStat('maxHp') * 0.3);
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * Math.PI * 2;
+      particles.push({
+        x: player.x, y: player.y,
+        dx: Math.cos(a) * 3, dy: Math.sin(a) * 3,
+        life: 25, maxLife: 25, color: '#ff4444', r: 4,
+      });
+    }
+    showWaveBanner('SECOND WIND!');
+    updateHUD();
+    return;
+  }
+
+  if (player.hp <= 0) { player.hp = 0; gameOver(); }
+  updateHUD();
 }
 
 // ── ZOMBIE UPDATE ────────────────────────────────────
@@ -1109,12 +1167,8 @@ function updateZombies() {
     // Zombie hits player
     if (dist < PLAYER_R + z.radius - 2) {
       if (!z.hitting || frameCount - z.lastHit > 40) {
-        player.hp -= 8;
-        hurtFlash = 18;
         z.lastHit = frameCount;
-        spawnBlood(player.x, player.y, 4);
-        if (player.hp <= 0) { player.hp = 0; gameOver(); }
-        updateHUD();
+        damagePlayer(8);
       }
       z.hitting = true;
     } else {
@@ -1204,12 +1258,8 @@ function updateSpitterProjectiles() {
     // hit player
     const dx = p.x - player.x, dy = p.y - player.y;
     if (dx*dx + dy*dy < (6 + PLAYER_R)**2) {
-      player.hp -= 10;
-      hurtFlash = 18;
-      spawnBlood(player.x, player.y, 4);
       spitterProjectiles.splice(i, 1);
-      if (player.hp <= 0) { player.hp = 0; gameOver(); }
-      updateHUD();
+      damagePlayer(10);
     }
   }
 }
@@ -1684,6 +1734,11 @@ function updateHUD() {
     d.className = 'bullet-pip' + (i < player.ammo ? '' : ' empty');
     pips.appendChild(d);
   }
+
+  if (player.maxShield > 0) {
+    const shieldPct = player.shield / player.maxShield;
+    document.getElementById('shield-bar').style.width = (shieldPct * 100) + '%';
+  }
 }
 
 // ── XP SYNC ─────────────────────────────────────────
@@ -1749,6 +1804,29 @@ function loop(now) {
   updateSpitterProjectiles();
   updateParticles();
   updateReload(now);
+
+  // Shield regen
+  if (player.maxShield > 0) {
+    if (player.shield < player.maxShield) {
+      player.shieldRegenTimer += 1/60;
+      const delay = getPlayerStat('shieldRegenDelay');
+      if (player.shieldRegenTimer >= delay) {
+        let rate = getPlayerStat('shieldRegenRate');
+        if (hasSkill('fortress')) rate *= 2;
+        player.shield = Math.min(player.shield + rate / 60, player.maxShield);
+      }
+    }
+  }
+
+  // HP Regen
+  if (!player.lastDamageTime) player.lastDamageTime = 0;
+  const regenRate = getPlayerStat('regenHpPerSec');
+  if (regenRate > 0 && player.hp < getPlayerStat('maxHp')) {
+    const timeSinceDamage = (frameCount - player.lastDamageTime) / 60;
+    if (timeSinceDamage > 3) {
+      player.hp = Math.min(player.hp + regenRate / 60, getPlayerStat('maxHp'));
+    }
+  }
 
   if (pendingXp > 0 && now - lastXpSync > XP_SYNC_INTERVAL) {
     syncXp();
