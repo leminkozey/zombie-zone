@@ -2348,10 +2348,10 @@ function drawBullets() {
 }
 
 const ZOMBIE_TYPES = {
-  normal:  { body: '#2d5a1e', skin: '#7a9a50', arm: '#3a5528', armDark: '#2a4018', leg: '#2a3a1a', scale: 1.0, eyeColor: '#ff3300', eyeGlow: '#ff2200' },
-  runner:  { body: '#cc5500', skin: '#ee8833', arm: '#aa4400', armDark: '#883300', leg: '#773300', scale: 0.85, eyeColor: '#ffcc00', eyeGlow: '#ff8800' },
-  tank:    { body: '#771818', skin: '#993333', arm: '#661111', armDark: '#440a0a', leg: '#440000', scale: 1.5, eyeColor: '#ff1100', eyeGlow: '#cc0000', plate: '#551010', scar: '#330808' },
-  spitter: { body: '#5533aa', skin: '#8855cc', arm: '#442288', armDark: '#331166', leg: '#331155', scale: 1.0, eyeColor: '#88ff44', eyeGlow: '#66dd22', glow: '#99ff44', glowDim: '#55aa22' },
+  normal:  { body: '#3d7a28', skin: '#8abb55', arm: '#4a7030', outline: '#5a9938', scale: 1.0, eyeColor: '#ff4422', eyeGlow: '#ff2200' },
+  runner:  { body: '#dd6600', skin: '#ffaa33', arm: '#cc5500', outline: '#ff8800', scale: 0.85, eyeColor: '#ffee00', eyeGlow: '#ffcc00' },
+  tank:    { body: '#882222', skin: '#aa3333', arm: '#771818', outline: '#aa2222', scale: 1.5, eyeColor: '#ff2200', eyeGlow: '#dd0000', plate: '#661515' },
+  spitter: { body: '#6644bb', skin: '#9966dd', arm: '#5533aa', outline: '#8855cc', scale: 1.0, eyeColor: '#aaff55', eyeGlow: '#88ee33', glow: '#bbff66', glowDim: '#77cc33' },
 };
 
 function drawZombie(z) {
@@ -2359,328 +2359,291 @@ function drawZombie(z) {
 
   const t = ZOMBIE_TYPES[z.type] || ZOMBIE_TYPES.normal;
   const s = t.scale;
-  const r = 10 * s;
+  const r = 11 * s;
 
   ctx.save();
   ctx.translate(z.x, z.y);
 
-  // death animation — body fragments scatter
+  // Death — fragments scatter
   if (!z.alive && z.deathTimer > 0) {
     const prog = 1 - z.deathTimer / 30;
-    ctx.globalAlpha = 1 - prog;
-    // Draw scattered fragments instead of rotating corpse
-    const fragmentCount = 5;
+    const fragmentCount = 6;
     for (let f = 0; f < fragmentCount; f++) {
-      const fragAngle = (f / fragmentCount) * Math.PI * 2 + z.angle;
-      const fragDist = prog * 20 * s;
-      const fx = Math.cos(fragAngle) * fragDist;
-      const fy = Math.sin(fragAngle) * fragDist;
+      const a = (f / fragmentCount) * Math.PI * 2 + z.angle;
+      const d = prog * 22 * s;
+      ctx.globalAlpha = (1 - prog) * 0.7;
       ctx.fillStyle = f % 2 === 0 ? t.body : t.skin;
-      ctx.globalAlpha = (1 - prog) * 0.8;
-      ctx.fillRect(fx - 3*s, fy - 2*s, 6*s, 4*s);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 3 * s, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
     return;
   }
 
-  // shadow
+  // Shadow
   ctx.save();
-  ctx.globalAlpha *= 0.25;
+  ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.ellipse(0, 3, r * 1.1, r * 0.6, 0, 0, Math.PI*2);
+  ctx.ellipse(0, 3, r * 1.1, r * 0.55, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  // Runner motion blur
-  if (z.type === 'runner' && z.speed > 1.2) {
+  // Runner: motion trail
+  if (z.type === 'runner') {
     ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = t.body;
-    const blurDist = 8 * s;
-    ctx.beginPath();
-    ctx.arc(-Math.cos(z.angle) * blurDist, -Math.sin(z.angle) * blurDist, r * 0.8, 0, Math.PI*2);
-    ctx.fill();
-    ctx.globalAlpha = 0.08;
-    ctx.beginPath();
-    ctx.arc(-Math.cos(z.angle) * blurDist * 1.8, -Math.sin(z.angle) * blurDist * 1.8, r * 0.6, 0, Math.PI*2);
-    ctx.fill();
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = t.outline;
+    const bx = -Math.cos(z.angle) * 10 * s;
+    const by = -Math.sin(z.angle) * 10 * s;
+    ctx.beginPath(); ctx.arc(bx, by, r * 0.7, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.06;
+    ctx.beginPath(); ctx.arc(bx * 1.7, by * 1.7, r * 0.5, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
-  // Spitter toxic drip particles (when moving)
-  if (z.type === 'spitter' && z.frame % 6 === 0) {
+  // Spitter: toxic drip
+  if (z.type === 'spitter' && z.frame % 5 === 0) {
     particles.push({
-      x: z.x + (Math.random()-0.5) * 6,
-      y: z.y + (Math.random()-0.5) * 6,
-      dx: (Math.random()-0.5) * 0.5,
-      dy: 0.5 + Math.random() * 0.5,
-      life: 12, maxLife: 12,
-      color: t.glow, r: 1.5,
+      x: z.x + (Math.random() - 0.5) * 8,
+      y: z.y + (Math.random() - 0.5) * 8,
+      dx: (Math.random() - 0.5) * 0.5, dy: 0.3 + Math.random() * 0.5,
+      life: 15, maxLife: 15, color: t.glow, r: 1.5 + Math.random(),
     });
   }
 
   ctx.rotate(z.angle);
+  const wobble = Math.sin(z.wobble * 0.5) * 2;
+  const armReach = z.hitting ? 14 * s : 10 * s;
 
-  // ── Type-specific drawing ──
+  // ── NORMAL: Classic shambler ──
   if (z.type === 'normal') {
-    // NORMAL — Hunched humanoid with torn clothing
-    const armSwing = Math.sin(z.wobble * 0.5) * 2.5;
-    const armReachL = z.hitting ? 15*s : 12*s; // left arm reaches further (asymmetric)
-    const armReachR = z.hitting ? 12*s : 8*s;
-
-    // Arms
+    // Arms — asymmetric reach
     ctx.fillStyle = t.arm;
-    ctx.fillRect(4*s, (-6 + armSwing)*s, armReachL, 3.5*s);
-    ctx.fillStyle = t.armDark;
-    ctx.fillRect(4*s, (3 - armSwing)*s, armReachR, 3*s);
+    ctx.fillRect(4 * s, (-5.5 + wobble) * s, armReach + 2 * s, 3.5 * s);
+    ctx.fillRect(4 * s, (3 - wobble) * s, armReach - 2 * s, 3 * s);
 
-    // Body — hunched shape (slightly oval, leaning forward)
+    // Body
     ctx.fillStyle = t.body;
     ctx.beginPath();
-    ctx.ellipse(1*s, 0, r, r * 0.85, 0, 0, Math.PI*2);
+    ctx.ellipse(0, 0, r, r * 0.88, 0, 0, Math.PI * 2);
     ctx.fill();
-
-    // Torn clothing lines
-    ctx.strokeStyle = t.armDark;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(-4*s, -5*s); ctx.lineTo(-1*s, -7*s);
-    ctx.moveTo(-3*s, 4*s); ctx.lineTo(0, 6*s);
-    ctx.moveTo(2*s, -6*s); ctx.lineTo(5*s, -4*s);
+    // Outline for visibility
+    ctx.strokeStyle = t.outline;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-
-    // Matted skin texture (darker spots)
-    ctx.fillStyle = t.armDark;
-    ctx.globalAlpha = 0.4;
-    ctx.beginPath(); ctx.arc(-3*s, -2*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(2*s, 4*s, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
 
     // Head
     ctx.fillStyle = t.skin;
     ctx.beginPath();
-    ctx.arc(4*s, 0, 5*s, 0, Math.PI*2);
+    ctx.arc(4.5 * s, 0, 5.5 * s, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyes
+    // Eyes — glowing
+    ctx.save();
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = t.eyeGlow;
+    ctx.fillStyle = t.eyeColor;
+    ctx.beginPath(); ctx.arc(7.5 * s, -2.2 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(7.5 * s, 2.2 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+  // ── RUNNER: Lean speed demon ──
+  } else if (z.type === 'runner') {
+    // Arms trailing back
+    ctx.fillStyle = t.arm;
+    ctx.save();
+    ctx.translate(-3 * s, -4 * s);
+    ctx.rotate(0.5 + wobble * 0.03);
+    ctx.fillRect(0, 0, -11 * s, 2.5 * s);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(-3 * s, 4 * s);
+    ctx.rotate(-0.5 - wobble * 0.03);
+    ctx.fillRect(0, 0, -11 * s, 2.5 * s);
+    ctx.restore();
+
+    // Body — narrow, elongated
+    ctx.fillStyle = t.body;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 1.15, r * 0.65, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = t.outline;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Head — small, feral
+    ctx.fillStyle = t.skin;
+    ctx.beginPath();
+    ctx.arc(5.5 * s, 0, 3.8 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Jaw
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(7.5 * s, 0, 1.5 * s, -0.6, 0.6);
+    ctx.fill();
+
+    // Eyes — bright, feral
+    ctx.save();
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = t.eyeGlow;
+    ctx.fillStyle = t.eyeColor;
+    ctx.beginPath(); ctx.arc(7 * s, -2 * s, 1.6 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(7 * s, 2 * s, 1.6 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+  // ── TANK: Massive brute ──
+  } else if (z.type === 'tank') {
+    // Huge arms
+    ctx.fillStyle = t.arm;
+    const tSwing = Math.sin(z.wobble * 0.3) * 1.5;
+    ctx.fillRect(2 * s, (-8 + tSwing) * s, 14 * s, 5.5 * s);
+    ctx.fillRect(2 * s, (3 - tSwing) * s, 14 * s, 5.5 * s);
+
+    // Massive body — wide
+    ctx.fillStyle = t.body;
+    ctx.beginPath();
+    ctx.ellipse(-1 * s, 0, r * 0.95, r * 1.15, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = t.outline;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Armor plates
+    ctx.fillStyle = t.plate;
+    ctx.fillRect(-5 * s, -7 * s, 11 * s, 14 * s);
+    // Shoulder pads
+    ctx.beginPath();
+    ctx.ellipse(4 * s, -8 * s, 4 * s, 3 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(4 * s, 8 * s, 4 * s, 3 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Scars
+    ctx.strokeStyle = '#440808';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-7 * s, -4 * s); ctx.lineTo(-2 * s, 1 * s);
+    ctx.moveTo(0, 4 * s); ctx.lineTo(5 * s, 8 * s);
+    ctx.stroke();
+
+    // Thick neck
+    ctx.fillStyle = t.arm;
+    ctx.fillRect(4 * s, -4 * s, 6 * s, 8 * s);
+
+    // Head — sunken
+    ctx.fillStyle = t.skin;
+    ctx.beginPath();
+    ctx.arc(9 * s, 0, 5.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Brow ridge
+    ctx.fillStyle = t.plate;
+    ctx.fillRect(7 * s, -4 * s, 5 * s, 2.5 * s);
+
+    // Eyes — deep-set, menacing
     ctx.save();
     ctx.shadowBlur = 4;
     ctx.shadowColor = t.eyeGlow;
     ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(11 * s, -2.2 * s, 2.2 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(11 * s, 2.2 * s, 2.2 * s, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
-  } else if (z.type === 'runner') {
-    // RUNNER — Lean, elongated, arms trailing behind
-    const armTrail = Math.sin(z.wobble) * 3;
-
-    // Arms trailing behind (speed pose)
-    ctx.fillStyle = t.arm;
-    ctx.save();
-    ctx.translate(-4*s, -4*s);
-    ctx.rotate(0.6 + armTrail * 0.05);
-    ctx.fillRect(0, 0, -10*s, 2.5*s);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(-4*s, 4*s);
-    ctx.rotate(-0.6 - armTrail * 0.05);
-    ctx.fillRect(0, 0, -10*s, 2.5*s);
-    ctx.restore();
-
-    // Body — leaner, elongated
-    ctx.fillStyle = t.body;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r * 1.1, r * 0.7, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // Ribcage lines (emaciated look)
-    ctx.strokeStyle = t.armDark;
-    ctx.lineWidth = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(-2*s, -4*s); ctx.lineTo(3*s, -3*s);
-    ctx.moveTo(-1*s, -2*s); ctx.lineTo(4*s, -1*s);
-    ctx.moveTo(-1*s, 2*s); ctx.lineTo(4*s, 1*s);
-    ctx.stroke();
-
-    // Head — smaller, feral
-    ctx.fillStyle = t.skin;
-    ctx.beginPath();
-    ctx.arc(5*s, 0, 3.5*s, 0, Math.PI*2);
-    ctx.fill();
-
-    // Open jaw (feral look)
-    ctx.fillStyle = t.armDark;
-    ctx.beginPath();
-    ctx.arc(7*s, 0, 1.5*s, -0.5, 0.5);
-    ctx.fill();
-
-    // Eyes — intense
-    ctx.save();
-    ctx.shadowBlur = 5;
-    ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(6.5*s, -1.8*s, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(6.5*s, 1.8*s, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  } else if (z.type === 'tank') {
-    // TANK — Massive, armored, hunched forward
-    const armSwing = Math.sin(z.wobble * 0.3) * 1.5;
-
-    // Thick arms
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(3*s, (-7 + armSwing)*s, 12*s, 5*s);
-    ctx.fillRect(3*s, (3 - armSwing)*s, 12*s, 5*s);
-
-    // Body — wider, hunched
-    ctx.fillStyle = t.body;
-    ctx.beginPath();
-    ctx.ellipse(-1*s, 0, r * 0.95, r * 1.1, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // Armor plates
-    ctx.fillStyle = t.plate;
-    // Chest plate
-    ctx.fillRect(-4*s, -6*s, 10*s, 12*s);
-    // Shoulder pads
-    ctx.fillRect(2*s, -9*s, 6*s, 4*s);
-    ctx.fillRect(2*s, 5*s, 6*s, 4*s);
-
-    // Visible scars/wounds (dark lines)
-    ctx.strokeStyle = t.scar;
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(-6*s, -4*s); ctx.lineTo(-2*s, 0);
-    ctx.moveTo(0, 3*s); ctx.lineTo(4*s, 7*s);
-    ctx.moveTo(-3*s, -7*s); ctx.lineTo(1*s, -3*s);
-    ctx.stroke();
-
-    // Hunched forward — thick neck
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(4*s, -3*s, 5*s, 6*s);
-
-    // Head — smaller relative to body
-    ctx.fillStyle = t.skin;
-    ctx.beginPath();
-    ctx.arc(8*s, 0, 5*s, 0, Math.PI*2);
-    ctx.fill();
-
-    // Scowl / brow
-    ctx.fillStyle = t.plate;
-    ctx.fillRect(6*s, -3.5*s, 4*s, 2*s);
-
-    // Eyes — deep-set, angry
-    ctx.save();
-    ctx.shadowBlur = 3;
-    ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(10*s, -2*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(10*s, 2*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
+  // ── SPITTER: Toxic bloater ──
   } else if (z.type === 'spitter') {
-    // SPITTER — Bloated body, one big throwing arm, glowing belly
-    const armSwing = Math.sin(z.wobble * 0.4) * 2;
-    const throwExtend = z.throwAnim > 0 ? z.throwAnim * 1.5 : 0;
+    const throwExt = z.throwAnim > 0 ? z.throwAnim * 1.5 : 0;
 
-    // Normal arm (left)
+    // Normal arm
     ctx.fillStyle = t.arm;
-    ctx.fillRect(3*s, (-5 + armSwing)*s, 8*s, 3*s);
+    ctx.fillRect(3 * s, (-5 + wobble) * s, 9 * s, 3 * s);
 
-    // Big throwing arm (right) — larger
-    ctx.fillStyle = t.arm;
+    // Throwing arm — bigger, swollen hand
     ctx.save();
-    ctx.translate(3*s, (4 - armSwing)*s);
-    ctx.fillRect(0, 0, (10 + throwExtend)*s, 4.5*s);
-    // Swollen hand
-    ctx.fillStyle = t.armDark;
+    ctx.translate(3 * s, (4 - wobble) * s);
+    ctx.fillStyle = t.arm;
+    ctx.fillRect(0, 0, (11 + throwExt) * s, 4.5 * s);
+    ctx.fillStyle = t.skin;
     ctx.beginPath();
-    ctx.arc((10 + throwExtend)*s, 2.2*s, 3*s, 0, Math.PI*2);
+    ctx.arc((11 + throwExt) * s, 2 * s, 3.5 * s, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    // Body — slightly bloated
+    // Body — bloated
     ctx.fillStyle = t.body;
     ctx.beginPath();
-    ctx.ellipse(0, 0, r * 0.9, r * 1.05, 0, 0, Math.PI*2);
+    ctx.ellipse(0, 0, r * 0.95, r * 1.08, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = t.outline;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-    // Glowing belly area (pulses)
+    // Glowing toxic belly — pulsing
     ctx.save();
-    const glowPulse = 0.4 + Math.sin(frameCount * 0.12) * 0.3;
-    ctx.globalAlpha = glowPulse;
+    const gp = 0.35 + Math.sin(frameCount * 0.12) * 0.25;
+    ctx.globalAlpha = gp;
     ctx.fillStyle = t.glow;
     ctx.beginPath();
-    ctx.arc(-1*s, 0, 5*s, 0, Math.PI*2);
+    ctx.arc(-1 * s, 0, 6 * s, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = glowPulse * 0.5;
+    ctx.globalAlpha = gp * 0.4;
     ctx.fillStyle = t.glowDim;
     ctx.beginPath();
-    ctx.arc(-1*s, 0, 7*s, 0, Math.PI*2);
+    ctx.arc(-1 * s, 0, 9 * s, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.restore();
 
-    // Veins from belly
+    // Toxic veins
     ctx.strokeStyle = t.glowDim;
-    ctx.lineWidth = 0.6;
+    ctx.lineWidth = 0.8;
     ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    ctx.moveTo(-1*s, -4*s); ctx.lineTo(2*s, -8*s);
-    ctx.moveTo(1*s, 3*s); ctx.lineTo(4*s, 7*s);
-    ctx.moveTo(-4*s, -1*s); ctx.lineTo(-8*s, -3*s);
+    ctx.moveTo(-2 * s, -5 * s); ctx.lineTo(2 * s, -9 * s);
+    ctx.moveTo(1 * s, 4 * s); ctx.lineTo(5 * s, 8 * s);
+    ctx.moveTo(-5 * s, 0); ctx.lineTo(-9 * s, -2 * s);
     ctx.stroke();
     ctx.globalAlpha = 1;
 
     // Head
     ctx.fillStyle = t.skin;
     ctx.beginPath();
-    ctx.arc(4*s, 0, 5*s, 0, Math.PI*2);
+    ctx.arc(4.5 * s, 0, 5 * s, 0, Math.PI * 2);
     ctx.fill();
 
     // Glowing mouth
     ctx.save();
-    const mouthGlow = 0.5 + Math.sin(frameCount * 0.1) * 0.3;
+    ctx.globalAlpha = 0.45 + Math.sin(frameCount * 0.1) * 0.3;
     ctx.fillStyle = t.glow;
-    ctx.globalAlpha = mouthGlow;
     ctx.beginPath();
-    ctx.ellipse(7*s, 0, 2*s, 1.5*s, 0, 0, Math.PI*2);
+    ctx.ellipse(7.5 * s, 0, 2.2 * s, 1.5 * s, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
     ctx.restore();
 
     // Eyes
     ctx.save();
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 5;
     ctx.shadowColor = t.eyeGlow;
     ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(6*s, -2.5*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(6*s, 2.5*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6.5 * s, -2.5 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6.5 * s, 2.5 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
   ctx.restore();
 
-  // hp bar (only if damaged) — drawn unrotated
+  // HP bar — unrotated, above zombie
   if (z.alive && z.hp < z.maxHp) {
     ctx.save();
     ctx.translate(z.x, z.y);
-    const bw = 22*s, bh = 3;
-    ctx.fillStyle = '#220000';
-    ctx.fillRect(-bw/2, -r - 10, bw, bh);
+    const bw = 24 * s, bh = 3;
+    ctx.fillStyle = '#1a0000';
+    ctx.fillRect(-bw / 2, -r - 10, bw, bh);
     ctx.fillStyle = '#ee2200';
-    ctx.fillRect(-bw/2, -r - 10, bw * (z.hp / z.maxHp), bh);
-    // Notch marks on HP bar
-    ctx.strokeStyle = '#330000';
-    ctx.lineWidth = 0.5;
-    for (let i = 1; i < z.maxHp && i < 20; i++) {
-      const nx = -bw/2 + bw * (i / z.maxHp);
-      ctx.beginPath();
-      ctx.moveTo(nx, -r - 10); ctx.lineTo(nx, -r - 10 + bh);
-      ctx.stroke();
-    }
+    ctx.fillRect(-bw / 2, -r - 10, bw * (z.hp / z.maxHp), bh);
     ctx.restore();
   }
 }
@@ -2723,7 +2686,7 @@ function drawPlayer() {
   ctx.stroke();
 
   // Off-hand arm (left arm, stabilizing the weapon)
-  ctx.fillStyle = '#556644';
+  ctx.fillStyle = '#7a9966';
   ctx.save();
   ctx.translate(6 - recoil, -5);
   ctx.rotate(-0.2);
@@ -2731,7 +2694,7 @@ function drawPlayer() {
   ctx.restore();
 
   // Main arm (right arm, holding weapon)
-  ctx.fillStyle = '#556644';
+  ctx.fillStyle = '#7a9966';
   ctx.save();
   ctx.translate(4 - recoil, 3);
   ctx.rotate(0.15);
@@ -2758,14 +2721,17 @@ function drawPlayer() {
   ctx.fillRect(10 - recoil, 2, 3, 4);
 
   // Body — rounded rect torso with tactical vest
-  ctx.fillStyle = '#556644';
+  ctx.fillStyle = '#7a9966';
   ctx.beginPath();
   // Rounded body shape
   ctx.arc(0, 0, 11, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = '#99bb77';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
 
   // Tactical vest detail — darker center stripe
-  ctx.fillStyle = '#445533';
+  ctx.fillStyle = '#5a7744';
   ctx.fillRect(-3, -10, 6, 20);
   // Vest side panels
   ctx.fillStyle = '#4a5a38';
@@ -2785,13 +2751,13 @@ function drawPlayer() {
   ctx.stroke();
 
   // Head — with helmet
-  ctx.fillStyle = '#c8a070';
+  ctx.fillStyle = '#ddb888';
   ctx.beginPath();
   ctx.arc(4, 0, 6, 0, Math.PI * 2);
   ctx.fill();
 
   // Helmet
-  ctx.fillStyle = '#445533';
+  ctx.fillStyle = '#5a7744';
   ctx.beginPath();
   ctx.arc(4, 0, 6.5, -Math.PI * 0.7, Math.PI * 0.7);
   ctx.closePath();
