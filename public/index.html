@@ -270,6 +270,8 @@
     <div id="reload-bar-bg"><div id="reload-bar"></div></div>
   </div>
 
+  <div id="dash-display" style="position:absolute;bottom:16px;right:16px;display:none;z-index:5;pointer-events:none;display:flex;gap:2px"></div>
+
   <div id="xp-bar-wrap"><div id="xp-bar"></div></div>
   <div id="xp-level">LVL 1</div>
   <div id="level-up-banner">LEVEL UP!</div>
@@ -724,6 +726,14 @@ let hurtFlash, mouseX, mouseY, running;
 let score, frameCount;
 let currentLevel;
 let keys = {};
+let dashCharges = [];
+let dashActive = false;
+let dashStartX = 0, dashStartY = 0;
+let dashTargetX = 0, dashTargetY = 0;
+let dashProgress = 0;
+let dashAfterimage = null;
+let bulletTimeTimer = 0;
+let bulletTimeX = 0, bulletTimeY = 0;
 
 let globalXp = 0;        // total XP from server
 let pendingXp = 0;       // XP earned this session, not yet synced
@@ -756,6 +766,15 @@ async function init() {
   const shieldWrap = document.getElementById('shield-bar-wrap');
   shieldWrap.style.display = player.maxShield > 0 ? 'block' : 'none';
   player.lastDamageTime = 0;
+
+  const numCharges = getPlayerStat('dashCharges');
+  dashCharges = [];
+  for (let i = 0; i < numCharges; i++) {
+    dashCharges.push({ ready: true, cooldownStart: 0 });
+  }
+  dashActive = false;
+  dashAfterimage = null;
+  bulletTimeTimer = 0;
 
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = [];
@@ -866,6 +885,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Escape') { togglePause(); return; }
   keys[e.code] = true;
   if (e.code === 'KeyR' && !reloading && player.ammo < MAX_AMMO) startReload();
+  if (e.code === 'Space') { tryDash(); e.preventDefault(); return; }
   e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1099,6 +1119,20 @@ function updateZombies() {
     const dist = Math.sqrt(dx*dx + dy*dy);
     z.angle = Math.atan2(dy, dx);
 
+    if (dashAfterimage && z.type !== 'spitter') {
+      const adx = dashAfterimage.x - z.x, ady = dashAfterimage.y - z.y;
+      const adist = Math.sqrt(adx*adx + ady*ady);
+      if (adist < 150) {
+        const spd = z.speed;
+        const mx = (adx/adist) * spd;
+        const my = (ady/adist) * spd;
+        if (!wallCollide(z.x + mx, z.y, z.radius - 2)) z.x += mx;
+        if (!wallCollide(z.x, z.y + my, z.radius - 2)) z.y += my;
+        z.angle = Math.atan2(ady, adx);
+        continue;
+      }
+    }
+
     // spitter distance-keeping
     if (z.type === 'spitter' && dist > 1) {
       if (dist < 150) {
@@ -1117,8 +1151,15 @@ function updateZombies() {
       const spd = z.speed;
       // aggression: faster when player is low HP
       const aggroMult = player.hp < player.maxHp * 0.3 ? 1.2 : 1.0;
-      let moveX = (dx/dist) * spd * aggroMult;
-      let moveY = (dy/dist) * spd * aggroMult;
+      let bulletTimeMult = 1.0;
+      if (bulletTimeTimer > 0) {
+        const btdx = z.x - bulletTimeX, btdy = z.y - bulletTimeY;
+        if (btdx*btdx + btdy*btdy < 200*200) {
+          bulletTimeMult = 0.5;
+        }
+      }
+      let moveX = (dx/dist) * spd * aggroMult * bulletTimeMult;
+      let moveY = (dy/dist) * spd * aggroMult * bulletTimeMult;
 
       const canX = !wallCollide(z.x + moveX, z.y, z.radius - 2);
       const canY = !wallCollide(z.x, z.y + moveY, z.radius - 2);
@@ -1739,6 +1780,19 @@ function updateHUD() {
     const shieldPct = player.shield / player.maxShield;
     document.getElementById('shield-bar').style.width = (shieldPct * 100) + '%';
   }
+
+  const dashEl = document.getElementById('dash-display');
+  if (getPlayerStat('dashUnlocked')) {
+    dashEl.style.display = 'flex';
+    dashEl.innerHTML = '';
+    for (const c of dashCharges) {
+      const pip = document.createElement('div');
+      pip.style.cssText = 'width:8px;height:20px;margin:0 2px;border:1px solid ' + (c.ready ? '#33aaff' : '#333') + ';background:' + (c.ready ? '#33aaff44' : 'transparent');
+      dashEl.appendChild(pip);
+    }
+  } else {
+    dashEl.style.display = 'none';
+  }
 }
 
 // ── XP SYNC ─────────────────────────────────────────
@@ -1792,12 +1846,98 @@ async function gameOver() {
   showGameMenu();
 }
 
+// ── DASH SYSTEM ──────────────────────────────────────
+function tryDash() {
+  if (!getPlayerStat('dashUnlocked')) return;
+  if (dashActive) return;
+  const charge = dashCharges.find(c => c.ready);
+  if (!charge) return;
+
+  charge.ready = false;
+  charge.cooldownStart = performance.now();
+  dashActive = true;
+  dashProgress = 0;
+  dashStartX = player.x;
+  dashStartY = player.y;
+
+  const dist = getPlayerStat('dashDistance');
+  dashTargetX = player.x + Math.cos(player.angle) * dist;
+  dashTargetY = player.y + Math.sin(player.angle) * dist;
+
+  if (hasSkill('phantom_dash')) {
+    player.dashInvulnerable = true;
+    dashAfterimage = { x: player.x, y: player.y, angle: player.angle, timer: 90 };
+  }
+}
+
+function updateDash() {
+  const cd = getPlayerStat('dashCooldown') * 1000;
+  const now = performance.now();
+  for (const c of dashCharges) {
+    if (!c.ready && now - c.cooldownStart >= cd) {
+      c.ready = true;
+    }
+  }
+
+  if (dashActive) {
+    dashProgress += 0.15;
+    if (dashProgress >= 1) {
+      dashProgress = 1;
+      dashActive = false;
+      player.dashInvulnerable = false;
+
+      if (hasSkill('bullet_time')) {
+        bulletTimeTimer = 120;
+        bulletTimeX = player.x;
+        bulletTimeY = player.y;
+      }
+    }
+
+    const t = dashProgress;
+    const nx = dashStartX + (dashTargetX - dashStartX) * t;
+    const ny = dashStartY + (dashTargetY - dashStartY) * t;
+
+    if (!wallCollide(nx, player.y, PLAYER_R - 2)) player.x = nx;
+    if (!wallCollide(player.x, ny, PLAYER_R - 2)) player.y = ny;
+
+    for (let i = 0; i < 2; i++) {
+      particles.push({
+        x: player.x + (Math.random()-0.5)*10,
+        y: player.y + (Math.random()-0.5)*10,
+        dx: (Math.random()-0.5)*2, dy: (Math.random()-0.5)*2,
+        life: 10, maxLife: 10, color: '#33aaff', r: 3,
+      });
+    }
+  }
+
+  if (dashAfterimage) {
+    dashAfterimage.timer--;
+    if (dashAfterimage.timer <= 0) dashAfterimage = null;
+  }
+
+  if (bulletTimeTimer > 0) bulletTimeTimer--;
+}
+
+function drawDashAfterimage() {
+  if (!dashAfterimage) return;
+  ctx.save();
+  ctx.globalAlpha = dashAfterimage.timer / 90 * 0.4;
+  ctx.translate(dashAfterimage.x, dashAfterimage.y);
+  ctx.rotate(dashAfterimage.angle);
+  ctx.fillStyle = '#33aaff';
+  ctx.beginPath();
+  ctx.arc(0, 0, PLAYER_R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // ── MAIN LOOP ────────────────────────────────────────
 function loop(now) {
   if (!running) return;
   frameCount++;
 
   movePlayer();
+  updateDash();
   if (mouseDown) tryShoot();
   updateZombies();
   updateBullets();
@@ -1857,6 +1997,7 @@ function loop(now) {
   drawBullets();
   drawSpitterProjectiles();
   zombies.forEach(drawZombie);
+  drawDashAfterimage();
   drawPlayer();
   drawMinimap();
 
