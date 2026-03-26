@@ -854,7 +854,7 @@ function getSkillLevel(skillId) {
 // ── WEAPON DEFINITIONS ─────────────────────────────────
 const WEAPONS = {
   pistol:         { id: 'pistol', name: 'PISTOL', type: 'Semi', unlockLevel: 0, cost: 0, damage: 1, range: 55, fireRate: 15, reloadMs: 1800, magSize: 12, spread: 0.06, special: null, icon: '🔫' },
-  smg:            { id: 'smg', name: 'SMG', type: 'Auto', unlockLevel: 8, cost: 800, damage: 0.7, range: 45, fireRate: 3, reloadMs: 1500, magSize: 35, spread: 0.1, special: null, icon: '⚡' },
+  smg:            { id: 'smg', name: 'SMG', type: 'Auto', unlockLevel: 8, cost: 800, damage: 0.4, range: 45, fireRate: 5, reloadMs: 1500, magSize: 35, spread: 0.1, special: null, icon: '⚡' },
   shotgun:        { id: 'shotgun', name: 'SHOTGUN', type: 'Spread', unlockLevel: 20, cost: 4000, damage: 1.5, range: 30, fireRate: 20, reloadMs: 2200, magSize: 6, spread: 0.3, special: 'shotgun', icon: '💥' },
   assault_rifle:  { id: 'assault_rifle', name: 'ASSAULT RIFLE', type: 'Auto', unlockLevel: 35, cost: 12000, damage: 1.2, range: 65, fireRate: 5, reloadMs: 1600, magSize: 30, spread: 0.04, special: null, icon: '🎯' },
   sniper:         { id: 'sniper', name: 'SNIPER', type: 'Single', unlockLevel: 55, cost: 30000, damage: 4, range: 90, fireRate: 30, reloadMs: 2500, magSize: 5, spread: 0.01, special: 'pierce', icon: '🔭' },
@@ -4268,28 +4268,49 @@ function renderArsenal() {
     const canUpgrade = selOwned && currentLvl < maxLvl && gold >= cost;
 
     const currentVal = getWeaponStat(selectedArsenalWeapon, sd.key);
-    let barPct;
-    if (sd.key === 'rate') barPct = Math.max(0, 100 - (currentVal / 30) * 100);
-    else if (sd.key === 'reload') barPct = Math.max(0, 100 - (currentVal / 3000) * 100);
-    else if (sd.key === 'acc') barPct = Math.max(0, 100 - (currentVal / 0.3) * 100);
-    else if (sd.key === 'dmg') barPct = (currentVal / 5) * 100;
-    else if (sd.key === 'range') barPct = (currentVal / 100) * 100;
-    else if (sd.key === 'mag') barPct = (currentVal / 120) * 100;
-    barPct = Math.min(100, Math.max(5, barPct));
+    // Format stat as readable number
+    let displayVal;
+    if (sd.key === 'dmg') displayVal = currentVal.toFixed(1) + 'x';
+    else if (sd.key === 'range') displayVal = Math.round(currentVal) + 'm';
+    else if (sd.key === 'rate') displayVal = (60 / currentVal).toFixed(1) + '/s';
+    else if (sd.key === 'reload') displayVal = (currentVal / 1000).toFixed(1) + 's';
+    else if (sd.key === 'mag') displayVal = Math.round(currentVal);
+    else if (sd.key === 'acc') displayVal = (100 - currentVal * 100).toFixed(0) + '%';
+
+    // What the next upgrade gives
+    let nextVal = '';
+    if (currentLvl < maxLvl) {
+      const nextWpnVal = getWeaponStat(selectedArsenalWeapon, sd.key);
+      // Simulate +1 level
+      const base = WEAPONS[selectedArsenalWeapon];
+      const nl = currentLvl + 1;
+      let nv;
+      if (sd.key === 'dmg') nv = base.damage * (1 + nl * 0.1);
+      else if (sd.key === 'range') nv = base.range + nl * 5;
+      else if (sd.key === 'rate') nv = Math.max(1, base.fireRate - nl * 0.5);
+      else if (sd.key === 'reload') nv = base.reloadMs * (1 - nl * 0.08);
+      else if (sd.key === 'mag') nv = Math.round(base.magSize * (1 + nl * 0.1));
+      else if (sd.key === 'acc') nv = base.spread * (1 - nl * 0.08);
+
+      if (sd.key === 'dmg') nextVal = ' \u2192 ' + nv.toFixed(1) + 'x';
+      else if (sd.key === 'range') nextVal = ' \u2192 ' + Math.round(nv) + 'm';
+      else if (sd.key === 'rate') nextVal = ' \u2192 ' + (60 / nv).toFixed(1) + '/s';
+      else if (sd.key === 'reload') nextVal = ' \u2192 ' + (nv / 1000).toFixed(1) + 's';
+      else if (sd.key === 'mag') nextVal = ' \u2192 ' + Math.round(nv);
+      else if (sd.key === 'acc') nextVal = ' \u2192 ' + (100 - nv * 100).toFixed(0) + '%';
+    }
 
     const row = document.createElement('div');
-    row.style.marginBottom = '18px';
+    row.style.marginBottom = '16px';
     row.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
         <span style="font-size:11px;letter-spacing:2px;color:#4a5460">${sd.name}</span>
         <span style="font-size:10px;color:#556070;letter-spacing:1px">LVL ${currentLvl}/${maxLvl}</span>
       </div>
-      <div style="height:6px;background:#111418;position:relative;border-radius:1px">
-        <div style="height:100%;width:${barPct}%;background:${sd.color};border-radius:1px"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-family:'Oswald',sans-serif;font-size:18px;color:${sd.color};letter-spacing:1px">${displayVal}<span style="font-size:12px;color:#3a4450">${nextVal}</span></span>
+        ${selOwned ? `<button class="upgrade-stat-btn" data-stat="${sd.key}" style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;color:${canUpgrade ? '#ddaa00' : '#333'};background:transparent;border:1px solid ${canUpgrade ? '#665500' : '#1a1a1a'};padding:4px 12px;cursor:${canUpgrade ? 'pointer' : 'default'}">${currentLvl >= maxLvl ? 'MAX' : cost + 'G \u25B2'}</button>` : ''}
       </div>
-      ${selOwned ? `<div style="display:flex;justify-content:flex-end;margin-top:5px">
-        <button class="upgrade-stat-btn" data-stat="${sd.key}" style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;color:${canUpgrade ? '#ddaa00' : '#333'};background:transparent;border:1px solid ${canUpgrade ? '#665500' : '#1a1a1a'};padding:4px 12px;cursor:${canUpgrade ? 'pointer' : 'default'}">${currentLvl >= maxLvl ? 'MAX' : cost + 'G \u25B2'}</button>
-      </div>` : ''}
     `;
     statsContainer.appendChild(row);
   });
