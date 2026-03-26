@@ -25,11 +25,7 @@
   canvas { display: block; cursor: crosshair; width: 100%; height: 100%; }
   #hud {
     position: absolute;
-    top: 0; left: 0; right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 10px 16px;
+    inset: 0;
     pointer-events: none;
     z-index: 5;
   }
@@ -154,9 +150,8 @@
   }
   #reload-bar-wrap {
     position: absolute;
-    bottom: 60px; left: 50%;
-    transform: translateX(-50%);
-    width: 160px;
+    bottom: 90px; right: 16px; left: auto; transform: none;
+    width: 90px;
     display: none;
     z-index: 10;
     pointer-events: none;
@@ -310,24 +305,25 @@
 <div id="wrapper">
   <canvas id="c"></canvas>
 
-  <div id="hud">
-    <div class="hud-box">
+  <div id="hud" style="position:absolute;inset:0;pointer-events:none;z-index:5">
+    <!-- Bottom-left: HP -->
+    <div class="hud-box" style="position:absolute;bottom:20px;left:16px">
       <div class="hud-label">Health</div>
       <div class="hud-val" id="hp-val">100</div>
       <div id="hp-bar-wrap"><div id="hp-bar" style="width:100%"></div></div>
-      <div id="shield-bar-wrap" style="width:100%;height:4px;background:#111118;margin-top:3px;display:none;position:relative;clip-path:polygon(0 0, 100% 0, calc(100% - 2px) 100%, 0 100%)">
-        <div id="shield-bar" style="height:4px;background:linear-gradient(90deg,#2277cc,#3399ff);width:0%;transition:width 0.2s;box-shadow:0 0 8px #3399ff55;background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.08) 3px,rgba(255,255,255,0.08) 6px)"></div>
+      <div id="shield-bar-wrap" style="width:100%;height:3px;background:#111;margin-top:2px;display:none">
+        <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
       </div>
     </div>
-    <div class="hud-box" style="text-align:center">
-      <div id="wave-info">WAVE 1</div>
-      <div class="hud-label" style="margin-top:2px" id="kill-count">0 / 0</div>
-      <div class="hud-label" id="hud-username" style="margin-top:4px;color:#666"></div>
-    </div>
-    <div class="hud-box" style="text-align:right">
+    <!-- Bottom-right: Ammo -->
+    <div class="hud-box" style="position:absolute;bottom:20px;right:16px;text-align:right">
       <div class="hud-label">Ammo</div>
       <div class="hud-val" id="ammo-val">30</div>
       <div id="ammo-display"></div>
+    </div>
+    <!-- Top-left: Username -->
+    <div style="position:absolute;top:10px;left:16px">
+      <div class="hud-label" id="hud-username" style="color:#666"></div>
     </div>
   </div>
 
@@ -337,7 +333,7 @@
     <div id="reload-bar-bg"><div id="reload-bar"></div></div>
   </div>
 
-  <div id="dash-display" style="position:absolute;bottom:16px;right:16px;display:none;z-index:5;pointer-events:none;display:flex;gap:2px"></div>
+  <div id="dash-display" style="position:absolute;bottom:80px;right:16px;display:none;z-index:5;pointer-events:none;display:flex;gap:2px"></div>
 
   <div id="xp-bar-wrap"><div id="xp-bar"></div></div>
   <div id="xp-level">LVL 1</div>
@@ -789,13 +785,14 @@ function wallCollide(x, y, r) {
 let SPAWN_EDGES = [];
 function rebuildSpawnEdges() {
   SPAWN_EDGES = [];
+  // Only add edge positions where the tile is actually floor (not wall)
   for (let col = 1; col < COLS-1; col++) {
-    SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: TILE+TILE/2 });
-    SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: (ROWS-2)*TILE+TILE/2 });
+    if (MAP[1][col] === 0) SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: TILE+TILE/2 });
+    if (MAP[ROWS-2][col] === 0) SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: (ROWS-2)*TILE+TILE/2 });
   }
   for (let row = 1; row < ROWS-1; row++) {
-    SPAWN_EDGES.push({ x: TILE+TILE/2, y: row*TILE+TILE/2 });
-    SPAWN_EDGES.push({ x: (COLS-2)*TILE+TILE/2, y: row*TILE+TILE/2 });
+    if (MAP[row][1] === 0) SPAWN_EDGES.push({ x: TILE+TILE/2, y: row*TILE+TILE/2 });
+    if (MAP[row][COLS-2] === 0) SPAWN_EDGES.push({ x: (COLS-2)*TILE+TILE/2, y: row*TILE+TILE/2 });
   }
 }
 rebuildSpawnEdges();
@@ -1776,50 +1773,68 @@ function updateZombies() {
       let bulletTimeMult = 1.0;
       if (bulletTimeTimer > 0) {
         const btdx = z.x - bulletTimeX, btdy = z.y - bulletTimeY;
-        if (btdx*btdx + btdy*btdy < 200*200) {
-          bulletTimeMult = 0.5;
-        }
+        if (btdx*btdx + btdy*btdy < 200*200) bulletTimeMult = 0.5;
       }
-
       const finalSpeed = spd * aggroMult * bulletTimeMult;
 
-      // Flowfield pathfinding with sub-tile smoothing
+      // Direct direction to player
+      const dirX = dx / dist;
+      const dirY = dy / dist;
+
+      // Check if direct path is clear (no wall between zombie and player within 3 tiles)
+      const lookAhead = Math.min(dist, TILE * 3);
+      const checkX = z.x + dirX * lookAhead;
+      const checkY = z.y + dirY * lookAhead;
+      const directPathClear = !wallCollide(z.x + dirX * TILE, z.y + dirY * TILE, z.radius);
+
       let moveX, moveY;
 
-      if (dist < TILE * 1.5) {
-        // Very close — direct chase
-        moveX = (dx/dist) * finalSpeed;
-        moveY = (dy/dist) * finalSpeed;
-      } else {
-        // Use smoothed flowfield direction for sub-tile precision
-        const smoothDir = getSmoothedFlowDir(z.x, z.y);
-        if (smoothDir) {
-          moveX = smoothDir.dx * finalSpeed;
-          moveY = smoothDir.dy * finalSpeed;
+      if (dist < TILE * 1.2 && directPathClear) {
+        // Very close and clear — direct chase
+        moveX = dirX * finalSpeed;
+        moveY = dirY * finalSpeed;
+      } else if (flowfield && !directPathClear) {
+        // Path blocked — use PURE flowfield, no blending
+        const smooth = getSmoothedFlowDir(z.x, z.y);
+        if (smooth) {
+          moveX = smooth.dx * finalSpeed;
+          moveY = smooth.dy * finalSpeed;
         } else {
-          // Fallback: raw flowfield tile direction
-          const ztx = Math.floor(z.x / TILE);
-          const zty = Math.floor(z.y / TILE);
-          const hasFF = flowfield && ztx >= 0 && ztx < COLS && zty >= 0 && zty < ROWS && flowfield[zty][ztx].dist < Infinity;
-          if (hasFF) {
-            const ff = flowfield[zty][ztx];
-            const ffLen = Math.sqrt(ff.dx*ff.dx + ff.dy*ff.dy);
-            if (ffLen > 0) {
-              moveX = (ff.dx/ffLen) * finalSpeed;
-              moveY = (ff.dy/ffLen) * finalSpeed;
-            } else {
-              moveX = (dx/dist) * finalSpeed;
-              moveY = (dy/dist) * finalSpeed;
-            }
-          } else {
-            moveX = (dx/dist) * finalSpeed;
-            moveY = (dy/dist) * finalSpeed;
-          }
+          moveX = dirX * finalSpeed;
+          moveY = dirY * finalSpeed;
         }
+      } else if (flowfield) {
+        // Path clear but far — blend flowfield with direct (80/20)
+        const smooth = getSmoothedFlowDir(z.x, z.y);
+        if (smooth) {
+          const bx = smooth.dx * 0.3 + dirX * 0.7;
+          const by = smooth.dy * 0.3 + dirY * 0.7;
+          const bl = Math.sqrt(bx*bx + by*by);
+          moveX = (bx/bl) * finalSpeed;
+          moveY = (by/bl) * finalSpeed;
+        } else {
+          moveX = dirX * finalSpeed;
+          moveY = dirY * finalSpeed;
+        }
+      } else {
+        moveX = dirX * finalSpeed;
+        moveY = dirY * finalSpeed;
       }
 
-      // Apply movement with wall sliding and corner escape
-      applyMove(z, moveX, moveY, moveR);
+      // Movement with wall sliding
+      const mr = z.radius - 2;
+      const canFull = !wallCollide(z.x + moveX, z.y + moveY, mr);
+      if (canFull) {
+        z.x += moveX;
+        z.y += moveY;
+      } else {
+        // Try each axis separately (wall sliding)
+        if (!wallCollide(z.x + moveX, z.y, mr)) z.x += moveX;
+        else if (!wallCollide(z.x + moveX * 0.5, z.y, mr)) z.x += moveX * 0.5;
+
+        if (!wallCollide(z.x, z.y + moveY, mr)) z.y += moveY;
+        else if (!wallCollide(z.x, z.y + moveY * 0.5, mr)) z.y += moveY * 0.5;
+      }
     }
 
     // spitter shooting
@@ -2800,7 +2815,7 @@ function drawPlayer() {
 }
 
 function drawMinimap() {
-  const S = 6, ox = 10, oy = H - ROWS*S - 10;
+  const S = 6, ox = W - COLS*S - 10, oy = 10;
   ctx.save();
   ctx.globalAlpha = 0.6;
   ctx.fillStyle = '#000';
@@ -2842,6 +2857,15 @@ function drawMinimap() {
   ctx.fillStyle = '#00ff88';
   ctx.fillRect(ox + (player.x/TILE)*S - 2, oy + (player.y/TILE)*S - 2, 4, 4);
   ctx.restore();
+
+  // Wave info under minimap
+  ctx.font = "14px 'Oswald', 'Bebas Neue', sans-serif";
+  ctx.fillStyle = '#666';
+  ctx.textAlign = 'center';
+  ctx.fillText('WAVE ' + wave, ox + COLS*S/2, oy + ROWS*S + 18);
+  ctx.font = "10px 'JetBrains Mono', monospace";
+  ctx.fillStyle = '#444';
+  ctx.fillText(waveKills + ' / ' + waveTotal, ox + COLS*S/2, oy + ROWS*S + 32);
 }
 
 // ── HUD UPDATE ───────────────────────────────────────
@@ -2855,8 +2879,6 @@ function updateHUD() {
   bar.style.background = pct > 0.6 ? '#33cc44' : pct > 0.3 ? '#ccaa00' : '#cc2200';
 
   document.getElementById('ammo-val').textContent = player.ammo;
-  document.getElementById('wave-info').textContent = `WAVE ${wave}`;
-  document.getElementById('kill-count').textContent = `${waveKills} / ${waveTotal}`;
 
   // Ammo pips
   const pips = document.getElementById('ammo-display');
@@ -3030,7 +3052,7 @@ function loop(now) {
   movePlayer();
 
   // Update flowfield every 15 frames
-  if (frameCount - lastFlowfieldUpdate > 15) {
+  if (frameCount - lastFlowfieldUpdate > 5) {
     computeFlowfield();
     lastFlowfieldUpdate = frameCount;
   }
