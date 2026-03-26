@@ -181,7 +181,12 @@ app.post('/api/weapons/upgrade', auth, (req, res) => {
   const baseCost = UPGRADE_BASE_COSTS[stat];
   if (!baseCost) return res.status(400).json({ error: 'Invalid stat' });
 
-  const weapon = getWeapon.get(req.user.id, weaponId);
+  let weapon = getWeapon.get(req.user.id, weaponId);
+  // Pistol is always owned — create DB entry if missing
+  if (!weapon && weaponId === 'pistol') {
+    buyWeapon.run(req.user.id, 'pistol');
+    weapon = getWeapon.get(req.user.id, weaponId);
+  }
   if (!weapon) return res.status(400).json({ error: 'Weapon not owned' });
 
   const currentLevel = weapon[`${stat}_level`];
