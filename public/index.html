@@ -23,6 +23,7 @@
     height: 100vh;
   }
   canvas { display: block; cursor: crosshair; width: 100%; height: 100%; }
+  #c { cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><line x1="12" y1="4" x2="12" y2="20" stroke="%23555" stroke-width="1"/><line x1="4" y1="12" x2="20" y2="12" stroke="%23555" stroke-width="1"/><circle cx="12" cy="12" r="4" stroke="%23555" stroke-width="1" fill="none"/></svg>') 12 12, crosshair; }
   #hud {
     position: absolute;
     inset: 0;
@@ -2925,62 +2926,122 @@ function drawPlayer() {
   ctx.fillRect(0, 0, 10, 3.5);
   ctx.restore();
 
-  // Weapon — drawn based on activeWeaponId
+  // Weapon — drawn based on activeWeaponId (top-down, pointing right)
   ctx.save();
   ctx.translate(-recoil, 0);
   if (activeWeaponId === 'pistol') {
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(4, -2, 12, 4);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(16, -1, 6, 2);
+    // Compact — grip visible as wider bump, short barrel
+    ctx.fillStyle = '#3a3530'; // grip
+    ctx.fillRect(2, -3, 6, 6);
+    ctx.fillStyle = '#2a2a28'; // slide
+    ctx.fillRect(3, -2, 14, 4);
+    ctx.fillStyle = '#1a1a18'; // barrel
+    ctx.fillRect(17, -1.2, 5, 2.4);
+    ctx.fillStyle = '#cc2200'; // front sight
+    ctx.fillRect(21, -0.5, 1, 1);
+
   } else if (activeWeaponId === 'smg') {
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(2, -2.5, 16, 5);
-    ctx.fillStyle = '#1a1a1a';
+    // Stubby stock, medium body, mag down, foregrip
+    ctx.fillStyle = '#222220'; // stock
+    ctx.fillRect(-4, -1.5, 6, 3);
+    ctx.fillStyle = '#2a2a28'; // body
+    ctx.fillRect(2, -3, 16, 6);
+    ctx.fillStyle = '#1a1a18'; // barrel
     ctx.fillRect(18, -1.5, 8, 3);
-    ctx.fillStyle = '#252520';
-    ctx.fillRect(8, 2.5, 3, 5);
+    ctx.fillStyle = '#252522'; // magazine
+    ctx.fillRect(6, 3, 3.5, 6);
+    ctx.fillStyle = '#333330'; // foregrip
+    ctx.fillRect(12, -4, 3, 8);
+    ctx.fillStyle = '#cc2200';
+    ctx.fillRect(25, -0.5, 1, 1);
+
   } else if (activeWeaponId === 'shotgun') {
-    ctx.fillStyle = '#3d3525';
-    ctx.fillRect(-2, -2, 8, 4);
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(6, -2.5, 12, 5);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(18, -2.5, 10, 5);
+    // Long — wooden stock, pump section, WIDE barrel end
+    ctx.fillStyle = '#3d3525'; // stock
+    ctx.fillRect(-8, -2, 12, 4);
+    ctx.fillStyle = '#4a3e2e'; // stock butt
+    ctx.fillRect(-8, -2.5, 3, 5);
+    ctx.fillStyle = '#2a2a28'; // receiver
+    ctx.fillRect(4, -3, 10, 6);
+    ctx.fillStyle = '#3d3525'; // pump
+    ctx.fillRect(14, -3, 6, 6);
+    ctx.fillStyle = '#1a1a18'; // barrel — WIDE
+    ctx.fillRect(20, -3.5, 12, 7);
+    ctx.fillStyle = '#0e0f0e'; // bore
+    ctx.beginPath(); ctx.arc(32, 0, 2.5, 0, Math.PI*2); ctx.fill();
+
   } else if (activeWeaponId === 'assault_rifle') {
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(0, -2.5, 18, 5);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(18, -1.5, 10, 3);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(27, -2, 3, 4);
-    ctx.fillStyle = '#252520';
-    ctx.fillRect(8, 2.5, 4, 5);
-    ctx.fillStyle = '#3a3a30';
-    ctx.fillRect(2, -4, 14, 1.5);
+    // Long, sleek — stock, rail on top, curved mag, flash hider
+    ctx.fillStyle = '#222220'; // stock
+    ctx.fillRect(-10, -2, 10, 4);
+    ctx.fillStyle = '#2a2a28'; // stock plate
+    ctx.fillRect(-12, -3, 3, 6);
+    ctx.fillStyle = '#2a2a28'; // receiver
+    ctx.fillRect(0, -3, 18, 6);
+    ctx.fillStyle = '#333330'; // rail
+    ctx.fillRect(2, -4.5, 14, 1.5);
+    ctx.fillStyle = '#252522'; // magazine (angled)
+    ctx.save(); ctx.translate(6, 3); ctx.rotate(0.1);
+    ctx.fillRect(0, 0, 4, 7);
+    ctx.restore();
+    ctx.fillStyle = '#1a1a18'; // handguard + barrel
+    ctx.fillRect(18, -2, 12, 4);
+    ctx.fillStyle = '#333330'; // flash hider
+    ctx.fillRect(29, -2.5, 3, 5);
+    ctx.fillStyle = '#0e0f0e';
+    ctx.fillRect(30, -0.8, 1.5, 1.6);
+    ctx.fillStyle = '#cc2200';
+    ctx.fillRect(8, -5, 1, 1);
+
   } else if (activeWeaponId === 'sniper') {
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(-4, -2, 18, 4);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(14, -1.2, 18, 2.4);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(30, -2, 4, 4);
-    ctx.fillStyle = '#222';
-    ctx.fillRect(0, -5, 12, 2.5);
-    ctx.fillStyle = '#1a2a44';
-    ctx.beginPath(); ctx.arc(0, -3.8, 1.2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(12, -3.8, 1.2, 0, Math.PI*2); ctx.fill();
+    // Very long — big scope on top, thin barrel, muzzle brake
+    ctx.fillStyle = '#2a2a28'; // stock
+    ctx.fillRect(-14, -2, 14, 4);
+    ctx.fillStyle = '#222220'; // stock plate
+    ctx.fillRect(-16, -3.5, 4, 7);
+    ctx.fillStyle = '#2a2a28'; // receiver
+    ctx.fillRect(0, -2.5, 14, 5);
+    ctx.fillStyle = '#1e1e1c'; // scope (prominent)
+    ctx.fillRect(-4, -6, 18, 3);
+    ctx.fillStyle = '#1a2a40'; // lens front
+    ctx.beginPath(); ctx.arc(14, -4.5, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1a2a40'; // lens rear
+    ctx.beginPath(); ctx.arc(-4, -4.5, 1.5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#252522'; // mag
+    ctx.fillRect(2, 2.5, 5, 5);
+    ctx.fillStyle = '#1a1a18'; // long thin barrel
+    ctx.fillRect(14, -1.2, 22, 2.4);
+    ctx.fillStyle = '#333330'; // muzzle brake
+    ctx.fillRect(34, -2.5, 4, 5);
+    ctx.fillStyle = '#0e0f0e';
+    ctx.fillRect(35.5, -1, 1, 2);
+    ctx.fillRect(37, -1, 1, 2);
+
   } else if (activeWeaponId === 'minigun') {
-    ctx.fillStyle = '#2a2a2a';
-    ctx.fillRect(-2, -4, 14, 8);
-    ctx.fillStyle = '#1a1a1a';
+    // Wide and chunky — motor back, barrel cluster, ammo hint
+    ctx.fillStyle = '#2a2a28'; // motor housing
+    ctx.fillRect(-6, -5, 10, 10);
+    ctx.fillStyle = '#222220'; // motor cap
+    ctx.beginPath(); ctx.arc(-6, 0, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3d3525'; // handles
+    ctx.fillRect(-4, -7.5, 4, 2.5);
+    ctx.fillRect(-4, 5, 4, 2.5);
+    ctx.fillStyle = '#2a2a28'; // body
+    ctx.fillRect(4, -4, 10, 8);
+    ctx.fillStyle = '#1a1a18'; // 5 barrels
     for (let i = -2; i <= 2; i++) {
-      ctx.fillRect(12, i*2 - 0.6, 16, 1.2);
+      ctx.fillRect(14, i*2.2 - 0.7, 14, 1.4);
     }
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(20, 0, 4, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = '#333330'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(20, 0, 5, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(26, 0, 5, 0, Math.PI*2); ctx.stroke();
+    // Ammo belt
+    ctx.fillStyle = '#ddaa00'; ctx.globalAlpha = 0.2;
+    ctx.fillRect(-4, -9, 6, 1.5);
+    ctx.fillRect(-1, -10.5, 5, 1.5);
+    ctx.globalAlpha = 1;
+
   } else {
-    // Fallback
     ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(4, -2, 14, 4);
     ctx.fillStyle = '#1a1a1a';
@@ -3886,24 +3947,23 @@ document.getElementById('st-survival').addEventListener('click', () => stSelectP
 document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
 document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
 
-// ── WEAPON PREVIEW DRAWING (TOP-DOWN VIEW) ─────────────
-// Weapons drawn as seen from directly above — barrel points RIGHT
+// ── WEAPON PREVIEW DRAWING (TOP-DOWN SCHEMATIC) ────────
 function drawWeaponPreview(ctx, weaponId, scale) {
   ctx.save();
   const s = scale || 1;
 
-  // Colors
-  const dark = '#1e2020';
-  const body = '#333836';
-  const light = '#4a504c';
+  const dark = '#1e2220';
+  const body = '#343836';
+  const light = '#4a514c';
   const accent = '#555d58';
   const wood = '#4a3828';
   const woodL = '#5a4832';
   const bore = '#0e0f0e';
   const red = '#cc2200';
+  const outline = '#2a3030';
 
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.lineCap = 'butt';
+  ctx.lineJoin = 'miter';
 
   if (weaponId === 'pistol') {
     // Compact handgun — top-down: rectangular body, short barrel
@@ -4075,6 +4135,17 @@ function drawWeaponPreview(ctx, weaponId, scale) {
     ctx.fillRect(-12*s, -14*s, 8*s, 2.5*s);
     ctx.globalAlpha = 1;
   }
+
+  // Schematic overlay — thin outline around weapon for blueprint feel
+  ctx.strokeStyle = '#2a3535';
+  ctx.lineWidth = 0.5 * s;
+  ctx.globalAlpha = 0.3;
+  // Center crosshair
+  ctx.beginPath();
+  ctx.moveTo(-3*s, 0); ctx.lineTo(3*s, 0);
+  ctx.moveTo(0, -3*s); ctx.lineTo(0, 3*s);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
