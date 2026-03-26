@@ -450,17 +450,15 @@
         WASD — Bewegen &nbsp;|&nbsp; MAUS — Zielen &nbsp;|&nbsp; LINKSKLICK — Schie&szlig;en<br>
         R — Nachladen &nbsp;|&nbsp; SPACE — Dash &nbsp;|&nbsp; F halten — Rescue &nbsp;|&nbsp; ESC — Pause
       </div>
-      <div class="lobby-footer">
-        <div class="map-select">
-          <div class="map-option active">WAREHOUSE</div>
-          <div class="map-option">BUNKER <span class="lock-label">COMING SOON</span></div>
-          <div class="map-option">CITY <span class="lock-label">COMING SOON</span></div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <button class="start-btn" id="start-btn" style="font-size:30px;padding:18px 70px;letter-spacing:8px;border-width:2px">STARTEN</button>
-          <a href="#" onclick="doLogout();return false" style="color:#404050;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;transition:color 0.2s" onmouseover="this.style.color='#ee2200'" onmouseout="this.style.color='#404050'">ABMELDEN</a>
-        </div>
-        <div style="width:120px"></div>
+      <div style="position:absolute;bottom:24px;left:24px">
+        <div style="font-size:11px;letter-spacing:3px;color:#3a4450;margin-bottom:10px">KARTE</div>
+        <div class="map-option active" style="width:180px;padding:12px 16px;border:1px solid #ee2200;background:rgba(238,34,0,0.04);margin-bottom:6px;font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:2px;color:#8090a0">WAREHOUSE</div>
+        <div class="map-option" style="width:180px;padding:10px 16px;border:1px solid #1a1e22;margin-bottom:6px;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:2px;color:#2a3040;opacity:0.5">BUNKER <span style="font-size:8px;color:#3a4450;margin-left:6px">SOON</span></div>
+        <div class="map-option" style="width:180px;padding:10px 16px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:2px;color:#2a3040;opacity:0.5">CITY <span style="font-size:8px;color:#3a4450;margin-left:6px">SOON</span></div>
+      </div>
+      <div style="position:absolute;bottom:24px;right:24px;display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+        <button class="start-btn" id="start-btn" style="font-size:32px;padding:20px 80px;letter-spacing:10px;border-width:2px">STARTEN</button>
+        <a href="#" onclick="doLogout();return false" style="color:#404050;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2px;transition:color 0.2s" onmouseover="this.style.color='#ee2200'" onmouseout="this.style.color='#404050'">ABMELDEN</a>
       </div>
     </div>
 
@@ -3818,183 +3816,193 @@ document.getElementById('st-survival').addEventListener('click', () => stSelectP
 document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
 document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
 
-// ── WEAPON PREVIEW DRAWING ──────────────────────────────
+// ── WEAPON PREVIEW DRAWING (TOP-DOWN VIEW) ─────────────
+// Weapons drawn as seen from directly above — barrel points RIGHT
 function drawWeaponPreview(ctx, weaponId, scale) {
   ctx.save();
   const s = scale || 1;
-  ctx.strokeStyle = '#3a4440';
-  ctx.fillStyle = '#2a2e28';
-  ctx.lineWidth = 1.5;
 
-  const metal = '#3a3e38';
-  const metalDark = '#222624';
-  const metalLight = '#4a5048';
-  const wood = '#3d3525';
-  const woodLight = '#4a3e2e';
+  // Colors
+  const dark = '#1e2020';
+  const body = '#333836';
+  const light = '#4a504c';
+  const accent = '#555d58';
+  const wood = '#4a3828';
+  const woodL = '#5a4832';
+  const bore = '#0e0f0e';
+  const red = '#cc2200';
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
   if (weaponId === 'pistol') {
-    // Grip
-    ctx.fillStyle = wood;
-    ctx.fillRect(-8*s, 2*s, 10*s, 14*s);
-    ctx.fillStyle = woodLight;
-    ctx.fillRect(-6*s, 4*s, 2*s, 10*s);
-    // Body/slide
-    ctx.fillStyle = metal;
-    ctx.fillRect(-10*s, -4*s, 28*s, 8*s);
-    ctx.fillStyle = metalLight;
-    ctx.fillRect(-8*s, -4*s, 24*s, 2*s);
+    // Compact handgun — top-down: rectangular body, short barrel
+    // Body
+    ctx.fillStyle = body;
+    ctx.fillRect(-6*s, -3*s, 16*s, 6*s);
     // Barrel
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(18*s, -2*s, 12*s, 4*s);
+    ctx.fillStyle = dark;
+    ctx.fillRect(10*s, -2*s, 10*s, 4*s);
+    // Bore
+    ctx.fillStyle = bore;
+    ctx.beginPath(); ctx.arc(20*s, 0, 1.2*s, 0, Math.PI*2); ctx.fill();
+    // Grip (below, visible as wider section)
+    ctx.fillStyle = wood;
+    ctx.fillRect(-4*s, -4.5*s, 8*s, 9*s);
     // Trigger guard
-    ctx.strokeStyle = metal;
-    ctx.lineWidth = 1.5*s;
-    ctx.beginPath();
-    ctx.moveTo(-2*s, 2*s); ctx.lineTo(2*s, 8*s); ctx.lineTo(6*s, 2*s);
-    ctx.stroke();
-    // Sight
-    ctx.fillStyle = '#ee2200';
-    ctx.fillRect(28*s, -3*s, 2*s, 1.5*s);
+    ctx.strokeStyle = body; ctx.lineWidth = 1*s;
+    ctx.beginPath(); ctx.arc(3*s, 0, 2.5*s, -0.5, 0.5); ctx.stroke();
+    // Sight dot
+    ctx.fillStyle = red;
+    ctx.beginPath(); ctx.arc(19*s, 0, 0.8*s, 0, Math.PI*2); ctx.fill();
 
   } else if (weaponId === 'smg') {
-    // Stock (folded)
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(-22*s, -3*s, 14*s, 6*s);
+    // Compact SMG — slightly longer, magazine sticks out
+    // Stock stub
+    ctx.fillStyle = dark;
+    ctx.fillRect(-16*s, -2*s, 8*s, 4*s);
     // Body
-    ctx.fillStyle = metal;
-    ctx.fillRect(-8*s, -5*s, 30*s, 10*s);
-    ctx.fillStyle = metalLight;
-    ctx.fillRect(-6*s, -5*s, 26*s, 2.5*s);
-    // Magazine (extends down)
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(4*s, 5*s, 6*s, 14*s);
+    ctx.fillStyle = body;
+    ctx.fillRect(-8*s, -3.5*s, 22*s, 7*s);
     // Barrel
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(22*s, -2.5*s, 14*s, 5*s);
+    ctx.fillStyle = dark;
+    ctx.fillRect(14*s, -2*s, 12*s, 4*s);
+    ctx.fillStyle = bore;
+    ctx.beginPath(); ctx.arc(26*s, 0, 1.2*s, 0, Math.PI*2); ctx.fill();
+    // Magazine (sticks out to one side)
+    ctx.fillStyle = accent;
+    ctx.fillRect(0*s, 3.5*s, 5*s, 8*s);
     // Foregrip
-    ctx.fillStyle = wood;
-    ctx.fillRect(14*s, 5*s, 6*s, 8*s);
+    ctx.fillStyle = light;
+    ctx.fillRect(8*s, -4.5*s, 4*s, 9*s);
     // Sight
-    ctx.fillStyle = '#ee2200';
-    ctx.fillRect(34*s, -3.5*s, 2*s, 1.5*s);
+    ctx.fillStyle = red;
+    ctx.beginPath(); ctx.arc(25*s, 0, 0.8*s, 0, Math.PI*2); ctx.fill();
 
   } else if (weaponId === 'shotgun') {
+    // Pump shotgun — long, wide barrel end
     // Stock
     ctx.fillStyle = wood;
-    ctx.fillRect(-30*s, -4*s, 20*s, 8*s);
-    ctx.fillStyle = woodLight;
-    ctx.fillRect(-28*s, -4*s, 4*s, 8*s);
+    ctx.fillRect(-28*s, -2.5*s, 14*s, 5*s);
+    ctx.fillStyle = woodL;
+    ctx.fillRect(-28*s, -2.5*s, 3*s, 5*s);
     // Receiver
-    ctx.fillStyle = metal;
-    ctx.fillRect(-10*s, -5*s, 22*s, 10*s);
-    // Pump
+    ctx.fillStyle = body;
+    ctx.fillRect(-14*s, -3.5*s, 16*s, 7*s);
+    // Pump grip
     ctx.fillStyle = wood;
-    ctx.fillRect(12*s, -4*s, 10*s, 8*s);
-    ctx.strokeStyle = woodLight; ctx.lineWidth = 0.8*s;
-    ctx.beginPath();
-    ctx.moveTo(14*s, -2*s); ctx.lineTo(20*s, -2*s);
-    ctx.moveTo(14*s, 2*s); ctx.lineTo(20*s, 2*s);
-    ctx.stroke();
-    // Wide barrel
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(22*s, -4*s, 18*s, 8*s);
-    ctx.fillStyle = '#1a1c1a';
-    ctx.beginPath(); ctx.arc(40*s, 0, 4*s, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(2*s, -4*s, 8*s, 8*s);
+    ctx.strokeStyle = woodL; ctx.lineWidth = 0.6*s;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.moveTo((3+i*2.5)*s, -3*s); ctx.lineTo((3+i*2.5)*s, 3*s); ctx.stroke();
+    }
+    // Barrel — wider
+    ctx.fillStyle = dark;
+    ctx.fillRect(10*s, -3*s, 20*s, 6*s);
+    // Muzzle — wide opening
+    ctx.fillStyle = bore;
+    ctx.beginPath(); ctx.arc(30*s, 0, 2.5*s, 0, Math.PI*2); ctx.fill();
 
   } else if (weaponId === 'assault_rifle') {
+    // AR — long with rail on top
     // Stock
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(-34*s, -3*s, 18*s, 6*s);
-    ctx.fillStyle = metal;
-    ctx.fillRect(-36*s, -5*s, 6*s, 10*s);
-    // Body
-    ctx.fillStyle = metal;
-    ctx.fillRect(-16*s, -6*s, 38*s, 12*s);
-    ctx.fillStyle = metalLight;
-    ctx.fillRect(-14*s, -6*s, 34*s, 3*s);
-    // Magazine (curved)
-    ctx.fillStyle = metalDark;
-    ctx.save();
-    ctx.translate(2*s, 6*s); ctx.rotate(0.1);
-    ctx.fillRect(0, 0, 7*s, 16*s);
+    ctx.fillStyle = dark;
+    ctx.fillRect(-30*s, -2.5*s, 12*s, 5*s);
+    ctx.fillStyle = body;
+    ctx.fillRect(-32*s, -3.5*s, 5*s, 7*s);
+    // Body/receiver
+    ctx.fillStyle = body;
+    ctx.fillRect(-18*s, -4*s, 26*s, 8*s);
+    // Rail on top
+    ctx.fillStyle = light;
+    ctx.fillRect(-14*s, -5*s, 20*s, 1.5*s);
+    // Magazine
+    ctx.fillStyle = accent;
+    ctx.save(); ctx.translate(-4*s, 4*s); ctx.rotate(0.08);
+    ctx.fillRect(0, 0, 5*s, 10*s);
     ctx.restore();
-    // Barrel + handguard
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(22*s, -3*s, 22*s, 6*s);
-    // Barrel tip
-    ctx.fillStyle = '#1a1c1a';
-    ctx.fillRect(42*s, -2*s, 6*s, 4*s);
-    // Scope rail
-    ctx.fillStyle = metalLight;
-    ctx.fillRect(-8*s, -8*s, 28*s, 2*s);
-    // Sight dot
-    ctx.fillStyle = '#ee2200';
-    ctx.fillRect(16*s, -9*s, 2*s, 1.5*s);
+    // Handguard
+    ctx.fillStyle = dark;
+    ctx.fillRect(8*s, -3*s, 14*s, 6*s);
+    // Barrel
+    ctx.fillStyle = dark;
+    ctx.fillRect(22*s, -1.5*s, 14*s, 3*s);
+    // Flash hider
+    ctx.fillStyle = body;
+    ctx.fillRect(34*s, -2.5*s, 4*s, 5*s);
+    ctx.fillStyle = bore;
+    ctx.beginPath(); ctx.arc(38*s, 0, 1*s, 0, Math.PI*2); ctx.fill();
+    // Sight
+    ctx.fillStyle = red;
+    ctx.beginPath(); ctx.arc(4*s, -5.5*s, 0.8*s, 0, Math.PI*2); ctx.fill();
 
   } else if (weaponId === 'sniper') {
+    // Sniper — very long, scope visible as long cylinder on top
     // Stock (adjustable)
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(-44*s, -3*s, 22*s, 6*s);
-    ctx.fillStyle = metal;
-    ctx.fillRect(-46*s, -6*s, 6*s, 12*s);
+    ctx.fillStyle = body;
+    ctx.fillRect(-40*s, -2.5*s, 16*s, 5*s);
+    ctx.fillStyle = dark;
+    ctx.fillRect(-42*s, -4*s, 5*s, 8*s);
     // Body
-    ctx.fillStyle = metal;
-    ctx.fillRect(-22*s, -5*s, 30*s, 10*s);
-    // Scope
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(-14*s, -12*s, 24*s, 5*s);
-    ctx.fillStyle = '#112233';
-    ctx.beginPath(); ctx.arc(-14*s, -9.5*s, 2.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(10*s, -9.5*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = body;
+    ctx.fillRect(-24*s, -3.5*s, 22*s, 7*s);
+    // Scope (long tube on top)
+    ctx.fillStyle = dark;
+    ctx.fillRect(-18*s, -6.5*s, 22*s, 3*s);
+    // Scope lenses
+    ctx.fillStyle = '#1a2a44';
+    ctx.beginPath(); ctx.arc(-18*s, -5*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4*s, -5*s, 1.5*s, 0, Math.PI*2); ctx.fill();
     // Magazine
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(-4*s, 5*s, 8*s, 10*s);
-    // Very long barrel
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(8*s, -2.5*s, 40*s, 5*s);
+    ctx.fillStyle = accent;
+    ctx.fillRect(-10*s, 3.5*s, 6*s, 6*s);
+    // Long barrel
+    ctx.fillStyle = dark;
+    ctx.fillRect(-2*s, -2*s, 40*s, 4*s);
     // Muzzle brake
-    ctx.fillStyle = metal;
-    ctx.fillRect(46*s, -3.5*s, 8*s, 7*s);
-    ctx.fillStyle = '#1a1c1a';
-    ctx.fillRect(48*s, -2*s, 1.5*s, 4*s);
-    ctx.fillRect(51*s, -2*s, 1.5*s, 4*s);
-    // Bipod (folded)
-    ctx.strokeStyle = metal; ctx.lineWidth = 1.5*s;
-    ctx.beginPath();
-    ctx.moveTo(14*s, 5*s); ctx.lineTo(10*s, 12*s);
-    ctx.moveTo(18*s, 5*s); ctx.lineTo(22*s, 12*s);
-    ctx.stroke();
+    ctx.fillStyle = body;
+    ctx.fillRect(36*s, -3*s, 6*s, 6*s);
+    ctx.fillStyle = bore;
+    ctx.fillRect(38*s, -1.5*s, 1*s, 3*s);
+    ctx.fillRect(40*s, -1.5*s, 1*s, 3*s);
+    // Bipod legs (folded alongside barrel)
+    ctx.strokeStyle = light; ctx.lineWidth = 1.2*s;
+    ctx.beginPath(); ctx.moveTo(4*s, 3.5*s); ctx.lineTo(14*s, 5*s); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4*s, -3.5*s); ctx.lineTo(14*s, -5*s); ctx.stroke();
 
   } else if (weaponId === 'minigun') {
-    // Motor housing (back)
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(-24*s, -8*s, 16*s, 16*s);
-    ctx.fillStyle = metal;
-    ctx.beginPath(); ctx.arc(-24*s, 0, 8*s, 0, Math.PI*2); ctx.fill();
-    // Handle grips
+    // Minigun — wide, multiple barrels visible as parallel lines
+    // Motor/rear housing
+    ctx.fillStyle = body;
+    ctx.fillRect(-20*s, -7*s, 14*s, 14*s);
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.arc(-20*s, 0, 7*s, 0, Math.PI*2); ctx.fill();
+    // Handles
     ctx.fillStyle = wood;
-    ctx.fillRect(-18*s, 8*s, 8*s, 10*s);
-    ctx.fillRect(2*s, 8*s, 8*s, 10*s);
-    // Body/receiver
-    ctx.fillStyle = metal;
-    ctx.fillRect(-8*s, -6*s, 24*s, 12*s);
-    // Barrel cluster (6 barrels in circle)
-    ctx.fillStyle = metalDark;
-    ctx.fillRect(16*s, -10*s, 30*s, 20*s);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const bx = 36*s + Math.cos(a) * 6*s;
-      const by = Math.sin(a) * 6*s;
-      ctx.fillStyle = '#1a1c1a';
-      ctx.beginPath(); ctx.arc(bx, by, 2*s, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(-16*s, -10*s, 6*s, 3*s);
+    ctx.fillRect(-16*s, 7*s, 6*s, 3*s);
+    // Body
+    ctx.fillStyle = body;
+    ctx.fillRect(-6*s, -5*s, 18*s, 10*s);
+    // 6 barrels as parallel lines
+    ctx.fillStyle = dark;
+    const barrelOffsets = [-5, -3, -1, 1, 3, 5];
+    for (const off of barrelOffsets) {
+      ctx.fillRect(12*s, off*s - 0.8*s, 26*s, 1.6*s);
     }
-    // Barrel shroud
-    ctx.strokeStyle = metal; ctx.lineWidth = 1.5*s;
-    ctx.beginPath(); ctx.arc(36*s, 0, 9*s, 0, Math.PI*2); ctx.stroke();
-    // Ammo belt hint
-    ctx.fillStyle = '#ddaa00'; ctx.globalAlpha = 0.3;
-    ctx.fillRect(-20*s, -12*s, 12*s, 3*s);
-    ctx.fillRect(-14*s, -15*s, 8*s, 3*s);
+    // Barrel shroud ring
+    ctx.strokeStyle = light; ctx.lineWidth = 1.5*s;
+    ctx.beginPath(); ctx.arc(24*s, 0, 6.5*s, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(34*s, 0, 6.5*s, 0, Math.PI*2); ctx.stroke();
+    // Muzzle ends
+    for (const off of barrelOffsets) {
+      ctx.fillStyle = bore;
+      ctx.beginPath(); ctx.arc(38*s, off*s, 0.8*s, 0, Math.PI*2); ctx.fill();
+    }
+    // Ammo belt
+    ctx.fillStyle = '#ddaa00'; ctx.globalAlpha = 0.25;
+    ctx.fillRect(-18*s, -12*s, 10*s, 2.5*s);
+    ctx.fillRect(-12*s, -14*s, 8*s, 2.5*s);
     ctx.globalAlpha = 1;
   }
 
