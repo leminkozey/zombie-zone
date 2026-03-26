@@ -1303,7 +1303,14 @@ function startNextWave() {
   // Spawn first zombie immediately so player sees something right away
   spawnZombie(); spawned++;
 
-  showWaveBanner(`WAVE ${wave}`);
+  if (wave === 5) {
+    showWaveBanner('WAVE 5 — GOLD BOOST AKTIV!');
+  } else if (wave >= 5) {
+    const mult = 1 + (wave - 5) * 0.5;
+    showWaveBanner(`WAVE ${wave} — GOLD x${mult.toFixed(1)}`);
+  } else {
+    showWaveBanner(`WAVE ${wave}`);
+  }
   updateHUD();
 }
 
@@ -2196,11 +2203,14 @@ function updateBullets() {
           runStats.xpEarned += z.xp;
           pendingXp += z.xp;
 
-          // Gold drop
+          // Gold drop with wave multiplier (1.5x per wave above 5)
           const goldDef = { normal: [5,10,2], runner: [10,15,3], tank: [25,40,5], spitter: [15,25,4] };
           const gd = goldDef[z.type] || goldDef.normal;
           let goldAmount = gd[0] + Math.floor(Math.random() * (gd[1] - gd[0] + 1)) + gd[2] * wave;
-          if (Math.random() < 0.05) goldAmount *= 3; // Gold Haufen
+          const goldMultiplier = wave >= 5 ? 1 + (wave - 5) * 0.5 : 1;
+          goldAmount = Math.round(goldAmount * goldMultiplier);
+          const isGoldHaufen = Math.random() < 0.05;
+          if (isGoldHaufen) goldAmount *= 3;
           pendingGold += goldAmount;
 
           // Diamond drop (wave 10+)
@@ -2213,11 +2223,15 @@ function updateBullets() {
           }
 
           // Floating gold text
+          let goldText = '+' + goldAmount + 'G';
+          let goldColor = '#ddaa00';
+          if (isGoldHaufen) { goldText += ' x3!'; goldColor = '#ffdd44'; }
+          else if (goldMultiplier > 1) { goldText += ' x' + goldMultiplier.toFixed(1); goldColor = '#eecc22'; }
           floatingTexts.push({
             x: z.x, y: z.y - 10,
-            text: '+' + goldAmount + 'G',
-            life: 40, maxLife: 40,
-            color: '#ddaa00',
+            text: goldText,
+            life: 45, maxLife: 45,
+            color: goldColor,
           });
 
           updateXpBar();
@@ -3227,10 +3241,18 @@ function drawMinimap() {
   ctx.fillStyle = '#ddaa00';
   ctx.textAlign = 'right';
   ctx.fillText((globalGold + pendingGold) + 'G', ox - 12, oy + 12);
-  // Diamonds below gold
+  // Gold multiplier indicator
+  if (wave >= 5) {
+    const mult = 1 + (wave - 5) * 0.5;
+    ctx.font = "10px 'JetBrains Mono', monospace";
+    ctx.fillStyle = '#eecc22';
+    ctx.fillText('x' + mult.toFixed(1) + ' GOLD', ox - 12, oy + 26);
+  }
+  // Diamonds below
   if (globalDiamonds + pendingDiamonds > 0) {
     ctx.fillStyle = '#44ddff';
-    ctx.fillText((globalDiamonds + pendingDiamonds) + 'D', ox - 12, oy + 28);
+    ctx.font = "13px 'JetBrains Mono', monospace";
+    ctx.fillText((globalDiamonds + pendingDiamonds) + 'D', ox - 12, wave >= 5 ? oy + 40 : oy + 28);
   }
 }
 
