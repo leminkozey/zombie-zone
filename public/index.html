@@ -1106,8 +1106,9 @@ function computeFlowfield() {
   const queue = [{ x: pTileX, y: pTileY }];
   const neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 
-  while (queue.length > 0) {
-    const cur = queue.shift();
+  let qHead = 0;
+  while (qHead < queue.length) {
+    const cur = queue[qHead++];
     const curDist = flowfield[cur.y][cur.x].dist;
 
     for (const [nx, ny] of neighbors) {
@@ -2258,6 +2259,53 @@ function damagePlayer(rawDamage, source) {
   updateHUD();
 }
 
+// Helper to apply movement with wall sliding (hoisted out of loop for perf)
+function applyMove(entity, mx, my, collR) {
+  // Try full diagonal move
+  if (!wallCollide(entity.x + mx, entity.y + my, collR)) {
+    entity.x += mx;
+    entity.y += my;
+    return true;
+  }
+  // Try each axis independently (wall sliding)
+  let moved = false;
+  if (!wallCollide(entity.x + mx, entity.y, collR)) {
+    entity.x += mx;
+    moved = true;
+  }
+  if (!wallCollide(entity.x, entity.y + my, collR)) {
+    entity.y += my;
+    moved = true;
+  }
+  if (moved) return true;
+  // Both axes blocked — try half-steps for corner scraping
+  const halfMx = mx * 0.5, halfMy = my * 0.5;
+  if (!wallCollide(entity.x + halfMx, entity.y, collR)) {
+    entity.x += halfMx;
+    return true;
+  }
+  if (!wallCollide(entity.x, entity.y + halfMy, collR)) {
+    entity.y += halfMy;
+    return true;
+  }
+  // Completely blocked — try perpendicular nudge to escape corner
+  const len = Math.sqrt(mx * mx + my * my);
+  if (len > 0.01) {
+    const perpX = -my / len * 2, perpY = mx / len * 2;
+    if (!wallCollide(entity.x + perpX, entity.y + perpY, collR)) {
+      entity.x += perpX;
+      entity.y += perpY;
+      return true;
+    }
+    if (!wallCollide(entity.x - perpX, entity.y - perpY, collR)) {
+      entity.x -= perpX;
+      entity.y -= perpY;
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── ZOMBIE UPDATE ────────────────────────────────────
 function updateZombies() {
   for (const z of zombies) {
@@ -2343,53 +2391,6 @@ function updateZombies() {
       }
       z.stuckFrames = 0;
       continue; // skip normal movement this frame
-    }
-
-    // Helper to apply movement with wall sliding
-    function applyMove(entity, mx, my, collR) {
-      // Try full diagonal move
-      if (!wallCollide(entity.x + mx, entity.y + my, collR)) {
-        entity.x += mx;
-        entity.y += my;
-        return true;
-      }
-      // Try each axis independently (wall sliding)
-      let moved = false;
-      if (!wallCollide(entity.x + mx, entity.y, collR)) {
-        entity.x += mx;
-        moved = true;
-      }
-      if (!wallCollide(entity.x, entity.y + my, collR)) {
-        entity.y += my;
-        moved = true;
-      }
-      if (moved) return true;
-      // Both axes blocked — try half-steps for corner scraping
-      const halfMx = mx * 0.5, halfMy = my * 0.5;
-      if (!wallCollide(entity.x + halfMx, entity.y, collR)) {
-        entity.x += halfMx;
-        return true;
-      }
-      if (!wallCollide(entity.x, entity.y + halfMy, collR)) {
-        entity.y += halfMy;
-        return true;
-      }
-      // Completely blocked — try perpendicular nudge to escape corner
-      const len = Math.sqrt(mx * mx + my * my);
-      if (len > 0.01) {
-        const perpX = -my / len * 2, perpY = mx / len * 2;
-        if (!wallCollide(entity.x + perpX, entity.y + perpY, collR)) {
-          entity.x += perpX;
-          entity.y += perpY;
-          return true;
-        }
-        if (!wallCollide(entity.x - perpX, entity.y - perpY, collR)) {
-          entity.x -= perpX;
-          entity.y -= perpY;
-          return true;
-        }
-      }
-      return false;
     }
 
     if (dashAfterimage && z.type !== 'spitter') {
@@ -2642,7 +2643,7 @@ function updateParticles() {
     p.x += p.dx; p.y += p.dy;
     p.dx *= 0.88; p.dy *= 0.88;
     p.life--;
-    if (p.life <= 0) particles.splice(i, 1);
+    if (p.life <= 0) { particles[i] = particles[particles.length - 1]; particles.pop(); }
   }
 }
 
@@ -2652,7 +2653,7 @@ function updateFloatingTexts() {
     const ft = floatingTexts[i];
     ft.y -= 0.5;
     ft.life--;
-    if (ft.life <= 0) floatingTexts.splice(i, 1);
+    if (ft.life <= 0) { floatingTexts[i] = floatingTexts[floatingTexts.length - 1]; floatingTexts.pop(); }
   }
 }
 
@@ -2772,81 +2773,83 @@ function drawMap() {
         mctx.fillRect(x, y, TILE, TILE);
 
         // Top face (lighter, gives depth)
-        ctx.fillStyle = '#2a2a30';
-        ctx.fillRect(x, y, TILE, 6);
+        mctx.fillStyle = '#2a2a30';
+        mctx.fillRect(x, y, TILE, 6);
 
         // Left edge highlight
-        ctx.fillStyle = '#252530';
-        ctx.fillRect(x, y, 3, TILE);
+        mctx.fillStyle = '#252530';
+        mctx.fillRect(x, y, 3, TILE);
 
         // Main body with brick-like horizontal lines
-        ctx.fillStyle = '#1a1a20';
-        ctx.fillRect(x + 3, y + 6, TILE - 6, TILE - 9);
+        mctx.fillStyle = '#1a1a20';
+        mctx.fillRect(x + 3, y + 6, TILE - 6, TILE - 9);
 
         // Brick lines
-        ctx.strokeStyle = '#16161c';
-        ctx.lineWidth = 0.6;
+        mctx.strokeStyle = '#16161c';
+        mctx.lineWidth = 0.6;
         const brickY1 = y + Math.floor(TILE * 0.35);
         const brickY2 = y + Math.floor(TILE * 0.65);
-        ctx.beginPath();
-        ctx.moveTo(x + 4, brickY1); ctx.lineTo(x + TILE - 4, brickY1);
-        ctx.moveTo(x + 4, brickY2); ctx.lineTo(x + TILE - 4, brickY2);
-        ctx.stroke();
+        mctx.beginPath();
+        mctx.moveTo(x + 4, brickY1); mctx.lineTo(x + TILE - 4, brickY1);
+        mctx.moveTo(x + 4, brickY2); mctx.lineTo(x + TILE - 4, brickY2);
+        mctx.stroke();
 
         // Right edge shadow
-        ctx.fillStyle = '#0e0e12';
-        ctx.fillRect(x + TILE - 2, y, 2, TILE);
+        mctx.fillStyle = '#0e0e12';
+        mctx.fillRect(x + TILE - 2, y, 2, TILE);
 
         // Bottom edge shadow
-        ctx.fillStyle = '#0a0a0e';
-        ctx.fillRect(x, y + TILE - 3, TILE, 3);
+        mctx.fillStyle = '#0a0a0e';
+        mctx.fillRect(x, y + TILE - 3, TILE, 3);
 
         // Top-left bevel highlight
-        ctx.fillStyle = '#333340';
-        ctx.fillRect(x, y, TILE, 1);
-        ctx.fillRect(x, y, 1, TILE);
+        mctx.fillStyle = '#333340';
+        mctx.fillRect(x, y, TILE, 1);
+        mctx.fillRect(x, y, 1, TILE);
 
       } else {
         // Floor — cracked concrete with noise variation
         const noise = getFloorNoise(col, row);
-        ctx.fillStyle = noise.variant;
-        ctx.fillRect(x, y, TILE, TILE);
+        mctx.fillStyle = noise.variant;
+        mctx.fillRect(x, y, TILE, TILE);
 
         // Subtle grid lines (very faint)
-        ctx.strokeStyle = '#181820';
-        ctx.lineWidth = 0.3;
-        ctx.strokeRect(x, y, TILE, TILE);
+        mctx.strokeStyle = '#181820';
+        mctx.lineWidth = 0.3;
+        mctx.strokeRect(x, y, TILE, TILE);
 
         // Debris dots
         for (const d of noise.debris) {
-          ctx.fillStyle = d.color;
-          ctx.fillRect(x + d.ox, y + d.oy, d.r, d.r);
+          mctx.fillStyle = d.color;
+          mctx.fillRect(x + d.ox, y + d.oy, d.r, d.r);
         }
 
         // Shadow along wall bases — check adjacent walls
         if (row > 0 && MAP[row-1][col] === 1) {
           // Wall above — cast shadow down
-          ctx.fillStyle = 'rgba(0,0,0,0.25)';
-          ctx.fillRect(x, y, TILE, 4);
+          mctx.fillStyle = 'rgba(0,0,0,0.25)';
+          mctx.fillRect(x, y, TILE, 4);
         }
         if (col > 0 && MAP[row][col-1] === 1) {
           // Wall to the left — cast shadow right
-          ctx.fillStyle = 'rgba(0,0,0,0.2)';
-          ctx.fillRect(x, y, 3, TILE);
+          mctx.fillStyle = 'rgba(0,0,0,0.2)';
+          mctx.fillRect(x, y, 3, TILE);
         }
         if (row < ROWS-1 && MAP[row+1][col] === 1) {
           // Wall below — subtle top shadow
-          ctx.fillStyle = 'rgba(0,0,0,0.12)';
-          ctx.fillRect(x, y + TILE - 2, TILE, 2);
+          mctx.fillStyle = 'rgba(0,0,0,0.12)';
+          mctx.fillRect(x, y + TILE - 2, TILE, 2);
         }
         if (col < COLS-1 && MAP[row][col+1] === 1) {
           // Wall to the right — subtle left shadow
-          ctx.fillStyle = 'rgba(0,0,0,0.12)';
-          ctx.fillRect(x + TILE - 2, y, 2, TILE);
+          mctx.fillStyle = 'rgba(0,0,0,0.12)';
+          mctx.fillRect(x + TILE - 2, y, 2, TILE);
         }
       }
     }
   }
+  // Blit the cache to the main canvas
+  ctx.drawImage(mapCacheCanvas, 0, 0);
 }
 
 function findFreeSpawnTile() {
@@ -3093,7 +3096,7 @@ function drawBullets() {
 function updateHitTrails() {
   for (let i = hitTrails.length - 1; i >= 0; i--) {
     hitTrails[i].life--;
-    if (hitTrails[i].life <= 0) hitTrails.splice(i, 1);
+    if (hitTrails[i].life <= 0) { hitTrails[i] = hitTrails[hitTrails.length - 1]; hitTrails.pop(); }
   }
 }
 
@@ -3767,12 +3770,19 @@ function updateHUD() {
   document.getElementById('ammo-val').textContent = player.ammo;
   const maxAmmo = getWeaponStat(activeWeaponId, 'mag');
   const pips = document.getElementById('ammo-display');
-  pips.innerHTML = '';
   const pipCount = Math.min(maxAmmo, 40);
-  for (let i = 0; i < pipCount; i++) {
-    const d = document.createElement('div');
-    d.className = 'bullet-pip' + (i < player.ammo ? '' : ' empty');
-    pips.appendChild(d);
+  // Only rebuild DOM if pip count changed
+  if (pips.children.length !== pipCount) {
+    pips.innerHTML = '';
+    for (let i = 0; i < pipCount; i++) {
+      const d = document.createElement('div');
+      d.className = 'bullet-pip empty';
+      pips.appendChild(d);
+    }
+  }
+  // Just toggle classes
+  for (let i = 0; i < pips.children.length; i++) {
+    pips.children[i].className = 'bullet-pip' + (i < player.ammo ? '' : ' empty');
   }
 
   if (player.maxShield > 0) {
