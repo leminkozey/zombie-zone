@@ -690,6 +690,15 @@ async function showGameMenu() {
       }
     } catch {}
 
+    try {
+      const opRes = await fetch('/api/operators', { headers: { 'Authorization': 'Bearer ' + authToken } });
+      if (opRes.ok) {
+        const opData = await opRes.json();
+        ownedOperators = opData.operators;
+        activeOperatorId = opData.activeOperator;
+      }
+    } catch {}
+
     renderArsenal();
 
     updateSkillTreeTab();
@@ -1077,6 +1086,10 @@ const BASE_STATS = {
   adrenalinSpeedPct: 0,
   berserkerMaxBonus: 0,
   ghostReduction: 0,
+  weaponDamagePct: 0,
+  healingEffectivenessPct: 0,
+  fireRatePct: 0,
+  weaponRangePct: 0,
 };
 
 let activeSkills = []; // { skillId, level } loaded from server
@@ -1093,6 +1106,23 @@ function getPlayerStat(stat) {
     const fx = def.effect(s.level);
     if (fx[stat] !== undefined) flat += fx[stat];
     if (fx[stat + 'Pct'] !== undefined) pct += fx[stat + 'Pct'];
+  }
+
+  // Operator buffs/debuffs
+  if (activeOperatorId && OPERATORS[activeOperatorId]) {
+    const op = OPERATORS[activeOperatorId];
+    if (op.buffs) {
+      if (op.buffs[stat] !== undefined) flat += op.buffs[stat];
+      if (op.buffs[stat + 'Pct'] !== undefined) pct += op.buffs[stat + 'Pct'];
+    }
+    if (op.debuffs) {
+      if (op.debuffs[stat] !== undefined) flat += op.debuffs[stat];
+      if (op.debuffs[stat + 'Pct'] !== undefined) pct += op.debuffs[stat + 'Pct'];
+    }
+    // Juggernaut exception: fireRate debuff doesn't apply to minigun
+    if (activeOperatorId === 'juggernaut' && stat + 'Pct' === 'fireRatePct' && activeWeaponId === 'minigun') {
+      pct -= (op.debuffs.fireRatePct || 0);
+    }
   }
 
   return base * (1 + pct) + flat;
@@ -1260,6 +1290,64 @@ const PERK_DEFS = {
 let ownedPerks = []; // perk IDs from server
 let activePerkCooldowns = {}; // { perkId: framesRemaining }
 let activePerkActive = {}; // { perkId: true/false } — currently activated
+
+// ── OPERATOR DEFINITIONS ───────────────────────────────
+const OPERATORS = {
+  soldier: {
+    id: 'soldier', name: 'SOLDAT', icon: '\u{1F396}', unlockLevel: 15, goldCost: 5000, diamondCost: 30,
+    desc: 'Kampferprobter Veteran. Mehr Schaden, staerkere Ammo-Versorgung.',
+    active: { name: 'KAMPFRAUSCH', desc: '8s unendlich Ammo + 50% Feuerrate', cooldown: 2100, duration: 480 },
+    passive: 'Ammo-Drops +50% haeufiger, Ammo-Packs geben doppelt',
+    buffs: { weaponDamagePct: 0.15 },
+    debuffs: { healingEffectivenessPct: -0.30 },
+  },
+  medic: {
+    id: 'medic', name: 'MEDIC', icon: '\u2695', unlockLevel: 25, goldCost: 12000, diamondCost: 50,
+    desc: 'Sanitaeter mit Heilfaehigkeiten. Mehr HP, aber weniger Schaden.',
+    active: { name: 'HEILFELD', desc: 'Heilzone: 5 HP/s fuer 8s (Phase 2)', cooldown: 1800, duration: 480 },
+    passive: 'Healthpack-Drops +50% haeufiger',
+    buffs: { maxHp: 50, regenHpPerSec: 1 },
+    debuffs: { weaponDamagePct: -0.20 },
+  },
+  builder: {
+    id: 'builder', name: 'BUILDER', icon: '\u{1F9F1}', unlockLevel: 35, goldCost: 25000, diamondCost: 75,
+    desc: 'Baut Barrikaden. Mehr HP, aber langsamer beim Schiessen.',
+    active: { name: 'BLOCK SETZEN', desc: 'Setzt Wand-Block. Max 10. (Phase 2)', cooldown: 480, duration: 0 },
+    passive: 'Bloecke heilen sich nach 10s',
+    buffs: { maxHpPct: 0.20 },
+    debuffs: { fireRatePct: -0.15 },
+  },
+  electrician: {
+    id: 'electrician', name: 'ELEKTRIKER', icon: '\u26A1', unlockLevel: 50, goldCost: 50000, diamondCost: 100,
+    desc: 'Setzt automatische Geschuetztuerme. Mehr Reichweite, langsamer.',
+    active: { name: 'TURRET', desc: 'Setzt Turret (2 DPS). Max 2. (Phase 2)', cooldown: 1200, duration: 0 },
+    passive: 'Turrets reparieren sich (2 HP/s)',
+    buffs: { weaponRangePct: 0.25 },
+    debuffs: { moveSpeedPct: -0.20 },
+  },
+  time_traveler: {
+    id: 'time_traveler', name: 'TIME TRAVELER', icon: '\u231B', unlockLevel: 70, goldCost: 100000, diamondCost: 150,
+    desc: 'Manipuliert die Zeit. Schnell, aber fragil.',
+    active: { name: 'ZEITRISS', desc: '5s Slowmo + Speedup (Phase 2)', cooldown: 2700, duration: 300 },
+    passive: 'Jeder 10. Kill: 1s Mini-Slowmo',
+    buffs: { moveSpeedPct: 0.30 },
+    debuffs: { maxHpPct: -0.25 },
+  },
+  juggernaut: {
+    id: 'juggernaut', name: 'JUGGERNAUT', icon: '\u{1F6E1}', unlockLevel: 90, goldCost: 200000, diamondCost: 200,
+    desc: 'Unaufhaltsame Festung. Massiv, aber langsam.',
+    active: { name: 'UNAUFHALTSAM', desc: '10s +50% Schaden + Kontaktschaden', cooldown: 2400, duration: 600 },
+    passive: 'Minigun kein Reload',
+    buffs: { maxHp: 100, shieldHp: 30, damageReductionPct: 0.15 },
+    debuffs: { moveSpeedPct: -0.40, fireRatePct: -0.30 },
+  },
+};
+
+let ownedOperators = [];
+let activeOperatorId = null;
+let operatorAbilityCooldown = 0;
+let operatorAbilityActive = false;
+let operatorAbilityTimer = 0;
 
 let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
 let activeWeaponId = localStorage.getItem('dz_activeWeapon') || 'pistol';
@@ -1525,6 +1613,7 @@ let runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitter
 const DEFAULT_KEYBINDS = {
   moveUp: 'KeyW', moveDown: 'KeyS', moveLeft: 'KeyA', moveRight: 'KeyD',
   reload: 'KeyR', dash: 'Space', rescue: 'KeyF', pause: 'Escape', perk: 'KeyE',
+  operatorAbility: 'KeyQ',
 };
 let keybinds = JSON.parse(localStorage.getItem('dz_keybinds') || 'null') || { ...DEFAULT_KEYBINDS };
 let mouseSensitivity = parseFloat(localStorage.getItem('dz_sensitivity') || '1');
@@ -1602,9 +1691,14 @@ async function init() {
     killRushBoost: 0,
     dashCharges: [],
     dashInvulnerable: false,
+    soldierRush: false,
+    juggernautActive: false,
   };
   player.maxAmmo = getWeaponStat(activeWeaponId, 'mag');
   minigunSpinup = 0;
+  operatorAbilityCooldown = 0;
+  operatorAbilityActive = false;
+  operatorAbilityTimer = 0;
   const shieldWrap = document.getElementById('shield-bar-wrap');
   shieldWrap.style.display = player.maxShield > 0 ? 'block' : 'none';
   player.lastDamageTime = 0;
@@ -2089,6 +2183,11 @@ document.addEventListener('keydown', e => {
       break;
     }
   }
+  if (e.code === keybinds.operatorAbility && running && !paused && activeOperatorId) {
+    if (operatorAbilityCooldown <= 0 && !operatorAbilityActive) {
+      activateOperatorAbility();
+    }
+  }
   if (e.code === keybinds.dash) { tryDash(); e.preventDefault(); return; }
   if (e.code === keybinds.rescue && rescueState === 'idle' && running && !paused) {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
@@ -2112,6 +2211,10 @@ canvas.addEventListener('mouseup',   e => { if (e.button === 0) mouseDown = fals
 
 // ── RELOAD ───────────────────────────────────────────
 function startReload() {
+  // Soldier Rush — no reload during ability
+  if (player.soldierRush) return;
+  // Juggernaut passive — minigun no reload
+  if (activeOperatorId === 'juggernaut' && activeWeaponId === 'minigun') return;
   const maxAmmo = getWeaponStat(activeWeaponId, 'mag');
   if (reloading || player.ammo === maxAmmo) return;
   reloading = true;
@@ -2134,6 +2237,37 @@ function updateReload(now) {
     player.ammo = getWeaponStat(activeWeaponId, 'mag');
     document.getElementById('reload-bar-wrap').style.display = 'none';
     updateHUD();
+  }
+}
+
+// ── OPERATOR ABILITIES ──────────────────────────────
+function activateOperatorAbility() {
+  const op = OPERATORS[activeOperatorId];
+  if (!op) return;
+  operatorAbilityCooldown = op.active.cooldown;
+  operatorAbilityActive = true;
+  operatorAbilityTimer = op.active.duration;
+  playSound('perk_activate');
+  showWaveBanner(op.active.name + '!');
+
+  if (activeOperatorId === 'soldier') {
+    player.soldierRush = true;
+  }
+  if (activeOperatorId === 'juggernaut') {
+    player.juggernautActive = true;
+  }
+  // Builder, Electrician, TimeTraveler, Medic — Phase 2 (show banner only for now)
+}
+
+function updateOperatorAbility() {
+  if (operatorAbilityCooldown > 0) operatorAbilityCooldown--;
+  if (operatorAbilityActive) {
+    operatorAbilityTimer--;
+    if (operatorAbilityTimer <= 0) {
+      operatorAbilityActive = false;
+      player.soldierRush = false;
+      player.juggernautActive = false;
+    }
   }
 }
 
@@ -2187,6 +2321,9 @@ function tryShoot() {
   const magSize = getWeaponStat(activeWeaponId, 'mag');
   let spread = getWeaponStat(activeWeaponId, 'acc');
   let dmg = getWeaponStat(activeWeaponId, 'dmg');
+  // Apply operator weapon damage buff/debuff
+  const wpnDmgMult = 1 + getPlayerStat('weaponDamagePct');
+  dmg *= wpnDmgMult;
   // Berserker — more damage at low HP
   const berserkerMax = getPlayerStat('berserkerMaxBonus');
   if (berserkerMax > 0) {
@@ -2196,7 +2333,14 @@ function tryShoot() {
       dmg *= berserkerMult;
     }
   }
-  const range = Math.round(getWeaponStat(activeWeaponId, 'range'));
+  // Juggernaut active — +50% damage
+  if (player.juggernautActive) dmg *= 1.5;
+  // Operator range buff
+  const rangeMult = 1 + getPlayerStat('weaponRangePct');
+  const range = Math.round(getWeaponStat(activeWeaponId, 'range') * rangeMult);
+  // Operator fire rate buff/debuff
+  const fireRateMult = 1 + getPlayerStat('fireRatePct');
+  fireRate = Math.max(1, Math.round(fireRate * Math.max(0.3, fireRateMult)));
 
   // Akimbo — double fire rate, double spread
   const akimboActive = activePerkActive['pistol_akimbo'] && activeWeaponId === 'pistol';
@@ -2205,8 +2349,10 @@ function tryShoot() {
     spread *= 2;
   }
 
+  const isSoldierRush = player.soldierRush === true;
+
   if (reloading || player.shootCooldown > 0) return;
-  if (player.ammo <= 0) {
+  if (player.ammo <= 0 && !isSoldierRush) {
     playSoundThrottled('empty_mag', 200);
     return;
   }
@@ -2227,12 +2373,17 @@ function tryShoot() {
     player.shootCooldown = fireRate;
   }
 
+  // Soldier Rush — halve fire rate cooldown
+  if (isSoldierRush) {
+    player.shootCooldown = Math.max(1, Math.round(player.shootCooldown * 0.5));
+  }
+
   // Last Stand — +50% fire rate during rescue extraction
   if (typeof rescueState !== 'undefined' && rescueState === 'extracting' && hasSkill('last_stand')) {
     player.shootCooldown = Math.max(1, Math.round(player.shootCooldown * 0.5));
   }
 
-  player.ammo--;
+  if (!isSoldierRush) player.ammo--;
   player.recoil = 4;
   playSoundThrottled('shoot_' + activeWeaponId, 50);
   updateHUD();
@@ -2825,6 +2976,11 @@ function updateZombies() {
         damagePlayer(8, 'melee');
       }
       z.hitting = true;
+      // Juggernaut active — contact damage to zombie
+      if (player.juggernautActive) {
+        z.hp -= 5 / 60; // 5 DPS, per frame
+        if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = 30; onZombieKill(z); }
+      }
     } else {
       z.hitting = false;
     }
@@ -3224,7 +3380,9 @@ function tryTimerHealthpack() {
 }
 
 function tryDropHealthpack(x, y) {
-  if (Math.random() < 0.15 && healthpacks.length < PICKUP_MAX) {
+  let healthDropChance = 0.15;
+  if (activeOperatorId === 'medic') healthDropChance *= 1.5;
+  if (Math.random() < healthDropChance && healthpacks.length < PICKUP_MAX) {
     healthpacks.push({ x, y, life: PICKUP_LIFETIME });
   }
 }
@@ -3237,7 +3395,8 @@ function updateHealthpacks() {
 
     const dx = h.x - player.x, dy = h.y - player.y;
     if (dx*dx + dy*dy < (PLAYER_R + 10)**2) {
-      const healAmount = Math.round(HEALTHPACK_HEAL * (1 + getPlayerStat('healthpackHealPct')));
+      const healMult = 1 + getPlayerStat('healingEffectivenessPct');
+      const healAmount = Math.round(HEALTHPACK_HEAL * (1 + getPlayerStat('healthpackHealPct')) * Math.max(0.1, healMult));
       runStats.healed += healAmount;
       player.hp = Math.min(player.hp + healAmount, getPlayerStat('maxHp'));
       healthpacks.splice(i, 1);
@@ -3299,7 +3458,9 @@ function tryTimerAmmopack() {
 }
 
 function tryDropAmmopack(x, y) {
-  if (Math.random() < 0.1 && ammopacks.length < PICKUP_MAX) {
+  let ammoDropChance = 0.1;
+  if (activeOperatorId === 'soldier') ammoDropChance *= 1.5;
+  if (Math.random() < ammoDropChance && ammopacks.length < PICKUP_MAX) {
     ammopacks.push({ x, y, life: PICKUP_LIFETIME });
   }
 }
@@ -4239,6 +4400,9 @@ async function gameOver() {
   ownedPerks = [];
   activePerkCooldowns = {};
   activePerkActive = {};
+  operatorAbilityCooldown = 0;
+  operatorAbilityActive = false;
+  operatorAbilityTimer = 0;
 
   const totalEarned = score;
   lastRunText = 'GESTORBEN: Wave ' + wave + '  |  +' + totalEarned + ' XP  |  75% VERLOREN';
@@ -4381,6 +4545,7 @@ function loop(now) {
   }
 
   updateDash();
+  updateOperatorAbility();
   updateRescue(performance.now());
   // Semi/Single weapons: only fire on initial click, not hold
   const wpnType = WEAPONS[activeWeaponId] ? WEAPONS[activeWeaponId].type : 'Auto';
@@ -4522,8 +4687,35 @@ function loop(now) {
   }
 
   drawRescueHUD();
+  drawOperatorHUD();
 
   requestAnimationFrame(loop);
+}
+
+function drawOperatorHUD() {
+  if (!activeOperatorId || !OPERATORS[activeOperatorId]) return;
+  const op = OPERATORS[activeOperatorId];
+  const lx = 16, ly = H/2 + 50;
+
+  ctx.save();
+  // Operator name
+  ctx.font = "11px 'JetBrains Mono', monospace";
+  ctx.fillStyle = '#556070';
+  ctx.textAlign = 'left';
+  ctx.fillText(op.icon + ' ' + op.name, lx, ly);
+
+  // Ability status
+  if (operatorAbilityActive) {
+    ctx.fillStyle = '#33cc44';
+    ctx.fillText('[Q] ' + op.active.name + ' AKTIV ' + Math.ceil(operatorAbilityTimer/60) + 's', lx, ly + 16);
+  } else if (operatorAbilityCooldown > 0) {
+    ctx.fillStyle = '#555';
+    ctx.fillText('[Q] ' + op.active.name + ' ' + Math.ceil(operatorAbilityCooldown/60) + 's', lx, ly + 16);
+  } else {
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText('[Q] ' + op.active.name + ' BEREIT', lx, ly + 16);
+  }
+  ctx.restore();
 }
 
 // ── SKILL TREE UI ──────────────────────────────────────
@@ -5594,6 +5786,9 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
   ownedPerks = [];
   activePerkCooldowns = {};
   activePerkActive = {};
+  operatorAbilityCooldown = 0;
+  operatorAbilityActive = false;
+  operatorAbilityTimer = 0;
 
   lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
   showGameMenu();
@@ -5608,6 +5803,7 @@ function renderKeybinds() {
   const labels = {
     moveUp: 'NACH OBEN', moveDown: 'NACH UNTEN', moveLeft: 'NACH LINKS', moveRight: 'NACH RECHTS',
     reload: 'NACHLADEN', dash: 'DASH', rescue: 'RESCUE', pause: 'PAUSE', perk: 'PERK AKTIVIEREN',
+    operatorAbility: 'OPERATOR FAEHIGKEIT',
   };
   Object.entries(keybinds).forEach(([action, key]) => {
     const row = document.createElement('div');
