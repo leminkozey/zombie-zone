@@ -538,6 +538,18 @@
             <span id="sensitivity-val" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#c0ccd8;min-width:40px">1.0</span>
           </div>
         </div>
+        <div style="margin-bottom:30px">
+          <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">LAUTSTAERKE</div>
+          <div style="display:flex;align-items:center;gap:16px">
+            <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.5" style="flex:1;accent-color:#ee2200">
+            <span id="volume-val" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#c0ccd8;min-width:40px">50%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <label style="font-size:11px;color:#556070;cursor:pointer;display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="sound-toggle" checked style="accent-color:#ee2200"> Sound aktiviert
+            </label>
+          </div>
+        </div>
         <div>
           <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">TASTENBELEGUNG</div>
           <div id="keybind-list"></div>
@@ -574,6 +586,7 @@ let currentUser = localStorage.getItem('dz_user');
 let authMode = 'login';
 
 function switchAuthTab(mode) {
+  playSound('ui_click');
   authMode = mode;
   document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
   document.querySelector(`.auth-tab:${mode === 'login' ? 'first' : 'last'}-child`).classList.add('active');
@@ -582,6 +595,7 @@ function switchAuthTab(mode) {
 }
 
 async function doAuth() {
+  ensureAudio();
   const name = document.getElementById('auth-name').value.trim();
   const password = document.getElementById('auth-pass').value;
   const errEl = document.getElementById('auth-error');
@@ -722,6 +736,312 @@ function resizeCanvas() {
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
+
+// ── SOUND SYSTEM ──────────────────────────────────────
+let audioCtx = null;
+let soundEnabled = true;
+let masterVolume = 0.5;
+
+// Load saved values
+masterVolume = parseFloat(localStorage.getItem('dz_volume') || '0.5');
+soundEnabled = localStorage.getItem('dz_sound') !== 'false';
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function ensureAudio() {
+  if (!audioCtx) initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+let lastSoundTime = {};
+function playSoundThrottled(type, minInterval, options) {
+  const now = performance.now();
+  if (lastSoundTime[type] && now - lastSoundTime[type] < minInterval) return;
+  lastSoundTime[type] = now;
+  playSound(type, options);
+}
+
+function playSound(type, options = {}) {
+  if (!audioCtx || !soundEnabled) return;
+  const vol = (options.volume || 1) * masterVolume;
+
+  switch (type) {
+    case 'shoot_pistol': sfxShoot(800, 0.06, vol * 0.3, 0.8); break;
+    case 'shoot_smg': sfxShoot(1200, 0.04, vol * 0.2, 0.5); break;
+    case 'shoot_shotgun': sfxShoot(300, 0.12, vol * 0.5, 1.2); break;
+    case 'shoot_assault_rifle': sfxShoot(900, 0.05, vol * 0.25, 0.7); break;
+    case 'shoot_sniper': sfxShoot(200, 0.15, vol * 0.6, 1.5); break;
+    case 'shoot_minigun': sfxShoot(1500, 0.03, vol * 0.15, 0.3); break;
+    case 'reload': sfxReload(vol * 0.4); break;
+    case 'hit': sfxHit(vol * 0.3); break;
+    case 'kill': sfxKill(vol * 0.25); break;
+    case 'zombie_hit': sfxZombieHit(vol * 0.2); break;
+    case 'player_hurt': sfxPlayerHurt(vol * 0.4); break;
+    case 'dash': sfxDash(vol * 0.3); break;
+    case 'pickup_health': sfxPickup(600, vol * 0.3); break;
+    case 'pickup_ammo': sfxPickup(800, vol * 0.3); break;
+    case 'pickup_gold': sfxPickup(1200, vol * 0.15); break;
+    case 'levelup': sfxLevelUp(vol * 0.4); break;
+    case 'wave_start': sfxWaveStart(vol * 0.3); break;
+    case 'empty_mag': sfxClick(2000, vol * 0.2); break;
+    case 'ui_click': sfxClick(1000, vol * 0.15); break;
+    case 'rescue_start': sfxRescueStart(vol * 0.3); break;
+    case 'rescue_success': sfxRescueSuccess(vol * 0.5); break;
+    case 'death': sfxDeath(vol * 0.5); break;
+    case 'perk_activate': sfxPerkActivate(vol * 0.4); break;
+    case 'explosion': sfxExplosion(vol * 0.5); break;
+  }
+}
+
+// ── SOUND GENERATORS ──────────────────────────────────
+
+function sfxShoot(freq, duration, vol, decay) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const noise = createNoise(duration + 0.05);
+  const noiseGain = audioCtx.createGain();
+
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.3, audioCtx.currentTime + duration);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration * decay);
+
+  noiseGain.gain.setValueAtTime(vol * 0.6, audioCtx.currentTime);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+  osc.connect(gain).connect(audioCtx.destination);
+  noise.connect(noiseGain).connect(audioCtx.destination);
+
+  osc.start(); osc.stop(audioCtx.currentTime + duration);
+  noise.start(); noise.stop(audioCtx.currentTime + duration + 0.05);
+}
+
+function sfxReload(vol) {
+  sfxClick(3000, vol);
+  setTimeout(() => sfxClick(2000, vol * 0.8), 150);
+  setTimeout(() => {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(vol * 0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+  }, 300);
+}
+
+function sfxHit(vol) {
+  const noise = createNoise(0.05);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+  noise.connect(gain).connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 0.05);
+}
+
+function sfxKill(vol) {
+  const noise = createNoise(0.1);
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 800;
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+  noise.connect(filter).connect(gain).connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 0.1);
+}
+
+function sfxZombieHit(vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150 + Math.random() * 100, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.08);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+}
+
+function sfxPlayerHurt(vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+}
+
+function sfxDash(vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.15);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+}
+
+function sfxPickup(freq, vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  osc.frequency.linearRampToValueAtTime(freq * 1.5, audioCtx.currentTime + 0.1);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+}
+
+function sfxLevelUp(vol) {
+  [0, 100, 200].forEach((delay, i) => {
+    setTimeout(() => {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 400 + i * 200;
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+    }, delay);
+  });
+}
+
+function sfxWaveStart(vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(80, audioCtx.currentTime);
+  osc.frequency.linearRampToValueAtTime(120, audioCtx.currentTime + 0.5);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(vol * 0.8, audioCtx.currentTime + 0.3);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.8);
+}
+
+function sfxClick(freq, vol) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.03);
+}
+
+function sfxRescueStart(vol) {
+  const noise = createNoise(0.3);
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol * 0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+  noise.connect(gain).connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 0.3);
+  setTimeout(() => sfxClick(1500, vol), 200);
+  setTimeout(() => sfxClick(1500, vol), 350);
+}
+
+function sfxRescueSuccess(vol) {
+  [0, 120, 240, 360].forEach((delay, i) => {
+    setTimeout(() => {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = [523, 659, 784, 1047][i];
+      gain.gain.setValueAtTime(vol * 0.5, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+    }, delay);
+  });
+}
+
+function sfxDeath(vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 1);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 1);
+}
+
+function sfxPerkActivate(vol) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.2);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+}
+
+function sfxExplosion(vol) {
+  const noise = createNoise(0.4);
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(2000, audioCtx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+  noise.connect(filter).connect(gain).connect(audioCtx.destination);
+  noise.start(); noise.stop(audioCtx.currentTime + 0.4);
+}
+
+function createNoise(duration) {
+  const bufferSize = audioCtx.sampleRate * duration;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  return source;
+}
+
+// Background ambient drone
+let ambientDrone = null;
+function startAmbient() {
+  if (!audioCtx || ambientDrone) return;
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  osc1.type = 'sine'; osc1.frequency.value = 55;
+  osc2.type = 'sine'; osc2.frequency.value = 57;
+  filter.type = 'lowpass'; filter.frequency.value = 200;
+  gain.gain.value = masterVolume * 0.04;
+  osc1.connect(filter); osc2.connect(filter);
+  filter.connect(gain).connect(audioCtx.destination);
+  osc1.start(); osc2.start();
+  ambientDrone = { osc1, osc2, gain };
+}
+function stopAmbient() {
+  if (!ambientDrone) return;
+  ambientDrone.osc1.stop(); ambientDrone.osc2.stop();
+  ambientDrone = null;
+}
 
 // ── CONFIG ──────────────────────────────────────────
 let TILE = 40;
@@ -1350,6 +1670,7 @@ async function init() {
 }
 
 function startNextWave() {
+  playSound('wave_start');
   wave++;
   runStats.maxWave = wave;
   waveKills = 0;
@@ -1481,6 +1802,7 @@ function updateRescue(now) {
       if (now - rescueHoldStart >= 3000) {
         rescueState = 'survival_phase';
         rescueSurvivalTimer = getPlayerStat('rescueSurvivalTime') * 60;
+        playSound('rescue_start');
         showWaveBanner('RESCUE ANGEFORDERT');
       }
       break;
@@ -1552,6 +1874,8 @@ function updateRescue(now) {
 
 async function rescueSuccess() {
   running = false;
+  playSound('rescue_success');
+  stopAmbient();
 
   if (authToken) {
     try {
@@ -1732,6 +2056,7 @@ document.addEventListener('keydown', e => {
       if (activePerkCooldowns[perkId] > 0) continue;
       activePerkCooldowns[perkId] = perk.cooldown;
       activePerkActive[perkId] = true;
+      playSound('perk_activate');
       showWaveBanner(perk.name + ' AKTIVIERT!');
       if (perkId === 'minigun_overdrive') {
         setTimeout(() => { activePerkActive['minigun_overdrive'] = false; }, 5000);
@@ -1796,6 +2121,7 @@ function startReload() {
   if (reloading || player.ammo === maxAmmo) return;
   reloading = true;
   reloadStart = performance.now();
+  playSound('reload');
   document.getElementById('reload-bar-wrap').style.display = 'block';
 }
 
@@ -1835,6 +2161,7 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
   }
   // Explosive — sniper passive: AoE on hit
   if (ownedPerks.includes('sniper_explosive') && weaponId === 'sniper' && z.alive) {
+    playSound('explosion');
     const aoeR = 40;
     for (const oz of zombies) {
       if (oz === z || !oz.alive) continue;
@@ -1879,7 +2206,11 @@ function tryShoot() {
     spread *= 2;
   }
 
-  if (reloading || player.ammo <= 0 || player.shootCooldown > 0) return;
+  if (reloading || player.shootCooldown > 0) return;
+  if (player.ammo <= 0) {
+    playSoundThrottled('empty_mag', 200);
+    return;
+  }
 
   if (wpn.special === 'spinup') {
     // Overdrive — skip spinup
@@ -1904,6 +2235,7 @@ function tryShoot() {
 
   player.ammo--;
   player.recoil = 4;
+  playSoundThrottled('shoot_' + activeWeaponId, 50);
   updateHUD();
 
   const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
@@ -1974,6 +2306,8 @@ function tryShoot() {
         z.alive = false;
         z.deathTimer = 30;
         onZombieKill(z);
+      } else if (z.alive) {
+        playSoundThrottled('hit', 30);
       }
     }
     if (hitZombies.length > 0 && !isPierce) {
@@ -2084,6 +2418,7 @@ function updateXpBar() {
 }
 
 function showLevelUp() {
+  playSound('levelup');
   const el = document.getElementById('level-up-banner');
   el.style.opacity = 1;
   setTimeout(() => { el.style.opacity = 0; }, 2500);
@@ -2238,6 +2573,7 @@ function damagePlayer(rawDamage, source) {
 
   hurtFlash = 18;
   spawnBlood(player.x, player.y, 4);
+  playSound('player_hurt');
 
   if (player.hp <= 0 && hasSkill('second_wind') && !player.secondWindUsed) {
     player.secondWindUsed = true;
@@ -2510,6 +2846,7 @@ function updateZombies() {
 
 // ── BULLET UPDATE ────────────────────────────────────
 function onZombieKill(z) {
+  playSound('kill');
   runStats.kills++;
   runStats[z.type + 'Kills']++;
   tryDropHealthpack(z.x, z.y);
@@ -2557,6 +2894,7 @@ function onZombieKill(z) {
   if (isGoldHaufen) { goldText += ' x3!'; goldColor = '#ffdd44'; }
   else if (goldMultiplier > 1) { goldText += ' x' + goldMultiplier.toFixed(1); goldColor = '#eecc22'; }
   floatingTexts.push({ x: z.x, y: z.y - 10, text: goldText, life: 45, maxLife: 45, color: goldColor });
+  playSoundThrottled('pickup_gold', 100);
 
   updateXpBar();
   waveKills++;
@@ -2589,6 +2927,7 @@ function updateBullets() {
       }
       if (b.life <= 1 || wallCollide(b.x, b.y, 4)) explode = true;
       if (explode) {
+        playSound('explosion');
         // AoE damage in 60px radius
         const aoeR = 60;
         for (const z of zombies) {
@@ -2628,6 +2967,8 @@ function updateBullets() {
           z.alive = false;
           z.deathTimer = 30;
           onZombieKill(z);
+        } else if (z.alive) {
+          playSoundThrottled('hit', 30);
         }
         if (!b.pierce) break;
       }
@@ -2901,6 +3242,7 @@ function updateHealthpacks() {
       runStats.healed += healAmount;
       player.hp = Math.min(player.hp + healAmount, getPlayerStat('maxHp'));
       healthpacks.splice(i, 1);
+      playSound('pickup_health');
       updateHUD();
       for (let j = 0; j < 8; j++) {
         const a = Math.random() * Math.PI * 2;
@@ -2977,6 +3319,7 @@ function updateAmmopacks() {
         document.getElementById('reload-bar-wrap').style.display = 'none';
       }
       ammopacks.splice(i, 1);
+      playSound('pickup_ammo');
       updateHUD();
       for (let j = 0; j < 8; j++) {
         const ang = Math.random() * Math.PI * 2;
@@ -3833,6 +4176,8 @@ function syncGold() {
 // ── GAME OVER ────────────────────────────────────────
 async function gameOver() {
   running = false;
+  playSound('death');
+  stopAmbient();
 
   if (authToken) {
     try {
@@ -3908,6 +4253,7 @@ function tryDash() {
   charge.cooldownStart = performance.now();
   dashActive = true;
   dashProgress = 0;
+  playSound('dash');
   dashStartX = player.x;
   dashStartY = player.y;
 
@@ -5158,7 +5504,7 @@ function switchMenuTab(tabName) {
 }
 
 document.querySelectorAll('.menu-tab').forEach(tab => {
-  tab.addEventListener('click', () => switchMenuTab(tab.dataset.tab));
+  tab.addEventListener('click', () => { playSound('ui_click'); switchMenuTab(tab.dataset.tab); });
 });
 
 document.getElementById('st-back').addEventListener('click', () => {
@@ -5166,22 +5512,26 @@ document.getElementById('st-back').addEventListener('click', () => {
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
+  ensureAudio();
   document.getElementById('hud-username').textContent = currentUser ? currentUser.toUpperCase() : '';
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   lastRunText = '';
   paused = false;
   init();
+  startAmbient();
   requestAnimationFrame(loop);
 });
 
 document.getElementById('resume-btn').addEventListener('click', () => {
+  playSound('ui_click');
   togglePause();
 });
 
 document.getElementById('quit-btn').addEventListener('click', async () => {
   paused = false;
   running = false;
+  stopAmbient();
   document.getElementById('pause-screen').style.display = 'none';
 
   if (authToken) {
@@ -5356,6 +5706,7 @@ async function loadStats() {
 // Settings tab switching
 document.querySelectorAll('.settings-tab').forEach(tab => {
   tab.addEventListener('click', () => {
+    playSound('ui_click');
     document.querySelectorAll('.settings-tab').forEach(t => { t.style.color = '#404855'; t.style.borderBottomColor = 'transparent'; });
     document.querySelectorAll('.settings-panel').forEach(p => p.style.display = 'none');
     tab.style.color = '#ee2200';
@@ -5371,12 +5722,29 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
 function showSettings() {
   document.getElementById('settings-screen').style.display = 'flex';
   renderKeybinds();
+  // Sync volume controls
+  document.getElementById('volume-slider').value = masterVolume;
+  document.getElementById('volume-val').textContent = Math.round(masterVolume * 100) + '%';
+  document.getElementById('sound-toggle').checked = soundEnabled;
 }
 
 document.getElementById('settings-btn-pause').addEventListener('click', showSettings);
 document.getElementById('settings-btn-lobby').addEventListener('click', showSettings);
 document.getElementById('settings-back').addEventListener('click', () => {
   document.getElementById('settings-screen').style.display = 'none';
+});
+
+// Volume controls
+document.getElementById('volume-slider').addEventListener('input', (e) => {
+  masterVolume = parseFloat(e.target.value);
+  document.getElementById('volume-val').textContent = Math.round(masterVolume * 100) + '%';
+  localStorage.setItem('dz_volume', masterVolume);
+  if (ambientDrone) ambientDrone.gain.gain.value = masterVolume * 0.04;
+});
+document.getElementById('sound-toggle').addEventListener('change', (e) => {
+  soundEnabled = e.target.checked;
+  localStorage.setItem('dz_sound', soundEnabled);
+  if (!soundEnabled) stopAmbient();
 });
 </script>
 </body>
