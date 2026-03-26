@@ -1816,42 +1816,24 @@ function updateZombies() {
       }
       const finalSpeed = spd * aggroMult * bulletTimeMult;
 
-      // Direct direction to player
       const dirX = dx / dist;
       const dirY = dy / dist;
 
-      // Check if direct path is clear (no wall between zombie and player within 3 tiles)
-      const lookAhead = Math.min(dist, TILE * 3);
-      const checkX = z.x + dirX * lookAhead;
-      const checkY = z.y + dirY * lookAhead;
-      const directPathClear = !wallCollide(z.x + dirX * TILE, z.y + dirY * TILE, z.radius);
-
       let moveX, moveY;
 
-      if (dist < TILE * 1.2 && directPathClear) {
-        // Very close and clear — direct chase
+      // ALWAYS follow flowfield — only go direct when touching-distance
+      if (dist < TILE * 0.8) {
+        // Melee range — direct
         moveX = dirX * finalSpeed;
         moveY = dirY * finalSpeed;
-      } else if (flowfield && !directPathClear) {
-        // Path blocked — use PURE flowfield, no blending
+      } else if (flowfield) {
+        // Follow flowfield ONLY
         const smooth = getSmoothedFlowDir(z.x, z.y);
-        if (smooth) {
+        if (smooth && (smooth.dx !== 0 || smooth.dy !== 0)) {
           moveX = smooth.dx * finalSpeed;
           moveY = smooth.dy * finalSpeed;
         } else {
-          moveX = dirX * finalSpeed;
-          moveY = dirY * finalSpeed;
-        }
-      } else if (flowfield) {
-        // Path clear but far — blend flowfield with direct (80/20)
-        const smooth = getSmoothedFlowDir(z.x, z.y);
-        if (smooth) {
-          const bx = smooth.dx * 0.3 + dirX * 0.7;
-          const by = smooth.dy * 0.3 + dirY * 0.7;
-          const bl = Math.sqrt(bx*bx + by*by);
-          moveX = (bx/bl) * finalSpeed;
-          moveY = (by/bl) * finalSpeed;
-        } else {
+          // Flowfield has no data here — fallback direct
           moveX = dirX * finalSpeed;
           moveY = dirY * finalSpeed;
         }
@@ -1860,17 +1842,14 @@ function updateZombies() {
         moveY = dirY * finalSpeed;
       }
 
-      // Movement with wall sliding
+      // Apply movement with wall collision
       const mr = z.radius - 2;
-      const canFull = !wallCollide(z.x + moveX, z.y + moveY, mr);
-      if (canFull) {
+      if (!wallCollide(z.x + moveX, z.y + moveY, mr)) {
         z.x += moveX;
         z.y += moveY;
       } else {
-        // Try each axis separately (wall sliding)
+        // Wall sliding — try each axis
         if (!wallCollide(z.x + moveX, z.y, mr)) z.x += moveX;
-        else if (!wallCollide(z.x + moveX * 0.5, z.y, mr)) z.x += moveX * 0.5;
-
         if (!wallCollide(z.x, z.y + moveY, mr)) z.y += moveY;
         else if (!wallCollide(z.x, z.y + moveY * 0.5, mr)) z.y += moveY * 0.5;
       }
@@ -3008,7 +2987,7 @@ function loop(now) {
   movePlayer();
 
   // Update flowfield every 15 frames
-  if (frameCount - lastFlowfieldUpdate > 5) {
+  if (frameCount - lastFlowfieldUpdate > 3) {
     computeFlowfield();
     lastFlowfieldUpdate = frameCount;
   }
