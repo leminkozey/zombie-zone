@@ -782,6 +782,76 @@ function computeFlowfield() {
 
 let lastFlowfieldUpdate = 0;
 
+// ── SMOOTHED FLOWFIELD DIRECTION ─────────────────────
+// Interpolates between neighboring tile distances for sub-tile precision
+function getSmoothedFlowDir(px, py) {
+  if (!flowfield) return null;
+  // Fractional tile position
+  const fx = px / TILE - 0.5;
+  const fy = py / TILE - 0.5;
+  const ix = Math.floor(fx);
+  const iy = Math.floor(fy);
+  const wx = fx - ix; // weight x (0..1)
+  const wy = fy - iy; // weight y (0..1)
+
+  // Sample distances at 4 corners of the cell
+  function getDist(c, r) {
+    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return Infinity;
+    if (MAP[r][c] === 1) return Infinity;
+    return flowfield[r][c].dist;
+  }
+
+  const d00 = getDist(ix, iy);
+  const d10 = getDist(ix + 1, iy);
+  const d01 = getDist(ix, iy + 1);
+  const d11 = getDist(ix + 1, iy + 1);
+
+  // If all corners are unreachable, fall back to raw flowfield
+  if (d00 === Infinity && d10 === Infinity && d01 === Infinity && d11 === Infinity) {
+    const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+    if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS && flowfield[ty][tx].dist < Infinity) {
+      const ff = flowfield[ty][tx];
+      return { dx: ff.dx, dy: ff.dy };
+    }
+    return null;
+  }
+
+  // Replace Infinity with a large finite value for interpolation
+  const maxD = 9999;
+  const s00 = d00 === Infinity ? maxD : d00;
+  const s10 = d10 === Infinity ? maxD : d10;
+  const s01 = d01 === Infinity ? maxD : d01;
+  const s11 = d11 === Infinity ? maxD : d11;
+
+  // Bilinear interpolation of distance
+  // Gradient points from high distance to low distance (toward player)
+  // dDist/dx via finite difference
+  const ddx = -((s10 - s00) * (1 - wy) + (s11 - s01) * wy);
+  const ddy = -((s01 - s00) * (1 - wx) + (s11 - s10) * wx);
+
+  const len = Math.sqrt(ddx * ddx + ddy * ddy);
+  if (len < 0.001) return null;
+  return { dx: ddx / len, dy: ddy / len };
+}
+
+// Find nearest walkable tile center for stuck recovery
+function nearestFreeTileCenter(px, py) {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  let bestDist = Infinity, bestX = px, bestY = py;
+  const searchR = 4;
+  for (let r = ty - searchR; r <= ty + searchR; r++) {
+    for (let c = tx - searchR; c <= tx + searchR; c++) {
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+      if (MAP[r][c] === 1) continue;
+      const cx = c * TILE + TILE / 2, cy = r * TILE + TILE / 2;
+      const ddx = px - cx, ddy = py - cy;
+      const d = ddx * ddx + ddy * ddy;
+      if (d < bestDist) { bestDist = d; bestX = cx; bestY = cy; }
+    }
+  }
+  return { x: bestX, y: bestY };
+}
+
 // ── STATE ───────────────────────────────────────────
 let player, bullets, zombies, particles, bloodDecals;
 let spitterProjectiles;
@@ -938,6 +1008,8 @@ function spawnZombie() {
 
   zombies.push({
     x: edge.x, y: edge.y,
+    prevX: edge.x, prevY: edge.y,
+    stuckFrames: 0,
     type,
     hp, maxHp: hp,
     speed: Math.min(baseSpd * cfg.speedMult, 3.5),
@@ -1431,37 +1503,128 @@ function updateZombies() {
   for (const z of zombies) {
     if (!z.alive) continue;
 
-    // Gentle push out of walls
-    if (wallCollide(z.x, z.y, z.radius)) {
-      const pushDirs = [[1,0],[-1,0],[0,1],[0,-1]];
-      for (const [pdx, pdy] of pushDirs) {
-        const testX = z.x + pdx * 2;
-        const testY = z.y + pdy * 2;
-        if (!wallCollide(testX, testY, z.radius)) {
-          z.x = testX;
-          z.y = testY;
-          break;
+    // Movement collision radius — smaller than visual to prevent corner-catching
+    const moveR = z.radius * 0.6;
+
+    // ── Aggressive push out of walls ──
+    if (wallCollide(z.x, z.y, moveR)) {
+      // Try cardinal pushes with increasing force
+      const pushDirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+      let escaped = false;
+      for (let force = 2; force <= 20 && !escaped; force += 2) {
+        for (const [pdx, pdy] of pushDirs) {
+          const testX = z.x + pdx * force;
+          const testY = z.y + pdy * force;
+          if (!wallCollide(testX, testY, moveR)) {
+            z.x = testX;
+            z.y = testY;
+            escaped = true;
+            break;
+          }
         }
+      }
+      // Still stuck — teleport to nearest free tile center
+      if (!escaped) {
+        const free = nearestFreeTileCenter(z.x, z.y);
+        z.x = free.x;
+        z.y = free.y;
       }
     }
 
     z.frame++;
     z.wobble += 0.08;
 
+    // Track previous position for stuck detection
+    if (z.frame % 3 === 0) {
+      const movedDx = z.x - z.prevX;
+      const movedDy = z.y - z.prevY;
+      const movedDist = movedDx * movedDx + movedDy * movedDy;
+      if (movedDist < 1) {
+        z.stuckFrames += 3;
+      } else {
+        z.stuckFrames = 0;
+      }
+      z.prevX = z.x;
+      z.prevY = z.y;
+    }
+
     const dx = player.x - z.x;
     const dy = player.y - z.y;
     const dist = Math.sqrt(dx*dx + dy*dy);
     z.angle = Math.atan2(dy, dx);
+
+    // ── Stuck recovery ──
+    if (z.stuckFrames >= 30) {
+      // Find nearest free tile center on the flowfield path and move toward it
+      const free = nearestFreeTileCenter(z.x, z.y);
+      const toDx = free.x - z.x, toDy = free.y - z.y;
+      const toLen = Math.sqrt(toDx * toDx + toDy * toDy);
+      if (toLen > 2) {
+        // Move aggressively toward free space, ignoring wall collision briefly
+        z.x += (toDx / toLen) * z.speed * 1.5;
+        z.y += (toDy / toLen) * z.speed * 1.5;
+      } else {
+        // We're at the free tile center — teleport if still stuck
+        z.x = free.x;
+        z.y = free.y;
+      }
+      z.stuckFrames = 0;
+      continue; // skip normal movement this frame
+    }
+
+    // Helper to apply movement with wall sliding
+    function applyMove(entity, mx, my, collR) {
+      // Try full diagonal move
+      if (!wallCollide(entity.x + mx, entity.y + my, collR)) {
+        entity.x += mx;
+        entity.y += my;
+        return true;
+      }
+      // Try each axis independently (wall sliding)
+      let moved = false;
+      if (!wallCollide(entity.x + mx, entity.y, collR)) {
+        entity.x += mx;
+        moved = true;
+      }
+      if (!wallCollide(entity.x, entity.y + my, collR)) {
+        entity.y += my;
+        moved = true;
+      }
+      if (moved) return true;
+      // Both axes blocked — try half-steps for corner scraping
+      const halfMx = mx * 0.5, halfMy = my * 0.5;
+      if (!wallCollide(entity.x + halfMx, entity.y, collR)) {
+        entity.x += halfMx;
+        return true;
+      }
+      if (!wallCollide(entity.x, entity.y + halfMy, collR)) {
+        entity.y += halfMy;
+        return true;
+      }
+      // Completely blocked — try perpendicular nudge to escape corner
+      const len = Math.sqrt(mx * mx + my * my);
+      if (len > 0.01) {
+        const perpX = -my / len * 2, perpY = mx / len * 2;
+        if (!wallCollide(entity.x + perpX, entity.y + perpY, collR)) {
+          entity.x += perpX;
+          entity.y += perpY;
+          return true;
+        }
+        if (!wallCollide(entity.x - perpX, entity.y - perpY, collR)) {
+          entity.x -= perpX;
+          entity.y -= perpY;
+          return true;
+        }
+      }
+      return false;
+    }
 
     if (dashAfterimage && z.type !== 'spitter') {
       const adx = dashAfterimage.x - z.x, ady = dashAfterimage.y - z.y;
       const adist = Math.sqrt(adx*adx + ady*ady);
       if (adist < 150) {
         const spd = z.speed;
-        const mx = (adx/adist) * spd;
-        const my = (ady/adist) * spd;
-        if (!wallCollide(z.x + mx, z.y, z.radius - 2)) z.x += mx;
-        if (!wallCollide(z.x, z.y + my, z.radius - 2)) z.y += my;
+        applyMove(z, (adx/adist) * spd, (ady/adist) * spd, moveR);
         z.angle = Math.atan2(ady, adx);
         continue;
       }
@@ -1472,10 +1635,7 @@ function updateZombies() {
       if (dist < 150) {
         // flee from player
         const spd = z.speed;
-        const fleeX = z.x - (dx/dist) * spd;
-        const fleeY = z.y - (dy/dist) * spd;
-        if (!wallCollide(fleeX, z.y, z.radius - 2)) z.x = fleeX;
-        if (!wallCollide(z.x, fleeY, z.radius - 2)) z.y = fleeY;
+        applyMove(z, -(dx/dist) * spd, -(dy/dist) * spd, moveR);
       }
       // if dist 150-200, do nothing (hold position)
       // if dist > 200, fall through to normal movement below
@@ -1494,42 +1654,43 @@ function updateZombies() {
 
       const finalSpeed = spd * aggroMult * bulletTimeMult;
 
-      // Flowfield pathfinding — zombies always follow the field, direct only when very close
+      // Flowfield pathfinding with sub-tile smoothing
       let moveX, moveY;
-      const ztx = Math.floor(z.x / TILE);
-      const zty = Math.floor(z.y / TILE);
-      const hasFF = flowfield && ztx >= 0 && ztx < COLS && zty >= 0 && zty < ROWS && flowfield[zty][ztx].dist < Infinity;
 
       if (dist < TILE * 1.5) {
         // Very close — direct chase
         moveX = (dx/dist) * finalSpeed;
         moveY = (dy/dist) * finalSpeed;
-      } else if (hasFF) {
-        // Follow flowfield direction (includes diagonals)
-        const ff = flowfield[zty][ztx];
-        const ffLen = Math.sqrt(ff.dx*ff.dx + ff.dy*ff.dy);
-        if (ffLen > 0) {
-          moveX = (ff.dx/ffLen) * finalSpeed;
-          moveY = (ff.dy/ffLen) * finalSpeed;
-        } else {
-          moveX = (dx/dist) * finalSpeed;
-          moveY = (dy/dist) * finalSpeed;
-        }
       } else {
-        moveX = (dx/dist) * finalSpeed;
-        moveY = (dy/dist) * finalSpeed;
+        // Use smoothed flowfield direction for sub-tile precision
+        const smoothDir = getSmoothedFlowDir(z.x, z.y);
+        if (smoothDir) {
+          moveX = smoothDir.dx * finalSpeed;
+          moveY = smoothDir.dy * finalSpeed;
+        } else {
+          // Fallback: raw flowfield tile direction
+          const ztx = Math.floor(z.x / TILE);
+          const zty = Math.floor(z.y / TILE);
+          const hasFF = flowfield && ztx >= 0 && ztx < COLS && zty >= 0 && zty < ROWS && flowfield[zty][ztx].dist < Infinity;
+          if (hasFF) {
+            const ff = flowfield[zty][ztx];
+            const ffLen = Math.sqrt(ff.dx*ff.dx + ff.dy*ff.dy);
+            if (ffLen > 0) {
+              moveX = (ff.dx/ffLen) * finalSpeed;
+              moveY = (ff.dy/ffLen) * finalSpeed;
+            } else {
+              moveX = (dx/dist) * finalSpeed;
+              moveY = (dy/dist) * finalSpeed;
+            }
+          } else {
+            moveX = (dx/dist) * finalSpeed;
+            moveY = (dy/dist) * finalSpeed;
+          }
+        }
       }
 
-      // Apply movement — try full move, then try axes separately
-      const canFull = !wallCollide(z.x + moveX, z.y + moveY, z.radius - 2);
-      if (canFull) {
-        z.x += moveX;
-        z.y += moveY;
-      } else {
-        // Try each axis independently (wall sliding)
-        if (!wallCollide(z.x + moveX, z.y, z.radius - 2)) z.x += moveX;
-        if (!wallCollide(z.x, z.y + moveY, z.radius - 2)) z.y += moveY;
-      }
+      // Apply movement with wall sliding and corner escape
+      applyMove(z, moveX, moveY, moveR);
     }
 
     // spitter shooting
@@ -1550,7 +1711,7 @@ function updateZombies() {
 
     if (z.throwAnim > 0) z.throwAnim--;
 
-    // Zombie hits player
+    // Zombie hits player (full radius for combat)
     if (dist < PLAYER_R + z.radius - 2) {
       if (!z.hitting || frameCount - z.lastHit > 40) {
         z.lastHit = frameCount;
@@ -1561,7 +1722,7 @@ function updateZombies() {
       z.hitting = false;
     }
 
-    // Zombie-zombie separation
+    // Zombie-zombie separation (full radius)
     for (const z2 of zombies) {
       if (z2 === z || !z2.alive) continue;
       const ex = z.x - z2.x, ey = z.y - z2.y;
