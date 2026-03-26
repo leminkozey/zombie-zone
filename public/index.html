@@ -1721,7 +1721,7 @@ function tryShoot() {
   updateHUD();
 
   const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-  const useHitscan = wpn.type === 'Auto'; // SMG, AR, Minigun = hitscan
+  const useHitscan = wpn.type === 'Auto' || activeWeaponId === 'sniper'; // Auto + Sniper = hitscan
 
   if (useHitscan) {
     // Hitscan — instant ray, no bullet object
@@ -1748,36 +1748,40 @@ function tryShoot() {
       }
     }
 
-    // Check zombies within ray distance
+    // Check zombies along ray — pierce hits ALL, normal hits first
+    const isPierce = wpn.special === 'pierce';
+    const hitZombies = [];
     for (const z of zombies) {
       if (!z.alive) continue;
-      // Point-to-line distance
       const zx = z.x - player.x, zy = z.y - player.y;
-      const proj = zx * rayDx + zy * rayDy; // projection along ray
-      if (proj < 0 || proj > hitDist) continue; // behind player or beyond wall
+      const proj = zx * rayDx + zy * rayDy;
+      if (proj < 0 || proj > hitDist) continue;
       const perpX = zx - rayDx * proj;
       const perpY = zy - rayDy * proj;
       const perpDist = Math.sqrt(perpX * perpX + perpY * perpY);
       if (perpDist < z.radius + BULLET_R) {
-        if (proj < hitDist) {
-          hitZombie = z;
-          hitDist = proj;
-          hitX = player.x + rayDx * proj;
-          hitY = player.y + rayDy * proj;
-        }
+        hitZombies.push({ z, proj });
       }
     }
+    // Sort by distance
+    hitZombies.sort((a, b) => a.proj - b.proj);
 
-    // Apply damage
-    if (hitZombie) {
-      hitZombie.hp -= dmg;
+    // Apply damage — pierce hits all, normal hits first only
+    const toHit = isPierce ? hitZombies : hitZombies.slice(0, 1);
+    for (const { z, proj } of toHit) {
+      z.hp -= dmg;
       runStats.damageDealt += dmg;
-      spawnBlood(hitZombie.x, hitZombie.y, 6, rayAngle);
-      if (hitZombie.hp <= 0) {
-        hitZombie.alive = false;
-        hitZombie.deathTimer = 30;
-        onZombieKill(hitZombie);
+      spawnBlood(z.x, z.y, 6, rayAngle);
+      if (z.hp <= 0) {
+        z.alive = false;
+        z.deathTimer = 30;
+        onZombieKill(z);
       }
+    }
+    // Update trail endpoint to first hit or wall
+    if (hitZombies.length > 0 && !isPierce) {
+      hitX = player.x + rayDx * hitZombies[0].proj;
+      hitY = player.y + rayDy * hitZombies[0].proj;
     }
 
     // Visual trail (cosmetic only, no physics)
