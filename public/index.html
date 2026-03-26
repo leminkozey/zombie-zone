@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>DEAD ZONE</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@400;600&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     background: #0c0c0e;
@@ -34,26 +34,40 @@
     z-index: 5;
   }
   .hud-box {
-    background: rgba(0,0,0,0.7);
-    border: 1px solid #333;
-    padding: 6px 12px;
-    min-width: 90px;
+    background: rgba(8,8,14,0.82);
+    border: 1px solid rgba(60,60,70,0.6);
+    border-left: 2px solid rgba(80,80,90,0.5);
+    padding: 8px 14px;
+    min-width: 100px;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+    backdrop-filter: blur(4px);
   }
-  .hud-label { font-size: 9px; color: #555; letter-spacing: 3px; text-transform: uppercase; }
-  .hud-val { font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: #e8e8e8; line-height: 1; }
-  .hud-val.danger { color: #cc2200; animation: pulse 0.4s infinite alternate; }
-  #hp-bar-wrap { width: 100%; height: 4px; background: #222; margin-top: 4px; }
-  #hp-bar { height: 4px; background: #33cc44; transition: width 0.2s, background 0.3s; }
+  .hud-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #505060; letter-spacing: 3px; text-transform: uppercase; }
+  .hud-val { font-family: 'Bebas Neue', sans-serif; font-size: 34px; color: #e0e0e8; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+  .hud-val.danger { color: #ee2200; animation: pulse 0.4s infinite alternate; text-shadow: 0 0 8px rgba(238,34,0,0.4); }
+  #hp-bar-wrap { width: 100%; height: 5px; background: #1a1a22; margin-top: 5px; clip-path: polygon(0 0, 100% 0, calc(100% - 3px) 100%, 0 100%); position: relative; }
+  #hp-bar { height: 5px; background: #33cc44; transition: width 0.2s, background 0.3s; }
+  #hp-bar-wrap::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: repeating-linear-gradient(90deg, transparent 0, transparent 9px, rgba(0,0,0,0.3) 9px, rgba(0,0,0,0.3) 10px); pointer-events: none; }
   #wave-info {
     text-align: center;
-    font-family: 'Bebas Neue', sans-serif;
+    font-family: 'Oswald', 'Bebas Neue', sans-serif;
     font-size: 22px;
-    color: #666;
-    letter-spacing: 4px;
+    font-weight: 600;
+    color: #888890;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    position: relative;
   }
-  #ammo-display { display: flex; gap: 3px; flex-wrap: wrap; max-width: 120px; margin-top: 4px; }
-  .bullet-pip { width: 6px; height: 12px; background: #ccaa00; border-radius: 1px; }
-  .bullet-pip.empty { background: #222; }
+  #wave-info::before, #wave-info::after {
+    content: '//';
+    color: #333340;
+    font-size: 14px;
+    vertical-align: middle;
+    margin: 0 6px;
+  }
+  #ammo-display { display: flex; gap: 2px; flex-wrap: wrap; max-width: 120px; margin-top: 5px; justify-content: flex-end; }
+  .bullet-pip { width: 4px; height: 10px; background: linear-gradient(180deg, #ddaa00 0%, #aa7700 70%, #886600 100%); border-radius: 1px 1px 0 0; transition: background 0.15s; }
+  .bullet-pip.empty { background: #181822; border: 1px solid #252530; border-radius: 1px; }
   #overlay, #pause-screen {
     position: absolute;
     inset: 0;
@@ -110,16 +124,18 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 64px;
-    color: #cc2200;
-    letter-spacing: 10px;
-    text-shadow: 0 0 30px #cc220099;
+    font-family: 'Oswald', 'Bebas Neue', sans-serif;
+    font-weight: 600;
+    font-size: 68px;
+    color: #ee2200;
+    letter-spacing: 12px;
+    text-shadow: 0 0 40px #ee220088, 0 0 80px #ee220044;
     pointer-events: none;
     z-index: 10;
     opacity: 0;
     transition: opacity 0.3s;
     white-space: nowrap;
+    text-transform: uppercase;
   }
   #reload-bar-wrap {
     position: absolute;
@@ -130,9 +146,9 @@
     z-index: 10;
     pointer-events: none;
   }
-  #reload-label { font-size: 10px; color: #888; letter-spacing: 3px; text-align: center; margin-bottom: 4px; }
-  #reload-bar-bg { width: 100%; height: 4px; background: #222; }
-  #reload-bar { height: 4px; background: #ccaa00; width: 0%; transition: none; }
+  #reload-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #ffaa00; letter-spacing: 3px; text-align: center; margin-bottom: 4px; text-shadow: 0 0 6px #ffaa0044; }
+  #reload-bar-bg { width: 100%; height: 4px; background: #1a1a22; clip-path: polygon(0 0, 100% 0, calc(100% - 2px) 100%, 0 100%); }
+  #reload-bar { height: 4px; background: linear-gradient(90deg, #aa7700, #ffaa00); width: 0%; transition: none; }
   #auth-screen {
     position: absolute;
     inset: 0;
@@ -197,40 +213,47 @@
     position: absolute;
     bottom: 0; left: 0; right: 0;
     height: 8px;
-    background: #111;
-    border-top: 1px solid #1a1a1a;
+    background: #0a0a10;
+    border-top: 1px solid #1a1a24;
     z-index: 5;
     pointer-events: none;
   }
   #xp-bar {
     height: 100%;
-    background: #55cc33;
+    background: linear-gradient(90deg, #33aa22, #44ff44);
     width: 0%;
     transition: width 0.3s;
-    box-shadow: 0 0 8px #55cc3366;
+    box-shadow: 0 0 10px #44ff4444;
   }
   #xp-level {
     position: absolute;
-    bottom: 10px;
+    bottom: 12px;
     left: 50%;
     transform: translateX(-50%);
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 18px;
-    color: #55cc33;
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    color: #44ff44;
     z-index: 6;
     pointer-events: none;
-    text-shadow: 0 0 6px #55cc3344;
+    text-shadow: 0 0 8px #44ff4444;
+    letter-spacing: 3px;
+    background: rgba(8,8,14,0.7);
+    padding: 2px 12px;
+    border: 1px solid #44ff4433;
+    border-radius: 10px;
   }
   #level-up-banner {
     position: absolute;
     top: 40%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 48px;
-    color: #55cc33;
-    letter-spacing: 8px;
-    text-shadow: 0 0 30px #55cc3399;
+    font-family: 'Oswald', 'Bebas Neue', sans-serif;
+    font-weight: 600;
+    font-size: 52px;
+    color: #44ff44;
+    letter-spacing: 10px;
+    text-shadow: 0 0 40px #44ff4488, 0 0 80px #44ff4444;
     pointer-events: none;
     z-index: 10;
     opacity: 0;
@@ -253,8 +276,8 @@
       <div class="hud-label">Health</div>
       <div class="hud-val" id="hp-val">100</div>
       <div id="hp-bar-wrap"><div id="hp-bar" style="width:100%"></div></div>
-      <div id="shield-bar-wrap" style="width:100%;height:3px;background:#111;margin-top:2px;display:none">
-        <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
+      <div id="shield-bar-wrap" style="width:100%;height:4px;background:#111118;margin-top:3px;display:none;position:relative;clip-path:polygon(0 0, 100% 0, calc(100% - 2px) 100%, 0 100%)">
+        <div id="shield-bar" style="height:4px;background:linear-gradient(90deg,#2277cc,#3399ff);width:0%;transition:width 0.2s;box-shadow:0 0 8px #3399ff55;background-image:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.08) 3px,rgba(255,255,255,0.08) 6px)"></div>
       </div>
     </div>
     <div class="hud-box" style="text-align:center">
@@ -2939,10 +2962,10 @@ function loop(now) {
 
   // Score display
   ctx.save();
-  ctx.font = "14px 'Share Tech Mono'";
-  ctx.fillStyle = '#444';
+  ctx.font = "12px 'JetBrains Mono'";
+  ctx.fillStyle = '#404050';
   ctx.textAlign = 'right';
-  ctx.fillText(`SCORE: ${score}`, W - 14, H - 12);
+  ctx.fillText(`SCORE  ${score}`, W - 14, H - 14);
   ctx.restore();
 
   drawRescueHUD();
