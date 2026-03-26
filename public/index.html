@@ -363,6 +363,9 @@
   @keyframes pulse { from { opacity:1; } to { opacity:0.5; } }
   @keyframes blink-border { 0%,100% { border-color: #ee2200; color: #ee2200; } 50% { border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 12px #ffaa0044; } }
   .blink-notify { animation: blink-border 1.2s ease-in-out infinite !important; border-color: #ee2200 !important; color: #ee2200 !important; }
+  .stat-card { background: #0a0d10; border: 1px solid #141a20; padding: 14px 16px; }
+  .stat-card-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 2px; color: #4a5460; margin-bottom: 4px; }
+  .stat-card-val { font-family: 'Oswald', sans-serif; font-size: 24px; color: #c0ccd8; letter-spacing: 2px; }
 </style>
 </head>
 <body>
@@ -439,6 +442,7 @@
         <div class="currency-info">
           <span class="currency-gold" id="lobby-gold">0 G</span>
           <span class="currency-diamonds" id="lobby-diamonds">0 D</span>
+          <button id="settings-btn-lobby" style="background:transparent;border:1px solid #252530;color:#505060;font-size:16px;padding:4px 8px;cursor:pointer;transition:all 0.2s;line-height:1" title="Einstellungen" onmouseover="this.style.borderColor='#ee2200';this.style.color='#ee2200'" onmouseout="this.style.borderColor='#252530';this.style.color='#505060'">&#9881;</button>
         </div>
       </div>
       <div class="sub">TOP-DOWN SURVIVAL</div>
@@ -517,7 +521,54 @@
     <h1 style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:#ee2200;letter-spacing:12px;text-shadow:0 0 40px #ee220055">DEAD ZONE</h1>
     <button class="start-btn" id="resume-btn">WEITER</button>
     <button class="start-btn btn-secondary" id="quit-btn">ZUR LOBBY</button>
+    <button class="start-btn btn-secondary" id="settings-btn-pause" style="margin-top:4px">EINSTELLUNGEN</button>
     <div style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;margin-top:10px;opacity:0.7">ACHTUNG: VERLASSEN = TOD-STRAFE</div>
+  </div>
+
+  <div id="settings-screen" style="display:none;position:absolute;inset:0;background:#06080a;z-index:22;flex-direction:column">
+    <!-- Settings tabs -->
+    <div style="display:flex;justify-content:center;background:rgba(6,8,10,0.9);border-bottom:1px solid #141a20;padding:12px 0">
+      <button class="settings-tab active" data-stab="controls" style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:500;letter-spacing:3px;color:#ee2200;padding:10px 24px;border:none;border-bottom:2px solid #ee2200;background:transparent;cursor:pointer">STEUERUNG</button>
+      <button class="settings-tab" data-stab="account" style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:500;letter-spacing:3px;color:#404855;padding:10px 24px;border:none;border-bottom:2px solid transparent;background:transparent;cursor:pointer">ACCOUNT</button>
+      <button class="settings-tab" data-stab="stats" style="font-family:'Oswald',sans-serif;font-size:14px;font-weight:500;letter-spacing:3px;color:#404855;padding:10px 24px;border:none;border-bottom:2px solid transparent;background:transparent;cursor:pointer">STATISTIKEN</button>
+    </div>
+    <!-- Settings content -->
+    <div style="flex:1;overflow-y:auto;padding:30px;max-width:700px;margin:0 auto;width:100%">
+      <!-- CONTROLS panel -->
+      <div class="settings-panel active" id="spanel-controls">
+        <div style="margin-bottom:30px">
+          <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">MAUS-SENSITIVITAET</div>
+          <div style="display:flex;align-items:center;gap:16px">
+            <input type="range" id="sensitivity-slider" min="0.2" max="3" step="0.1" value="1" style="flex:1;accent-color:#ee2200">
+            <span id="sensitivity-val" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#c0ccd8;min-width:40px">1.0</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">TASTENBELEGUNG</div>
+          <div id="keybind-list"></div>
+        </div>
+      </div>
+      <!-- ACCOUNT panel -->
+      <div class="settings-panel" id="spanel-account" style="display:none">
+        <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">PASSWORT AENDERN</div>
+        <div style="max-width:350px">
+          <input type="password" id="pw-old" placeholder="Aktuelles Passwort" style="width:100%;background:#0a0d10;border:1px solid #1a1e22;color:#c0ccd8;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:10px;outline:none">
+          <input type="password" id="pw-new" placeholder="Neues Passwort" style="width:100%;background:#0a0d10;border:1px solid #1a1e22;color:#c0ccd8;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:10px;outline:none">
+          <input type="password" id="pw-confirm" placeholder="Neues Passwort bestaetigen" style="width:100%;background:#0a0d10;border:1px solid #1a1e22;color:#c0ccd8;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:10px;outline:none">
+          <div id="pw-error" style="font-size:11px;color:#ee2200;min-height:16px;margin-bottom:10px"></div>
+          <button id="pw-save-btn" style="font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:3px;color:#33cc44;background:transparent;border:1px solid #33cc44;padding:8px 24px;cursor:pointer">SPEICHERN</button>
+        </div>
+      </div>
+      <!-- STATS panel -->
+      <div class="settings-panel" id="spanel-stats" style="display:none">
+        <div style="font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">SPIELER-STATISTIKEN</div>
+        <div id="stats-display"></div>
+      </div>
+    </div>
+    <!-- Back button -->
+    <div style="position:absolute;bottom:16px;right:20px;z-index:5">
+      <button id="settings-back" class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px">ZURUECK</button>
+    </div>
   </div>
 </div>
 
@@ -1102,6 +1153,15 @@ function nearestFreeTileCenter(px, py) {
 }
 
 // ── STATE ───────────────────────────────────────────
+let runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
+
+const DEFAULT_KEYBINDS = {
+  moveUp: 'KeyW', moveDown: 'KeyS', moveLeft: 'KeyA', moveRight: 'KeyD',
+  reload: 'KeyR', dash: 'Space', rescue: 'KeyF', pause: 'Escape',
+};
+let keybinds = JSON.parse(localStorage.getItem('dz_keybinds') || 'null') || { ...DEFAULT_KEYBINDS };
+let mouseSensitivity = parseFloat(localStorage.getItem('dz_sensitivity') || '1');
+
 let player, bullets, zombies, particles, bloodDecals;
 let spitterProjectiles;
 let wave, waveKills, waveTotal, waveActive;
@@ -1194,6 +1254,7 @@ async function init() {
   rescueCooldownUntil = 0;
   rescueRunTime = 0;
 
+  runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = [];
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
@@ -1229,6 +1290,7 @@ async function init() {
 
 function startNextWave() {
   wave++;
+  runStats.maxWave = wave;
   waveKills = 0;
   waveTotal = 4 + wave * 3;
   waveActive = true;
@@ -1345,7 +1407,7 @@ function updateRescue(now) {
       break;
 
     case 'holding_f':
-      if (!keys['KeyF']) { rescueState = 'idle'; break; }
+      if (!keys[keybinds.rescue]) { rescueState = 'idle'; break; }
       if (now - rescueHoldStart >= 3000) {
         rescueState = 'survival_phase';
         rescueSurvivalTimer = getPlayerStat('rescueSurvivalTime') * 60;
@@ -1422,6 +1484,14 @@ async function rescueSuccess() {
   running = false;
 
   if (authToken) {
+    try {
+      await fetch('/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+        body: JSON.stringify(runStats)
+      });
+    } catch {}
+
     if (pendingXp > 0) {
       const xpToSync = pendingXp;
       pendingXp = 0;
@@ -1559,9 +1629,9 @@ function togglePause() {
 
 document.addEventListener('keydown', e => {
   if (document.activeElement.tagName === 'INPUT') return;
-  if (e.code === 'Escape') { togglePause(); return; }
+  if (e.code === keybinds.pause) { togglePause(); return; }
   keys[e.code] = true;
-  if (e.code === 'KeyR' && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
+  if (e.code === keybinds.reload && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
   const weaponKeys = { 'Digit1': 'pistol', 'Digit2': 'smg', 'Digit3': 'shotgun', 'Digit4': 'assault_rifle', 'Digit5': 'sniper', 'Digit6': 'minigun' };
   if (weaponKeys[e.code] && ownedWeaponIds.includes(weaponKeys[e.code])) {
     setActiveWeapon(weaponKeys[e.code]);
@@ -1572,8 +1642,8 @@ document.addEventListener('keydown', e => {
     minigunSpinup = 0;
     updateHUD();
   }
-  if (e.code === 'Space') { tryDash(); e.preventDefault(); return; }
-  if (e.code === 'KeyF' && rescueState === 'idle' && running && !paused) {
+  if (e.code === keybinds.dash) { tryDash(); e.preventDefault(); return; }
+  if (e.code === keybinds.rescue && rescueState === 'idle' && running && !paused) {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
     if (rescueRunTime >= activationFrames && performance.now() >= rescueCooldownUntil) {
       rescueState = 'holding_f';
@@ -1778,10 +1848,10 @@ function spawnBlood(x, y, count = 8, dirAngle = null) {
 // ── PLAYER MOVE ──────────────────────────────────────
 function movePlayer() {
   let dx = 0, dy = 0;
-  if (keys['KeyW'] || keys['ArrowUp'])    dy -= 1;
-  if (keys['KeyS'] || keys['ArrowDown'])  dy += 1;
-  if (keys['KeyA'] || keys['ArrowLeft'])  dx -= 1;
-  if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+  if (keys[keybinds.moveUp])    dy -= 1;
+  if (keys[keybinds.moveDown])  dy += 1;
+  if (keys[keybinds.moveLeft])  dx -= 1;
+  if (keys[keybinds.moveRight]) dx += 1;
 
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
 
@@ -1798,7 +1868,10 @@ function movePlayer() {
   if (!wallCollide(nx, player.y, PLAYER_R - 2)) player.x = nx;
   if (!wallCollide(player.x, ny, PLAYER_R - 2)) player.y = ny;
 
-  player.angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+  const targetAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+  const angleDiff = targetAngle - player.angle;
+  const normalized = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+  player.angle += normalized * Math.min(1, mouseSensitivity);
   if (player.shootCooldown > 0) player.shootCooldown--;
   if (player.recoil > 0) player.recoil -= 0.5;
 }
@@ -1825,6 +1898,7 @@ function damagePlayer(rawDamage) {
   }
 
   player.hp -= damage;
+  runStats.damageTaken += rawDamage;
   player.shieldRegenTimer = 0;
   player.lastDamageTime = frameCount;
 
@@ -2104,6 +2178,7 @@ function updateBullets() {
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx*dx + dy*dy < (BULLET_R + z.radius)**2) {
         z.hp -= b.damage || 1;
+        runStats.damageDealt += (b.damage || 1);
         const bulletDir = Math.atan2(b.dy, b.dx);
         spawnBlood(z.x, z.y, 6, bulletDir);
         if (!b.pierce) {
@@ -2113,9 +2188,12 @@ function updateBullets() {
         if (z.hp <= 0) {
           z.alive = false;
           z.deathTimer = 30;
+          runStats.kills++;
+          runStats[z.type + 'Kills']++;
           tryDropHealthpack(z.x, z.y);
           tryDropAmmopack(z.x, z.y);
           score += z.xp;
+          runStats.xpEarned += z.xp;
           pendingXp += z.xp;
 
           // Gold drop
@@ -2408,6 +2486,7 @@ function updateHealthpacks() {
     const dx = h.x - player.x, dy = h.y - player.y;
     if (dx*dx + dy*dy < (PLAYER_R + 10)**2) {
       const healAmount = Math.round(HEALTHPACK_HEAL * (1 + getPlayerStat('healthpackHealPct')));
+      runStats.healed += healAmount;
       player.hp = Math.min(player.hp + healAmount, getPlayerStat('maxHp'));
       healthpacks.splice(i, 1);
       updateHUD();
@@ -3228,6 +3307,14 @@ async function gameOver() {
   running = false;
 
   if (authToken) {
+    try {
+      await fetch('/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+        body: JSON.stringify(runStats)
+      });
+    } catch {}
+
     if (pendingXp > 0) {
       const xpToSync = pendingXp;
       pendingXp = 0;
@@ -3296,10 +3383,10 @@ function tryDash() {
   const dist = getPlayerStat('dashDistance');
   // Dash direction from WASD input, not mouse aim
   let ddx = 0, ddy = 0;
-  if (keys['KeyW'] || keys['ArrowUp'])    ddy -= 1;
-  if (keys['KeyS'] || keys['ArrowDown'])  ddy += 1;
-  if (keys['KeyA'] || keys['ArrowLeft'])  ddx -= 1;
-  if (keys['KeyD'] || keys['ArrowRight']) ddx += 1;
+  if (keys[keybinds.moveUp])    ddy -= 1;
+  if (keys[keybinds.moveDown])  ddy += 1;
+  if (keys[keybinds.moveLeft])  ddx -= 1;
+  if (keys[keybinds.moveRight]) ddx += 1;
   // Fallback to aim direction if no movement keys held
   if (ddx === 0 && ddy === 0) {
     ddx = Math.cos(player.angle);
@@ -4398,6 +4485,14 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
   document.getElementById('pause-screen').style.display = 'none';
 
   if (authToken) {
+    try {
+      await fetch('/api/stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+        body: JSON.stringify(runStats)
+      });
+    } catch {}
+
     if (pendingXp > 0) {
       const xpToSync = pendingXp;
       pendingXp = 0;
@@ -4446,6 +4541,139 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
 
   lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
   showGameMenu();
+});
+
+// ── SETTINGS SCREEN ─────────────────────────────────
+
+function renderKeybinds() {
+  const list = document.getElementById('keybind-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const labels = {
+    moveUp: 'NACH OBEN', moveDown: 'NACH UNTEN', moveLeft: 'NACH LINKS', moveRight: 'NACH RECHTS',
+    reload: 'NACHLADEN', dash: 'DASH', rescue: 'RESCUE', pause: 'PAUSE',
+  };
+  Object.entries(keybinds).forEach(([action, key]) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #111418';
+    const keyDisplay = key.replace('Key', '').replace('Arrow', '').replace('Space', 'LEERTASTE').replace('Escape', 'ESC');
+    row.innerHTML = `
+      <span style="font-size:12px;color:#8090a0;letter-spacing:2px">${labels[action]}</span>
+      <button class="keybind-btn" data-action="${action}" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#c0ccd8;background:#0a0d10;border:1px solid #1a1e22;padding:6px 16px;cursor:pointer;min-width:100px;text-align:center">${keyDisplay}</button>
+    `;
+    list.appendChild(row);
+  });
+
+  list.querySelectorAll('.keybind-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.textContent = 'DRUECKE...';
+      btn.style.color = '#ee2200';
+      const handler = (e) => {
+        e.preventDefault();
+        keybinds[btn.dataset.action] = e.code;
+        localStorage.setItem('dz_keybinds', JSON.stringify(keybinds));
+        document.removeEventListener('keydown', handler);
+        renderKeybinds();
+      };
+      document.addEventListener('keydown', handler);
+    });
+  });
+}
+
+// Sensitivity slider
+document.getElementById('sensitivity-slider').addEventListener('input', (e) => {
+  mouseSensitivity = parseFloat(e.target.value);
+  document.getElementById('sensitivity-val').textContent = mouseSensitivity.toFixed(1);
+  localStorage.setItem('dz_sensitivity', mouseSensitivity.toString());
+});
+document.getElementById('sensitivity-slider').value = mouseSensitivity;
+document.getElementById('sensitivity-val').textContent = mouseSensitivity.toFixed(1);
+
+// Password change
+document.getElementById('pw-save-btn').addEventListener('click', async () => {
+  const old = document.getElementById('pw-old').value;
+  const newPw = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  const errEl = document.getElementById('pw-error');
+
+  if (!old || !newPw || !confirm) { errEl.textContent = 'Alle Felder ausfuellen'; return; }
+  if (newPw !== confirm) { errEl.textContent = 'Passwoerter stimmen nicht ueberein'; return; }
+  if (newPw.length < 3) { errEl.textContent = 'Mindestens 3 Zeichen'; return; }
+
+  try {
+    const res = await fetch('/api/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ oldPassword: old, newPassword: newPw })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      errEl.style.color = '#33cc44';
+      errEl.textContent = 'Passwort geaendert!';
+      document.getElementById('pw-old').value = '';
+      document.getElementById('pw-new').value = '';
+      document.getElementById('pw-confirm').value = '';
+    } else {
+      errEl.style.color = '#ee2200';
+      errEl.textContent = data.error || 'Fehler';
+    }
+  } catch { errEl.style.color = '#ee2200'; errEl.textContent = 'Server-Fehler'; }
+});
+
+// Stats display
+async function loadStats() {
+  const display = document.getElementById('stats-display');
+  if (!display) return;
+  display.innerHTML = '<div style="color:#3a4450">Laden...</div>';
+
+  try {
+    const res = await fetch('/api/stats', { headers: { 'Authorization': 'Bearer ' + authToken } });
+    if (res.ok) {
+      const s = await res.json();
+      display.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="stat-card"><div class="stat-card-label">KILLS GESAMT</div><div class="stat-card-val">${s.total_kills}</div></div>
+          <div class="stat-card"><div class="stat-card-label">HOECHSTE WAVE</div><div class="stat-card-val">${s.total_waves}</div></div>
+          <div class="stat-card"><div class="stat-card-label">NORMAL KILLS</div><div class="stat-card-val">${s.total_normal_kills}</div></div>
+          <div class="stat-card"><div class="stat-card-label">RUNNER KILLS</div><div class="stat-card-val">${s.total_runner_kills}</div></div>
+          <div class="stat-card"><div class="stat-card-label">TANK KILLS</div><div class="stat-card-val">${s.total_tank_kills}</div></div>
+          <div class="stat-card"><div class="stat-card-label">SPITTER KILLS</div><div class="stat-card-val">${s.total_spitter_kills}</div></div>
+          <div class="stat-card"><div class="stat-card-label">SCHADEN VERURSACHT</div><div class="stat-card-val">${Math.round(s.total_damage_dealt)}</div></div>
+          <div class="stat-card"><div class="stat-card-label">SCHADEN ERHALTEN</div><div class="stat-card-val">${Math.round(s.total_damage_taken)}</div></div>
+          <div class="stat-card"><div class="stat-card-label">GEHEILT</div><div class="stat-card-val">${Math.round(s.total_healed)}</div></div>
+          <div class="stat-card"><div class="stat-card-label">XP VERDIENT</div><div class="stat-card-val">${s.total_xp_earned}</div></div>
+          <div class="stat-card"><div class="stat-card-label">TODE</div><div class="stat-card-val">${s.total_deaths}</div></div>
+          <div class="stat-card"><div class="stat-card-label">RETTUNGEN</div><div class="stat-card-val">${s.total_rescues}</div></div>
+        </div>
+      `;
+    }
+  } catch {}
+}
+
+// Settings tab switching
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab').forEach(t => { t.style.color = '#404855'; t.style.borderBottomColor = 'transparent'; });
+    document.querySelectorAll('.settings-panel').forEach(p => p.style.display = 'none');
+    tab.style.color = '#ee2200';
+    tab.style.borderBottomColor = '#ee2200';
+    const panel = document.getElementById('spanel-' + tab.dataset.stab);
+    if (panel) panel.style.display = 'block';
+    if (tab.dataset.stab === 'stats') loadStats();
+    if (tab.dataset.stab === 'controls') renderKeybinds();
+  });
+});
+
+// Open/close settings
+function showSettings() {
+  document.getElementById('settings-screen').style.display = 'flex';
+  renderKeybinds();
+}
+
+document.getElementById('settings-btn-pause').addEventListener('click', showSettings);
+document.getElementById('settings-btn-lobby').addEventListener('click', showSettings);
+document.getElementById('settings-back').addEventListener('click', () => {
+  document.getElementById('settings-screen').style.display = 'none';
 });
 </script>
 </body>
