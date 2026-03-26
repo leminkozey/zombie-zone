@@ -709,6 +709,42 @@ function getSkillLevel(skillId) {
   return found ? found.level : 0;
 }
 
+// ── WEAPON DEFINITIONS ─────────────────────────────────
+const WEAPONS = {
+  pistol:         { id: 'pistol', name: 'PISTOL', type: 'Semi', unlockLevel: 0, cost: 0, damage: 1, range: 55, fireRate: 8, reloadMs: 1800, magSize: 12, spread: 0.06, special: null, icon: '🔫' },
+  smg:            { id: 'smg', name: 'SMG', type: 'Auto', unlockLevel: 8, cost: 800, damage: 0.7, range: 45, fireRate: 3, reloadMs: 1500, magSize: 35, spread: 0.1, special: null, icon: '⚡' },
+  shotgun:        { id: 'shotgun', name: 'SHOTGUN', type: 'Spread', unlockLevel: 20, cost: 4000, damage: 1.5, range: 30, fireRate: 20, reloadMs: 2200, magSize: 6, spread: 0.3, special: 'shotgun', icon: '💥' },
+  assault_rifle:  { id: 'assault_rifle', name: 'ASSAULT RIFLE', type: 'Auto', unlockLevel: 35, cost: 12000, damage: 1.2, range: 65, fireRate: 5, reloadMs: 1600, magSize: 30, spread: 0.04, special: null, icon: '🎯' },
+  sniper:         { id: 'sniper', name: 'SNIPER', type: 'Single', unlockLevel: 55, cost: 30000, damage: 4, range: 90, fireRate: 30, reloadMs: 2500, magSize: 5, spread: 0.01, special: 'pierce', icon: '🔭' },
+  minigun:        { id: 'minigun', name: 'MINIGUN', type: 'Auto', unlockLevel: 75, cost: 60000, damage: 0.8, range: 55, fireRate: 2, reloadMs: 3000, magSize: 100, spread: 0.12, special: 'spinup', icon: '⚙' },
+};
+
+const UPGRADE_BASE_COSTS = { dmg: 100, range: 80, rate: 120, reload: 80, mag: 100, acc: 60 };
+
+let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
+let activeWeaponId = 'pistol';
+let ownedWeaponIds = ['pistol'];
+
+function getWeaponStat(weaponId, stat) {
+  const base = WEAPONS[weaponId];
+  if (!base) return 0;
+  const owned = playerWeapons.find(w => w.weapon_id === weaponId);
+  const lvl = owned ? (owned[stat + '_level'] || 0) : 0;
+  switch (stat) {
+    case 'dmg': return base.damage * (1 + lvl * 0.1);
+    case 'range': return base.range + lvl * 5;
+    case 'rate': return Math.max(1, base.fireRate - lvl * 0.5);
+    case 'reload': return base.reloadMs * (1 - lvl * 0.08);
+    case 'mag': return Math.round(base.magSize * (1 + lvl * 0.1));
+    case 'acc': return base.spread * (1 - lvl * 0.08);
+    default: return 0;
+  }
+}
+
+function getUpgradeCost(stat, currentLevel) {
+  return Math.floor(UPGRADE_BASE_COSTS[stat] * (1 + currentLevel * 0.8));
+}
+
 const ZOMBIE_CONFIGS = {
   normal:  { hpBase: [2, 3], hpScale: 1, speedMult: 1.0, xp: 10, radius: ZOMBIE_R },
   runner:  { hpBase: [1, 2], hpScale: 0.5, speedMult: 2.0, xp: 25, radius: ZOMBIE_R * 0.85 },
@@ -974,6 +1010,14 @@ let pendingXp = 0;       // XP earned this session, not yet synced
 let lastXpSync = 0;      // timestamp of last sync
 const XP_SYNC_INTERVAL = 10000; // 10 seconds
 
+let globalGold = 0;
+let globalDiamonds = 0;
+let pendingGold = 0;
+let pendingDiamonds = 0;
+let lastGoldSync = 0;
+const GOLD_SYNC_INTERVAL = 10000;
+let minigunSpinup = 0;
+
 async function init() {
   // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
   generateMap();
@@ -987,7 +1031,7 @@ async function init() {
     x: mapW/2, y: mapH/2,
     hp: getPlayerStat('maxHp'),
     maxHp: getPlayerStat('maxHp'),
-    ammo: MAX_AMMO,
+    ammo: getWeaponStat(activeWeaponId, 'mag'),
     speed: getPlayerStat('moveSpeed'),
     angle: 0,
     shootCooldown: 0,
@@ -999,6 +1043,8 @@ async function init() {
     dashCharges: [],
     dashInvulnerable: false,
   };
+  player.maxAmmo = getWeaponStat(activeWeaponId, 'mag');
+  minigunSpinup = 0;
   const shieldWrap = document.getElementById('shield-bar-wrap');
   shieldWrap.style.display = player.maxShield > 0 ? 'block' : 'none';
   player.lastDamageTime = 0;
@@ -1385,7 +1431,17 @@ document.addEventListener('keydown', e => {
   if (document.activeElement.tagName === 'INPUT') return;
   if (e.code === 'Escape') { togglePause(); return; }
   keys[e.code] = true;
-  if (e.code === 'KeyR' && !reloading && player.ammo < MAX_AMMO) startReload();
+  if (e.code === 'KeyR' && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
+  const weaponKeys = { 'Digit1': 'pistol', 'Digit2': 'smg', 'Digit3': 'shotgun', 'Digit4': 'assault_rifle', 'Digit5': 'sniper', 'Digit6': 'minigun' };
+  if (weaponKeys[e.code] && ownedWeaponIds.includes(weaponKeys[e.code])) {
+    activeWeaponId = weaponKeys[e.code];
+    player.ammo = getWeaponStat(activeWeaponId, 'mag');
+    player.maxAmmo = getWeaponStat(activeWeaponId, 'mag');
+    reloading = false;
+    document.getElementById('reload-bar-wrap').style.display = 'none';
+    minigunSpinup = 0;
+    updateHUD();
+  }
   if (e.code === 'Space') { tryDash(); e.preventDefault(); return; }
   if (e.code === 'KeyF' && rescueState === 'idle' && running && !paused) {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
@@ -1409,7 +1465,8 @@ canvas.addEventListener('mouseup',   e => { if (e.button === 0) mouseDown = fals
 
 // ── RELOAD ───────────────────────────────────────────
 function startReload() {
-  if (reloading || player.ammo === MAX_AMMO) return;
+  const maxAmmo = getWeaponStat(activeWeaponId, 'mag');
+  if (reloading || player.ammo === maxAmmo) return;
   reloading = true;
   reloadStart = performance.now();
   document.getElementById('reload-bar-wrap').style.display = 'block';
@@ -1417,12 +1474,12 @@ function startReload() {
 
 function updateReload(now) {
   if (!reloading) return;
-  const reloadTime = getPlayerStat('reloadMs');
+  const reloadTime = getWeaponStat(activeWeaponId, 'reload');
   const prog = Math.min((now - reloadStart) / reloadTime, 1);
   document.getElementById('reload-bar').style.width = (prog * 100) + '%';
   if (prog >= 1) {
     reloading = false;
-    player.ammo = MAX_AMMO;
+    player.ammo = getWeaponStat(activeWeaponId, 'mag');
     document.getElementById('reload-bar-wrap').style.display = 'none';
     updateHUD();
   }
@@ -1430,52 +1487,60 @@ function updateReload(now) {
 
 // ── SHOOTING ─────────────────────────────────────────
 function tryShoot() {
+  const wpn = WEAPONS[activeWeaponId];
+  if (!wpn) return;
+  const fireRate = Math.max(1, Math.round(getWeaponStat(activeWeaponId, 'rate')));
+  const magSize = getWeaponStat(activeWeaponId, 'mag');
+  const spread = getWeaponStat(activeWeaponId, 'acc');
+  const dmg = getWeaponStat(activeWeaponId, 'dmg');
+  const range = Math.round(getWeaponStat(activeWeaponId, 'range'));
+
   if (reloading || player.ammo <= 0 || player.shootCooldown > 0) return;
+
+  if (wpn.special === 'spinup') {
+    minigunSpinup++;
+    if (minigunSpinup < 30) {
+      player.shootCooldown = Math.max(fireRate, Math.round(fireRate * 3 / (1 + minigunSpinup * 0.1)));
+    } else {
+      player.shootCooldown = fireRate;
+    }
+  } else {
+    player.shootCooldown = fireRate;
+  }
+
   player.ammo--;
-  player.shootCooldown = getPlayerStat('shootCooldown');
   player.recoil = 4;
   updateHUD();
 
   const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-  // Slight spread
-  const spread = (Math.random() - 0.5) * 0.06;
-  bullets.push({
-    x: player.x, y: player.y,
-    dx: Math.cos(angle + spread) * BULLET_SPD,
-    dy: Math.sin(angle + spread) * BULLET_SPD,
-    life: 55,
-  });
 
-  // Muzzle flash — multi-layer (white core, yellow mid, orange outer)
-  const muzzleX = player.x + Math.cos(angle) * 22;
-  const muzzleY = player.y + Math.sin(angle) * 22;
-  // White core
-  particles.push({
-    x: muzzleX, y: muzzleY,
-    dx: Math.cos(angle) * 2, dy: Math.sin(angle) * 2,
-    life: 4, maxLife: 4,
-    color: '#ffffff', r: 4,
-  });
-  // Yellow mid
-  for (let i = 0; i < 3; i++) {
-    const a = angle + (Math.random()-0.5)*0.5;
-    particles.push({
-      x: muzzleX, y: muzzleY,
-      dx: Math.cos(a)*4*(Math.random()+0.5),
-      dy: Math.sin(a)*4*(Math.random()+0.5),
-      life: 6, maxLife: 6,
-      color: '#ffcc22', r: 3,
+  if (wpn.special === 'shotgun') {
+    for (let p = 0; p < 5; p++) {
+      const pelletSpread = (p - 2) * 0.12 + (Math.random() - 0.5) * spread;
+      bullets.push({
+        x: player.x, y: player.y,
+        dx: Math.cos(angle + pelletSpread) * BULLET_SPD,
+        dy: Math.sin(angle + pelletSpread) * BULLET_SPD,
+        life: range, damage: dmg, pierce: false,
+      });
+    }
+  } else {
+    const bulletSpread = (Math.random() - 0.5) * spread;
+    bullets.push({
+      x: player.x, y: player.y,
+      dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
+      dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
+      life: range, damage: dmg, pierce: wpn.special === 'pierce',
     });
   }
-  // Orange outer
-  for (let i = 0; i < 3; i++) {
-    const a = angle + (Math.random()-0.5)*0.7;
+
+  for (let i = 0; i < 4; i++) {
+    const a = angle + (Math.random()-0.5)*0.4;
     particles.push({
-      x: muzzleX, y: muzzleY,
-      dx: Math.cos(a)*3*(Math.random()+0.3),
-      dy: Math.sin(a)*3*(Math.random()+0.3),
-      life: 8, maxLife: 8,
-      color: '#ff6600', r: 2.5,
+      x: player.x, y: player.y,
+      dx: Math.cos(a)*3*(Math.random()+0.5),
+      dy: Math.sin(a)*3*(Math.random()+0.5),
+      life: 8, maxLife: 8, color: '#ffcc00', r: 2,
     });
   }
 
@@ -1593,6 +1658,9 @@ function movePlayer() {
   let speed = getPlayerStat('moveSpeed');
   if (hasSkill('fortress') && player.shield >= player.maxShield && player.maxShield > 0) {
     speed *= 1.10;
+  }
+  if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0) {
+    speed *= 0.7;
   }
   const nx = player.x + dx * speed;
   const ny = player.y + dy * speed;
@@ -1905,11 +1973,13 @@ function updateBullets() {
       if (!z.alive) continue;
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx*dx + dy*dy < (BULLET_R + z.radius)**2) {
-        z.hp--;
+        z.hp -= b.damage || 1;
         const bulletDir = Math.atan2(b.dy, b.dx);
         spawnBlood(z.x, z.y, 6, bulletDir);
-        bullets.splice(i, 1);
-        hit = true;
+        if (!b.pierce) {
+          bullets.splice(i, 1);
+          hit = true;
+        }
         if (z.hp <= 0) {
           z.alive = false;
           z.deathTimer = 30;
@@ -1926,7 +1996,7 @@ function updateBullets() {
             setTimeout(() => startNextWave(), 2000);
           }
         }
-        break;
+        if (!b.pierce) break;
       }
     }
     if (hit) continue;
@@ -2233,7 +2303,7 @@ function updateAmmopacks() {
 
     const dx = a.x - player.x, dy = a.y - player.y;
     if (dx*dx + dy*dy < (PLAYER_R + 10)**2) {
-      player.ammo = MAX_AMMO;
+      player.ammo = getWeaponStat(activeWeaponId, 'mag');
       if (reloading) {
         reloading = false;
         document.getElementById('reload-bar-wrap').style.display = 'none';
@@ -2804,11 +2874,11 @@ function updateHUD() {
   bar.style.background = pct > 0.6 ? '#33cc44' : pct > 0.3 ? '#ccaa00' : '#cc2200';
 
   document.getElementById('ammo-val').textContent = player.ammo;
-
-  // Ammo pips
+  const maxAmmo = getWeaponStat(activeWeaponId, 'mag');
   const pips = document.getElementById('ammo-display');
   pips.innerHTML = '';
-  for (let i = 0; i < MAX_AMMO; i++) {
+  const pipCount = Math.min(maxAmmo, 40);
+  for (let i = 0; i < pipCount; i++) {
     const d = document.createElement('div');
     d.className = 'bullet-pip' + (i < player.ammo ? '' : ' empty');
     pips.appendChild(d);
@@ -3007,6 +3077,7 @@ function loop(now) {
   updateDash();
   updateRescue(performance.now());
   if (mouseDown) tryShoot();
+  if (!mouseDown) minigunSpinup = 0;
   updateZombies();
   updateBullets();
   updateSpitterProjectiles();
