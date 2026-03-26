@@ -299,6 +299,8 @@
   #st-mobility:not(.btn-secondary) { border-color: #33aaff; color: #33aaff; }
   #st-rescue:not(.btn-secondary) { border-color: #ffaa00; color: #ffaa00; }
   @keyframes pulse { from { opacity:1; } to { opacity:0.5; } }
+  @keyframes blink-border { 0%,100% { border-color: #ee2200; color: #ee2200; } 50% { border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 12px #ffaa0044; } }
+  .blink-notify { animation: blink-border 1.2s ease-in-out infinite !important; border-color: #ee2200 !important; color: #ee2200 !important; }
 </style>
 </head>
 <body>
@@ -474,6 +476,19 @@ async function showGameMenu() {
         activeSkills = skillData.skills.map(s => ({ skillId: s.skill_id, level: s.level }));
       }
     } catch {}
+
+    // Blink skill tree button if points available
+    const totalLevel = getLevelFromXp(globalXp);
+    const totalPoints = totalLevel - 1;
+    const usedPoints = activeSkills.reduce((sum, s) => sum + s.level, 0);
+    const btn = document.getElementById('skilltree-btn');
+    if (totalPoints - usedPoints > 0) {
+      btn.classList.add('blink-notify');
+      btn.textContent = 'SKILL TREE (' + (totalPoints - usedPoints) + ')';
+    } else {
+      btn.classList.remove('blink-notify');
+      btn.textContent = 'SKILL TREE';
+    }
   }
 }
 
