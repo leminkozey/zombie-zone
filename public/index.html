@@ -2071,7 +2071,7 @@ function drawMinimap() {
 // ── HUD UPDATE ───────────────────────────────────────
 function updateHUD() {
   const hpEl = document.getElementById('hp-val');
-  hpEl.textContent = Math.max(0, player.hp);
+  hpEl.textContent = Math.max(0, Math.floor(player.hp));
   hpEl.className = 'hud-val' + (player.hp <= 30 ? ' danger' : '');
   const pct = Math.max(0, player.hp / player.maxHp);
   const bar = document.getElementById('hp-bar');
