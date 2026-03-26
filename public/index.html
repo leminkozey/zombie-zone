@@ -4993,11 +4993,11 @@ function renderArsenal() {
   // Perk slots for selected weapon
   const perkSection = document.createElement('div');
   perkSection.style.cssText = 'margin-top:24px;padding-top:16px;border-top:1px solid #141a20';
-  perkSection.innerHTML = '<div style="font-family:Oswald,sans-serif;font-size:15px;font-weight:600;letter-spacing:3px;color:#8090a0;margin-bottom:14px">PERKS</div>';
+  perkSection.innerHTML = '<div style="font-family:Oswald,sans-serif;font-size:15px;font-weight:600;letter-spacing:3px;color:#8090a0;margin-bottom:14px;text-align:center">PERKS</div>';
 
   const wpnPerks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === selectedArsenalWeapon);
   const perkRow = document.createElement('div');
-  perkRow.style.cssText = 'display:flex;gap:12px';
+  perkRow.style.cssText = 'display:flex;gap:16px;justify-content:center';
 
   for (const [perkId, perk] of wpnPerks) {
     const owned = ownedPerks.includes(perkId);
