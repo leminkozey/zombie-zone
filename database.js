@@ -22,6 +22,20 @@ db.exec(`
 try { db.exec('ALTER TABLE users ADD COLUMN gold INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN diamonds INTEGER DEFAULT 0'); } catch {}
 
+// safe migrations for stats tracking
+try { db.exec('ALTER TABLE users ADD COLUMN total_kills INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_normal_kills INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_runner_kills INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_tank_kills INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_spitter_kills INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_damage_dealt INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_damage_taken INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_healed INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_xp_earned INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_deaths INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_rescues INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_waves INTEGER DEFAULT 0'); } catch {}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS user_skills (
     user_id INTEGER NOT NULL,
@@ -81,6 +95,26 @@ function upgradeWeaponStat(userId, weaponId, stat) {
   db.prepare(`UPDATE user_weapons SET ${stat}_level = ${stat}_level + 1 WHERE user_id = ? AND weapon_id = ?`).run(userId, weaponId);
 }
 
+// stats statements
+const addStats = db.prepare(`UPDATE users SET
+  total_kills = total_kills + ?,
+  total_normal_kills = total_normal_kills + ?,
+  total_runner_kills = total_runner_kills + ?,
+  total_tank_kills = total_tank_kills + ?,
+  total_spitter_kills = total_spitter_kills + ?,
+  total_damage_dealt = total_damage_dealt + ?,
+  total_damage_taken = total_damage_taken + ?,
+  total_healed = total_healed + ?,
+  total_xp_earned = total_xp_earned + ?,
+  total_waves = CASE WHEN ? > total_waves THEN ? ELSE total_waves END
+  WHERE id = ?`);
+
+const getStats = db.prepare('SELECT total_kills, total_normal_kills, total_runner_kills, total_tank_kills, total_spitter_kills, total_damage_dealt, total_damage_taken, total_healed, total_xp_earned, total_deaths, total_rescues, total_waves FROM users WHERE id = ?');
+
+const incrementDeaths = db.prepare('UPDATE users SET total_deaths = total_deaths + 1 WHERE id = ?');
+const incrementRescues = db.prepare('UPDATE users SET total_rescues = total_rescues + 1 WHERE id = ?');
+const updatePassword = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+
 const applyDeath = db.transaction((userId) => {
   const user = getUser.get(userId);
   if (!user) return null;
@@ -89,6 +123,7 @@ const applyDeath = db.transaction((userId) => {
   setGold.run(0, userId);
   deleteUserSkills.run(userId);
   deleteUserWeapons.run(userId);
+  incrementDeaths.run(userId);
   return { xp: newXp, gold: 0, diamonds: user.diamonds };
 });
 
@@ -97,4 +132,5 @@ module.exports = {
   deleteUserSkills, setXp, applyDeath,
   getUserWeapons, getWeapon, buyWeapon, deleteUserWeapons,
   addGold, setGold, addDiamonds, upgradeWeaponStat,
+  addStats, getStats, incrementRescues, updatePassword,
 };

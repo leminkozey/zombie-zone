@@ -6,6 +6,7 @@ const path = require('path');
 const {
   createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath,
   getUserWeapons, getWeapon, buyWeapon, addGold, setGold, addDiamonds, upgradeWeaponStat,
+  addStats, getStats, incrementRescues, updatePassword,
 } = require('./database');
 
 const app = express();
@@ -233,7 +234,43 @@ app.post('/api/death', auth, (req, res) => {
 app.post('/api/rescue', auth, (req, res) => {
   const user = getUser.get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
+  incrementRescues.run(req.user.id);
   res.json({ name: user.name, xp: user.xp });
+});
+
+// GET /api/stats
+app.get('/api/stats', auth, (req, res) => {
+  const stats = getStats.get(req.user.id);
+  if (!stats) return res.status(404).json({ error: 'User not found' });
+  res.json(stats);
+});
+
+// POST /api/stats — sync run stats
+app.post('/api/stats', auth, (req, res) => {
+  const { kills, normalKills, runnerKills, tankKills, spitterKills, damageDealt, damageTaken, healed, xpEarned, maxWave } = req.body;
+  addStats.run(
+    kills || 0, normalKills || 0, runnerKills || 0, tankKills || 0, spitterKills || 0,
+    damageDealt || 0, damageTaken || 0, healed || 0, xpEarned || 0,
+    maxWave || 0, maxWave || 0,
+    req.user.id
+  );
+  res.json({ ok: true });
+});
+
+// POST /api/change-password
+app.post('/api/change-password', auth, (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
+  if (newPassword.length < 3) return res.status(400).json({ error: 'Password too short' });
+
+  const user = findUserByName.get(req.user.name);
+  if (!user || !bcrypt.compareSync(oldPassword, user.password_hash)) {
+    return res.status(401).json({ error: 'Wrong password' });
+  }
+
+  const hash = bcrypt.hashSync(newPassword, 10);
+  updatePassword.run(hash, req.user.id);
+  res.json({ ok: true });
 });
 
 const PORT = process.env.PORT || 4444;
