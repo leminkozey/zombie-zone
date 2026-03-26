@@ -404,7 +404,7 @@
       <button class="menu-tab active" data-tab="lobby">LOBBY</button>
       <button class="menu-tab" data-tab="skilltree">SKILL TREE</button>
       <button class="menu-tab" data-tab="arsenal">ARSENAL</button>
-      <button class="menu-tab" data-tab="skins">OPERATORS <span class="soon-badge">SOON</span></button>
+      <button class="menu-tab" data-tab="skins">OPERATORS</button>
       <button class="menu-tab" data-tab="shop">SHOP</button>
     </div>
 
@@ -499,8 +499,22 @@
     </div>
 
     <!-- OPERATORS panel -->
-    <div class="menu-panel" id="panel-skins" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
-      <span style="font-family:'Oswald',sans-serif;font-size:18px;color:#404855;letter-spacing:6px">COMING SOON</span>
+    <div class="menu-panel" id="panel-skins" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;overflow-y:auto;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:0 8px;width:100%;max-width:1100px">
+        <div style="font-family:'Oswald',sans-serif;font-size:20px;font-weight:600;letter-spacing:5px;color:#8090a0">OPERATORS</div>
+        <div style="display:flex;gap:24px;align-items:center">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:16px;height:16px;background:#665500;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;color:#ddaa00">G</div>
+            <span id="op-gold" style="font-family:'Oswald',sans-serif;font-size:18px;color:#ddaa00">0</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:16px;height:16px;background:#1a5566;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;color:#44ddff">D</div>
+            <span id="op-diamonds" style="font-family:'Oswald',sans-serif;font-size:18px;color:#44ddff">0</span>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#556070" id="op-sp-display">SP: 0</div>
+        </div>
+      </div>
+      <div id="operator-grid" style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:1100px;margin:0 auto"></div>
     </div>
   </div>
 
@@ -654,8 +668,9 @@ async function showGameMenu() {
         globalDiamonds = data.diamonds || 0;
         const totalLevel = getLevelFromXp(globalXp);
         const skillPoints = totalLevel - 1;
+        const opLabel = activeOperatorId && OPERATORS[activeOperatorId] ? ' | ' + OPERATORS[activeOperatorId].icon + ' ' + OPERATORS[activeOperatorId].name : '';
         document.getElementById('lobby-stats').textContent =
-          'LVL ' + totalLevel + '  |  ' + globalXp + ' XP  |  ' + skillPoints + ' SKILL PUNKTE';
+          'LVL ' + totalLevel + '  |  ' + globalXp + ' XP  |  ' + skillPoints + ' SP' + opLabel;
         document.getElementById('lobby-level-badge').textContent = 'LVL ' + totalLevel;
         document.getElementById('lobby-gold').textContent = globalGold + ' G';
         document.getElementById('lobby-diamonds').textContent = globalDiamonds + ' D';
@@ -5581,6 +5596,177 @@ function renderArsenal() {
   statsContainer.appendChild(perkSection);
 }
 
+// ── OPERATORS TAB ────────────────────────────────────
+function renderOperators() {
+  const grid = document.getElementById('operator-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const opGold = document.getElementById('op-gold');
+  const opDia = document.getElementById('op-diamonds');
+  const opSp = document.getElementById('op-sp-display');
+  if (opGold) opGold.textContent = globalGold.toLocaleString();
+  if (opDia) opDia.textContent = globalDiamonds;
+
+  // Calculate available SP for operator upgrades
+  const totalLevel = getLevelFromXp(globalXp);
+  const totalSP = totalLevel - 1;
+  const usedSkillSP = activeSkills.reduce((sum, s) => sum + s.level, 0);
+  const usedOpSP = ownedOperators.reduce((sum, o) => {
+    let sp = 0;
+    for (let i = 1; i <= o.active_level; i++) sp += i * 3;
+    for (let i = 1; i <= o.passive_level; i++) sp += i * 2;
+    for (let i = 1; i <= o.buff_level; i++) sp += i * 5;
+    return sum + sp;
+  }, 0);
+  const availSP = totalSP - usedSkillSP - usedOpSP;
+  if (opSp) opSp.textContent = 'SP: ' + availSP;
+
+  const level = getLevelFromXp(globalXp);
+
+  Object.entries(OPERATORS).forEach(([opId, op]) => {
+    const owned = ownedOperators.find(o => o.operator_id === opId);
+    const isActive = activeOperatorId === opId;
+    const canAffordGold = globalGold >= op.goldCost;
+    const canAffordDia = globalDiamonds >= op.diamondCost;
+    const levelOk = level >= op.unlockLevel;
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#0a0d10;border:2px solid ' + (isActive ? '#33cc44' : owned ? '#1e2530' : '#111418') + ';padding:18px;width:320px;position:relative;transition:border-color 0.2s';
+
+    let html = '';
+    // Header
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+    html += '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:28px">' + op.icon + '</span><div>';
+    html += '<div style="font-family:Oswald,sans-serif;font-size:18px;font-weight:600;letter-spacing:3px;color:' + (owned ? '#c0ccd8' : '#4a5460') + '">' + op.name + '</div>';
+    html += '<div style="font-size:9px;color:#3a4450;letter-spacing:1px">LVL ' + op.unlockLevel + '</div>';
+    html += '</div></div>';
+    if (isActive) html += '<div style="font-size:9px;color:#33cc44;border:1px solid #33cc44;padding:2px 8px;letter-spacing:2px">AKTIV</div>';
+    html += '</div>';
+
+    // Description
+    html += '<div style="font-size:10px;color:#556070;margin-bottom:10px;line-height:1.5">' + op.desc + '</div>';
+
+    // Buffs/Debuffs
+    const buffText = Object.entries(op.buffs).map(([k, v]) => {
+      const pct = k.endsWith('Pct');
+      return (v > 0 ? '+' : '') + (pct ? Math.round(v * 100) + '%' : v) + ' ' + k.replace('Pct', '').replace(/([A-Z])/g, ' $1');
+    }).join(', ');
+    const debuffText = Object.entries(op.debuffs).map(([k, v]) => {
+      const pct = k.endsWith('Pct');
+      return (pct ? Math.round(v * 100) + '%' : v) + ' ' + k.replace('Pct', '').replace(/([A-Z])/g, ' $1');
+    }).join(', ');
+    html += '<div style="font-size:10px;color:#33cc44;margin-bottom:3px">\u25B2 ' + buffText + '</div>';
+    html += '<div style="font-size:10px;color:#ee2200;margin-bottom:8px">\u25BC ' + debuffText + '</div>';
+
+    // Active + Passive
+    html += '<div style="font-size:10px;color:#ffaa00;margin-bottom:3px">[Q] ' + op.active.name + ': ' + op.active.desc + '</div>';
+    html += '<div style="font-size:10px;color:#8866cc;margin-bottom:12px">\u27E1 ' + op.passive + '</div>';
+
+    // Action area
+    if (!owned) {
+      if (!levelOk) {
+        html += '<div style="font-size:10px;color:#333;letter-spacing:2px;text-align:center">LEVEL ' + op.unlockLevel + ' BENOETIGT</div>';
+      } else {
+        html += '<div style="display:flex;gap:8px;justify-content:center">';
+        html += '<button class="op-buy-btn" data-op="' + opId + '" data-currency="gold" style="font-family:JetBrains Mono,monospace;font-size:11px;color:' + (canAffordGold ? '#ddaa00' : '#333') + ';background:transparent;border:1px solid ' + (canAffordGold ? '#665500' : '#1a1a1a') + ';padding:6px 16px;cursor:' + (canAffordGold ? 'pointer' : 'default') + '">' + op.goldCost.toLocaleString() + 'G</button>';
+        html += '<button class="op-buy-btn" data-op="' + opId + '" data-currency="diamonds" style="font-family:JetBrains Mono,monospace;font-size:11px;color:' + (canAffordDia ? '#44ddff' : '#333') + ';background:transparent;border:1px solid ' + (canAffordDia ? '#1a5566' : '#1a1a1a') + ';padding:6px 16px;cursor:' + (canAffordDia ? 'pointer' : 'default') + '">' + op.diamondCost + '\uD83D\uDC8E</button>';
+        html += '</div>';
+      }
+    } else if (!isActive) {
+      html += '<div style="text-align:center"><button class="op-select-btn" data-op="' + opId + '" style="font-family:Oswald,sans-serif;font-size:13px;letter-spacing:3px;color:#33cc44;background:transparent;border:1px solid #33cc44;padding:8px 24px;cursor:pointer">AUSWAEHLEN</button></div>';
+    } else {
+      // Upgrade slots
+      html += '<div style="border-top:1px solid #141a20;padding-top:10px;margin-top:8px">';
+      html += '<div style="font-size:9px;letter-spacing:2px;color:#4a5460;margin-bottom:8px;text-align:center">UPGRADES</div>';
+      ['active', 'passive', 'buff'].forEach(slot => {
+        const maxLvl = slot === 'buff' ? 3 : 5;
+        const lvl = owned[slot + '_level'] || 0;
+        const baseCost = { active: { gold: 5000, sp: 3 }, passive: { gold: 3000, sp: 2 }, buff: { gold: 8000, sp: 5 } }[slot];
+        const nextLvl = lvl + 1;
+        const goldCost = baseCost.gold * nextLvl;
+        const spCost = baseCost.sp * nextLvl;
+        const canUpgrade = lvl < maxLvl && globalGold >= goldCost && availSP >= spCost;
+        const label = slot === 'active' ? 'AKTIV' : slot === 'passive' ? 'PASSIV' : 'BUFF';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+        html += '<span style="font-size:10px;color:#556070">' + label + ' ' + lvl + '/' + maxLvl + '</span>';
+        if (lvl < maxLvl) {
+          html += '<button class="op-upgrade-btn" data-op="' + opId + '" data-slot="' + slot + '" style="font-family:JetBrains Mono,monospace;font-size:9px;color:' + (canUpgrade ? '#ddaa00' : '#333') + ';background:transparent;border:1px solid ' + (canUpgrade ? '#665500' : '#1a1a1a') + ';padding:3px 10px;cursor:' + (canUpgrade ? 'pointer' : 'default') + '">' + goldCost.toLocaleString() + 'G + ' + spCost + 'SP</button>';
+        } else {
+          html += '<span style="font-size:9px;color:#33cc44;letter-spacing:1px">MAX</span>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    card.innerHTML = html;
+    grid.appendChild(card);
+  });
+
+  // Wire buy buttons
+  grid.querySelectorAll('.op-buy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const opId = btn.dataset.op;
+      const currency = btn.dataset.currency;
+      try {
+        const res = await fetch('/api/operators/buy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ operatorId: opId, currency: currency })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          ownedOperators = data.operators;
+          globalGold = data.gold;
+          globalDiamonds = data.diamonds;
+          renderOperators();
+        }
+      } catch(e) {}
+    });
+  });
+
+  // Wire select buttons
+  grid.querySelectorAll('.op-select-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const opId = btn.dataset.op;
+      try {
+        const res = await fetch('/api/operators/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ operatorId: opId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          activeOperatorId = data.activeOperator;
+          renderOperators();
+        }
+      } catch(e) {}
+    });
+  });
+
+  // Wire upgrade buttons
+  grid.querySelectorAll('.op-upgrade-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const opId = btn.dataset.op;
+      const slot = btn.dataset.slot;
+      try {
+        const res = await fetch('/api/operators/upgrade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ operatorId: opId, slot: slot })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          ownedOperators = data.operators;
+          globalGold = data.gold;
+          renderOperators();
+        }
+      } catch(e) {}
+    });
+  });
+}
+
 // ── PERK SHOP ───────────────────────────────────────
 function renderShop() {
   const grid = document.getElementById('perk-shop-grid');
@@ -5695,6 +5881,7 @@ function switchMenuTab(tabName) {
   }
 
   if (tabName === 'arsenal') { selectedArsenalWeapon = activeWeaponId; renderArsenal(); }
+  if (tabName === 'skins') { renderOperators(); }
   if (tabName === 'shop') { renderShop(); }
 }
 
