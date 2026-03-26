@@ -1226,7 +1226,10 @@ async function init() {
     } catch {}
   }
   pendingXp = 0;
+  pendingGold = 0;
+  pendingDiamonds = 0;
   lastXpSync = performance.now();
+  lastGoldSync = performance.now();
   currentLevel = getLevelFromXp(globalXp);
 
   updateHUD();
@@ -3159,6 +3162,12 @@ async function gameOver() {
     } catch {}
   }
 
+  // Reset weapons on death — back to pistol only
+  playerWeapons = [];
+  ownedWeaponIds = ['pistol'];
+  activeWeaponId = 'pistol';
+  globalGold = 0;
+
   const totalEarned = score;
   lastRunText = 'GESTORBEN: Wave ' + wave + '  |  +' + totalEarned + ' XP  |  75% VERLOREN';
   showGameMenu();
@@ -4054,6 +4063,12 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
       }
     } catch {}
   }
+
+  // Reset weapons on quit — back to pistol only
+  playerWeapons = [];
+  ownedWeaponIds = ['pistol'];
+  activeWeaponId = 'pistol';
+  globalGold = 0;
 
   lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
   showGameMenu();

@@ -16,6 +16,10 @@ Top-Down Zombie Survival Shooter im Browser. Welle um Welle Zombies abknallen, X
 - **Shield** — Schutzschild das Schaden absorbiert
 - **Rescue Mission** — Evakuierung anfordern um XP zu retten
 - **Tod-Strafe** — 75% XP Verlust bei Tod, Skills resettet
+- **6 Waffen** — Pistol, SMG, Shotgun, Assault Rifle, Sniper, Minigun
+- **Waffen-Upgrades** — 6 Stats je 10 Level mit Gold upgraden
+- **Gold & Diamanten** — Zombies droppen Gold, seltene Diamant-Drops ab Wave 10
+- **Arsenal** — Waffen kaufen, upgraden und ausruesten im Hauptmenue
 
 ## Schnellstart
 
@@ -37,6 +41,7 @@ Dann im Browser: **http://localhost:4444**
 | ESC | Pause |
 | Leertaste | Dash (wenn freigeschaltet) |
 | F halten | Rescue Mission anfordern |
+| 1-6 | Waffe wechseln |
 
 ## Tech Stack
 
