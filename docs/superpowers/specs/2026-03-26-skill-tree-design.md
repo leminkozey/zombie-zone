@@ -12,18 +12,39 @@ Player upgrades via a constellation-style skill tree with 3 paths (Survival, Mob
 
 ### New Behavior
 - Single unified XP: in-game XP bar = global XP, always
-- XP sent live to server during run (not just on death)
-- 1 level = 1 skill point
+- `skillPoints = level - 1` (Level 1 = 0 points, Level 10 = 9 points)
+
+### XP Sync Strategy
+- Client tracks `pendingXp` locally during run
+- Syncs to server via `POST /api/xp` every **10 seconds** (debounced, only if pendingXp > 0)
+- On run end (death/rescue/quit): final sync before state change
+- `POST /api/death` and `POST /api/rescue` are called AFTER the final XP sync completes
+- Server-side: `/api/death` atomically sets `xp = floor(xp * 0.25)` and deletes all skills in a single transaction
 
 ### XP Curve (Minecraft-style)
-- Early levels: fast (e.g., Level 2 = 50 XP)
-- Later levels: exponentially harder
-- Formula: `xpForLevel(n) = baseXP * n^exponent` (tuned so ~Level 5 is achievable in first run)
+- Formula: `xpForLevel(n) = floor(50 * n^1.5)`
+- Example levels:
+
+| Level | Total XP needed | XP for this level |
+|-------|----------------|-------------------|
+| 1 | 0 | — |
+| 2 | 141 | 141 |
+| 5 | 559 | 159 |
+| 10 | 1,581 | 199 |
+| 20 | 4,472 | 258 |
+| 50 | 17,677 | 395 |
+
+Tuned so Level 3-4 is achievable in a first run (~10 minutes).
 
 ### Death Penalty
-- **75% XP lost** (stored in DB: `xp = floor(xp * 0.25)`)
-- **All skill allocations deleted** from DB
+- **75% XP lost** (DB: `xp = floor(xp * 0.25)`, atomic transaction)
+- **All skill allocations deleted** from DB (same transaction)
 - Player returns to lobby with reduced level, can redistribute remaining points
+
+### Quit Behavior
+- ESC → "ZUR LOBBY" = **same as death penalty** (75% XP lost, all skills deleted)
+- Prevents exploit of quitting to avoid death penalty
+- HUD shows warning: "ACHTUNG: Verlassen = Tod-Strafe"
 
 ### Rescue Success
 - 100% XP kept, all skills remain in DB
@@ -43,12 +64,12 @@ Player upgrades via a constellation-style skill tree with 3 paths (Survival, Mob
 
 ### Node Interaction
 - **Hover:** Tooltip with name, description, stats per level, prerequisite, max level
-- **Click:** Invest a point (if enough points available + prerequisite unlocked)
+- **Click:** Invest 1 point (server validates: enough points + prerequisite unlocked + not over maxLvl)
 - Unlocked nodes glow in path color, locked nodes are dimmed
 - Available skill points displayed in HUD
 
 ### Visual Hierarchy
-- **Tier 0:** Start node — filled center, always unlocked, free
+- **Tier 0:** Start node — visual anchor only, no cost, no effect, always unlocked. Not counted in skill totals.
 - **Tier 1:** Directly connected to start
 - **Tier 2:** Requires predecessor node unlocked
 - **Tier 3:** Capstone — pulsing dashed border, strong single-level effects
@@ -78,6 +99,12 @@ Player upgrades via a constellation-style skill tree with 3 paths (Survival, Mob
 
 Adding a new skill = adding one object to the array. No system changes needed.
 
+### Stat Calculation Rules
+- **Flat bonuses** (HP, shield HP, distances): additive on base value
+- **Percentage bonuses** (move speed, damage reduction, heal effectiveness): multiplicative on base value, not on each other
+- Calculation order: `finalValue = baseValue * (1 + sumOfPercentBonuses) + sumOfFlatBonuses`
+- Example: Swift Lvl 3 (+24%) + Fortress (+10% at full shield) = `2.8 * (1 + 0.24 + 0.10) = 3.752`, not `2.8 * 1.24 * 1.10`
+
 ### SURVIVAL Path (green)
 
 | Skill | Tier | Max | Effect per Level |
@@ -89,6 +116,17 @@ Adding a new skill = adding one object to the array. No system changes needed.
 | Thick Skin | 2 | 3 | -5% incoming damage (max -15%) |
 | **Fortress** | 3 | 1 | 2x shield regen, +10% speed at full shield |
 | **Second Wind** | 3 | 1 | Once per run: survive lethal hit at 30% HP |
+
+### Shield Mechanic Details
+- Shield absorbs 100% of incoming damage until depleted (damage overflow passes to HP)
+- Damage pipeline: `raw damage → Thick Skin reduction → Shield absorb → HP`
+- Regen starts after `regenDelay` seconds without taking any damage (shield or HP)
+- Regen rate: 5 Shield HP/s (doubled by Fortress)
+- HUD: blue bar segment above HP bar, depletes right-to-left
+
+### Second Wind
+- Trigger state is **client-only**, resets on run start via `init()`
+- Not persisted in DB — only the skill allocation is persisted
 
 ### MOBILITY Path (blue)
 
@@ -104,6 +142,12 @@ Adding a new skill = adding one object to the array. No system changes needed.
 | **Phantom Dash** | 3 | 1 | Invulnerable during dash, afterimage confuses 1.5s |
 | **Bullet Time** | 3 | 1 | After dash: 50% zombie slow in radius for 2s |
 
+### Dash Charge Mechanic
+- Each charge has its **own independent cooldown**
+- Using a dash consumes 1 charge, that charge starts its cooldown immediately
+- Other full charges remain usable
+- Example: 3 charges, 2s CD. Use all 3 rapidly → first charge ready again after 2s, second after 2s, third after 2s (staggered by usage time)
+
 ### RESCUE Path (orange)
 
 | Skill | Tier | Max | Effect per Level |
@@ -117,7 +161,10 @@ Adding a new skill = adding one object to the array. No system changes needed.
 | **Evac Chopper** | 3 | 1 | Circle slowly follows player (0.5x player speed) |
 | **Fortified LZ** | 3 | 1 | -50% damage while standing in circle |
 
-**Totals:** 24 skills, 72 points to max all three trees.
+**Totals:** 24 skills (excluding 3 start nodes), 68 points to max all three trees.
+- Survival: 5+3+5+3+3+1+1 = 21
+- Mobility: 5+3+1+3+3+2+3+1+1 = 22
+- Rescue: 5+4+5+3+3+3+1+1 = 25
 
 ## Rescue Mission Mechanic
 
@@ -128,15 +175,41 @@ Adding a new skill = adding one object to the array. No system changes needed.
 - Only available after **240s** in-run (reducible via Quick Call skill)
 - **30s cooldown** between requests (reducible via Rapid Redial)
 
+### State Machine
+
+```
+idle → holding_f → survival_phase → circle_spawned → extracting → success
+                                                                 ↘ expired → idle (cooldown)
+```
+
+State transitions:
+- `idle → holding_f`: Player presses F (after activation time met, cooldown clear)
+- `holding_f → idle`: Player releases F before 3s
+- `holding_f → survival_phase`: 3s hold complete
+- `survival_phase → circle_spawned`: Survival timer reaches 0
+- `circle_spawned → extracting`: Player enters circle
+- `extracting → circle_spawned`: Player leaves circle (progress resets)
+- `extracting → success`: Progress bar reaches 100%
+- `circle_spawned → expired`: Expiry timer runs out
+- `extracting → expired`: Expiry timer runs out (even if partially extracted)
+- `expired → idle`: Cooldown starts, can re-request after cooldown
+
+**Death during any rescue state:** Normal death penalty applies. Rescue state is irrelevant — death always means 75% XP loss + skill reset. No special handling needed.
+
+**F pressed during active rescue:** Ignored. Only works in `idle` state.
+
+### Circle Spawn Rules
+- Circle center must be **>= 3 tiles** from any wall tile
+- Circle center must be **>= 5 tiles** from map border
+- **Spawn exclusion zone:** No new zombies spawn within 6 tiles of circle center
+- Existing zombies move normally, can enter the circle area
+- If no valid position found (very unlikely): retry with relaxed constraints (2 tiles from walls)
+
 ### Flow
 1. **Request sent** → survival phase timer starts (90s default)
 2. Timer visible in HUD, counting down
 3. Zombies continue spawning normally throughout
-4. After survival phase: **extraction circle** spawns at random map position
-   - Not too close to walls
-   - Visible on minimap
-   - **Spawn exclusion zone** around circle — no new zombies spawn within radius
-   - Existing zombies continue moving normally
+4. After survival phase: **extraction circle** spawns
 5. Stand in circle for **20s** (reducible via Fast Extract)
    - Progress bar above circle
    - Progress **resets** if player leaves circle
@@ -147,16 +220,16 @@ Adding a new skill = adding one object to the array. No system changes needed.
 - If expired: mission fails, cooldown starts, can request again
 
 ### Visuals
-- Glowing pulsing ring on the ground
-- Timer display in HUD for each phase
-- Minimap shows circle position
-- Hold-F progress bar in center of screen
+- Glowing pulsing ring on the ground (green/white)
+- Timer display in HUD for each phase (survival countdown, expiry countdown, extraction progress)
+- Minimap shows circle position as blinking marker
+- Hold-F progress bar in center of screen with "RESCUE ANFRAGE..." label
 
 ## Bugfix: Zombies Stuck in Walls
 
-- Validate spawn position is not inside a wall tile
+- Validate spawn position is not inside a wall tile (check with zombie's full radius)
 - Add push-out logic in `updateZombies()`: if a zombie's center is inside a wall, push it to nearest free tile
-- Check wall collision with zombie's full radius, not just center
+- Check wall collision with zombie's full radius, not just center point
 
 ## Database Changes
 
@@ -176,16 +249,19 @@ CREATE TABLE IF NOT EXISTS user_skills (
 );
 ```
 
-### New API Endpoints
+### API Endpoints
 
 | Method | Route | Description |
 |--------|-------|-------------|
 | GET | `/api/skills` | Load all skills for authenticated user |
-| POST | `/api/skills` | Invest skill point `{ skillId, level }` |
-| POST | `/api/death` | Death: delete all skills, reduce XP by 75% |
-| POST | `/api/rescue` | Rescue success: save current XP (skills stay) |
+| POST | `/api/skills/invest` | Invest 1 point in skill `{ skillId }`. Server validates: prerequisite unlocked, not over maxLvl, enough unspent points. Returns updated skill list. |
+| POST | `/api/death` | Atomic transaction: delete all user_skills + set `xp = floor(xp * 0.25)`. Returns new XP. |
+| POST | `/api/rescue` | Rescue success: just save current XP (final sync). Skills stay. Returns profile. |
 
-Existing endpoints unchanged: `/api/register`, `/api/login`, `/api/profile`, `/api/xp`.
+**Modified existing endpoint:**
+- `POST /api/xp` — unchanged logic (additive), but now called periodically during run instead of only at death. No validation changes needed — it only adds, never subtracts.
+
+**Removed ambiguity:** `/api/death` is always called AFTER the final `/api/xp` sync. Client awaits the XP sync response before calling death. No race condition.
 
 ## Frontend Architecture
 
@@ -195,20 +271,31 @@ Stays single-file (`index.html`), but logically organized:
 - **Skill definitions:** Data-driven array of skill objects
 - **Skill tree UI:** Canvas renderer in lobby overlay (pan, zoom, click, hover)
 - **Stat system:** `getPlayerStat(stat)` computes base value + all active skill bonuses
-- **Rescue state machine:** Own state in game loop (idle → holding_f → survival_phase → circle_spawned → extracting → success/expired)
+- **Rescue state machine:** Own state in game loop with explicit transitions
 
 ### Stat System
 
 ```js
+const BASE_STATS = {
+  maxHp: 100,
+  moveSpeed: 2.8,
+  reloadMs: 1800,
+  shootCooldown: 8,
+  // ...
+};
+
 function getPlayerStat(stat) {
-  let value = BASE_STATS[stat];
+  const base = BASE_STATS[stat];
+  let flatBonus = 0;
+  let pctBonus = 0;
+
   for (const s of activeSkills) {
-    const effect = skillMap[s.skillId].effect(s.level);
-    if (effect[stat] !== undefined) {
-      value += effect[stat]; // or multiply, depending on stat type
-    }
+    const fx = skillMap[s.skillId].effect(s.level);
+    if (fx[stat]) flatBonus += fx[stat];
+    if (fx[stat + 'Pct']) pctBonus += fx[stat + 'Pct'];
   }
-  return value;
+
+  return base * (1 + pctBonus) + flatBonus;
 }
 ```
 
