@@ -664,6 +664,7 @@ async function showGameMenu() {
       if (res.ok) {
         const data = await res.json();
         globalXp = data.xp;
+        activeOperatorId = data.active_operator || null;
         globalGold = data.gold || 0;
         globalDiamonds = data.diamonds || 0;
         const totalLevel = getLevelFromXp(globalXp);

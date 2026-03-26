@@ -20,6 +20,7 @@ Top-Down Zombie Survival Shooter im Browser. Welle um Welle Zombies abknallen, X
 - **Waffen-Upgrades** — 6 Stats je 10 Level mit Gold upgraden
 - **Gold & Diamanten** — Zombies droppen Gold, seltene Diamant-Drops ab Wave 10
 - **Arsenal** — Waffen kaufen, upgraden und ausruesten im Hauptmenue
+- **6 Operatoren** — Klassen mit Aktiv/Passiv-Faehigkeiten, Buffs und Debuffs (Soldat, Medic, Builder, Elektriker, Time Traveler, Juggernaut)
 
 ## Schnellstart
 
@@ -41,6 +42,7 @@ Dann im Browser: **http://localhost:4444**
 | ESC | Pause |
 | Leertaste | Dash (wenn freigeschaltet) |
 | F halten | Rescue Mission anfordern |
+| Q | Operator-Faehigkeit aktivieren |
 | 1-6 | Waffe wechseln |
 
 ## Tech Stack
