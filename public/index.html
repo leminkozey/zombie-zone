@@ -81,6 +81,7 @@
   #overlay {
     background: rgba(6,6,10,0.92);
     background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.008) 2px, rgba(255,255,255,0.008) 4px);
+    pointer-events: auto;
   }
   #pause-screen {
     background: rgba(6,6,10,0.6);
@@ -109,9 +110,10 @@
     cursor: pointer;
     background: transparent;
     transition: all 0.2s;
-    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
     position: relative;
     text-transform: uppercase;
+    pointer-events: auto;
+    z-index: 1;
   }
   .start-btn:hover {
     background: #ee2200;
