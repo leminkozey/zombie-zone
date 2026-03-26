@@ -9,6 +9,8 @@ const {
   getUserWeapons, getWeapon, buyWeapon, addGold, setGold, addDiamonds, upgradeWeaponStat,
   getUserPerks, buyPerk,
   addStats, getStats, incrementRescues, updatePassword,
+  getUserOperators, getOperator, buyOperator, setActiveOperator,
+  resetOperatorUpgrades, upgradeOperatorSlot,
 } = require('./database');
 
 const app = express();
@@ -86,7 +88,7 @@ app.post('/api/login', (req, res) => {
 app.get('/api/profile', auth, (req, res) => {
   const user = getUser.get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json({ name: user.name, xp: user.xp, gold: user.gold, diamonds: user.diamonds });
+  res.json({ name: user.name, xp: user.xp, gold: user.gold, diamonds: user.diamonds, active_operator: user.active_operator });
 });
 
 // add xp
@@ -241,6 +243,18 @@ const PERK_DEFS = {
   minigun_cryo:       { weaponId: 'minigun', type: 'passive', name: 'Cryo Rounds', diamonds: 15, gold: 10000 },
 };
 
+// operator definitions
+const OPERATOR_DEFS = {
+  soldier:       { unlockLevel: 15, goldCost: 5000, diamondCost: 30 },
+  medic:         { unlockLevel: 25, goldCost: 12000, diamondCost: 50 },
+  builder:       { unlockLevel: 35, goldCost: 25000, diamondCost: 75 },
+  electrician:   { unlockLevel: 50, goldCost: 50000, diamondCost: 100 },
+  time_traveler: { unlockLevel: 70, goldCost: 100000, diamondCost: 150 },
+  juggernaut:    { unlockLevel: 90, goldCost: 200000, diamondCost: 200 },
+};
+const OP_UPGRADE_MAX = { active: 5, passive: 5, buff: 3 };
+const OP_UPGRADE_BASE_COST = { active: { gold: 5000, sp: 3 }, passive: { gold: 3000, sp: 2 }, buff: { gold: 8000, sp: 5 } };
+
 // GET /api/perk-defs
 app.get('/api/perk-defs', (req, res) => {
   res.json(PERK_DEFS);
@@ -281,6 +295,111 @@ app.post('/api/perks/buy', auth, (req, res) => {
   const perks = getUserPerks.all(req.user.id).map(p => p.perk_id);
   const updatedUser = getUser.get(req.user.id);
   res.json({ perks, gold: updatedUser.gold, diamonds: updatedUser.diamonds });
+});
+
+// GET /api/operators
+app.get('/api/operators', auth, (req, res) => {
+  const operators = getUserOperators.all(req.user.id);
+  const user = getUser.get(req.user.id);
+  res.json({ operators, activeOperator: user ? user.active_operator : null });
+});
+
+// POST /api/operators/buy
+app.post('/api/operators/buy', auth, (req, res) => {
+  const { operatorId, currency } = req.body;
+  if (!operatorId) return res.status(400).json({ error: 'operatorId required' });
+  if (!currency || !['gold', 'diamonds'].includes(currency)) return res.status(400).json({ error: 'currency must be gold or diamonds' });
+
+  const def = OPERATOR_DEFS[operatorId];
+  if (!def) return res.status(400).json({ error: 'Unknown operator' });
+
+  const user = getUser.get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const level = getLevelFromXp(user.xp);
+  if (level < def.unlockLevel) {
+    return res.status(400).json({ error: `Requires level ${def.unlockLevel}` });
+  }
+
+  const existing = getOperator.get(req.user.id, operatorId);
+  if (existing) return res.status(400).json({ error: 'Operator already owned' });
+
+  if (currency === 'gold') {
+    if (user.gold < def.goldCost) return res.status(400).json({ error: 'Not enough gold' });
+    addGold.run(-def.goldCost, req.user.id);
+  } else {
+    if (user.diamonds < def.diamondCost) return res.status(400).json({ error: 'Not enough diamonds' });
+    addDiamonds.run(-def.diamondCost, req.user.id);
+  }
+
+  buyOperator.run(req.user.id, operatorId);
+  const operators = getUserOperators.all(req.user.id);
+  const updated = getUser.get(req.user.id);
+  res.json({ operators, gold: updated.gold, diamonds: updated.diamonds });
+});
+
+// POST /api/operators/select
+app.post('/api/operators/select', auth, (req, res) => {
+  const { operatorId } = req.body;
+
+  // null = deselect
+  if (operatorId === null || operatorId === undefined) {
+    setActiveOperator.run(null, req.user.id);
+    return res.json({ activeOperator: null });
+  }
+
+  if (!OPERATOR_DEFS[operatorId]) return res.status(400).json({ error: 'Unknown operator' });
+
+  const existing = getOperator.get(req.user.id, operatorId);
+  if (!existing) return res.status(400).json({ error: 'Operator not owned' });
+
+  setActiveOperator.run(operatorId, req.user.id);
+  res.json({ activeOperator: operatorId });
+});
+
+// POST /api/operators/upgrade
+app.post('/api/operators/upgrade', auth, (req, res) => {
+  const { operatorId, slot } = req.body;
+  if (!operatorId || !slot) return res.status(400).json({ error: 'operatorId and slot required' });
+  if (!['active', 'passive', 'buff'].includes(slot)) return res.status(400).json({ error: 'Invalid slot' });
+
+  const op = getOperator.get(req.user.id, operatorId);
+  if (!op) return res.status(400).json({ error: 'Operator not owned' });
+
+  const currentLevel = op[`${slot}_level`];
+  const maxLevel = OP_UPGRADE_MAX[slot];
+  if (currentLevel >= maxLevel) return res.status(400).json({ error: 'Slot already at max level' });
+
+  const user = getUser.get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  // gold cost: base * (currentLevel + 1)
+  const goldCost = OP_UPGRADE_BASE_COST[slot].gold * (currentLevel + 1);
+  if (user.gold < goldCost) return res.status(400).json({ error: 'Not enough gold' });
+
+  // skill point cost check
+  const totalLevel = getLevelFromXp(user.xp);
+  const totalSP = totalLevel - 1;
+  const usedSkillSP = getUserSkills.all(req.user.id).reduce((sum, s) => sum + s.level, 0);
+  const allOps = getUserOperators.all(req.user.id);
+  const usedOpSP = allOps.reduce((sum, o) => {
+    let sp = 0;
+    for (let i = 1; i <= o.active_level; i++) sp += i * OP_UPGRADE_BASE_COST.active.sp;
+    for (let i = 1; i <= o.passive_level; i++) sp += i * OP_UPGRADE_BASE_COST.passive.sp;
+    for (let i = 1; i <= o.buff_level; i++) sp += i * OP_UPGRADE_BASE_COST.buff.sp;
+    return sum + sp;
+  }, 0);
+  const availableSP = totalSP - usedSkillSP - usedOpSP;
+
+  const spCost = (currentLevel + 1) * OP_UPGRADE_BASE_COST[slot].sp;
+  if (availableSP < spCost) return res.status(400).json({ error: 'Not enough skill points' });
+
+  addGold.run(-goldCost, req.user.id);
+  upgradeOperatorSlot(req.user.id, operatorId, slot);
+
+  const operators = getUserOperators.all(req.user.id);
+  const updated = getUser.get(req.user.id);
+  res.json({ operators, gold: updated.gold });
 });
 
 // POST /api/gold

@@ -22,6 +22,9 @@ db.exec(`
 try { db.exec('ALTER TABLE users ADD COLUMN gold INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN diamonds INTEGER DEFAULT 0'); } catch {}
 
+// safe migration for active operator
+try { db.exec('ALTER TABLE users ADD COLUMN active_operator TEXT DEFAULT NULL'); } catch {}
+
 // safe migrations for stats tracking
 try { db.exec('ALTER TABLE users ADD COLUMN total_kills INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN total_normal_kills INTEGER DEFAULT 0'); } catch {}
@@ -71,13 +74,26 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_operators (
+    user_id INTEGER NOT NULL,
+    operator_id TEXT NOT NULL,
+    owned INTEGER NOT NULL DEFAULT 1,
+    active_level INTEGER DEFAULT 0,
+    passive_level INTEGER DEFAULT 0,
+    buff_level INTEGER DEFAULT 0,
+    PRIMARY KEY (user_id, operator_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )
+`);
+
 // remove deprecated skills
 db.prepare("DELETE FROM user_skills WHERE skill_id IN ('quick_reload', 'trigger_finger')").run();
 
 const createUser = db.prepare('INSERT INTO users (name, password_hash) VALUES (?, ?)');
 const findUserByName = db.prepare('SELECT * FROM users WHERE name = ?');
 const addXp = db.prepare('UPDATE users SET xp = xp + ? WHERE id = ?');
-const getUser = db.prepare('SELECT id, name, xp, gold, diamonds FROM users WHERE id = ?');
+const getUser = db.prepare('SELECT id, name, xp, gold, diamonds, active_operator FROM users WHERE id = ?');
 const getUserSkills = db.prepare('SELECT skill_id, level FROM user_skills WHERE user_id = ?');
 const upsertSkill = db.prepare(`
   INSERT INTO user_skills (user_id, skill_id, level) VALUES (?, ?, 1)
@@ -96,6 +112,19 @@ const deleteUserWeapons = db.prepare('DELETE FROM user_weapons WHERE user_id = ?
 const getUserPerks = db.prepare('SELECT perk_id FROM user_perks WHERE user_id = ?');
 const buyPerk = db.prepare('INSERT OR IGNORE INTO user_perks (user_id, perk_id) VALUES (?, ?)');
 const deleteUserPerks = db.prepare('DELETE FROM user_perks WHERE user_id = ?');
+
+// operator statements
+const getUserOperators = db.prepare('SELECT * FROM user_operators WHERE user_id = ?');
+const getOperator = db.prepare('SELECT * FROM user_operators WHERE user_id = ? AND operator_id = ?');
+const buyOperator = db.prepare('INSERT OR IGNORE INTO user_operators (user_id, operator_id) VALUES (?, ?)');
+const setActiveOperator = db.prepare('UPDATE users SET active_operator = ? WHERE id = ?');
+const resetOperatorUpgrades = db.prepare('UPDATE user_operators SET active_level = 0, passive_level = 0, buff_level = 0 WHERE user_id = ?');
+
+function upgradeOperatorSlot(userId, operatorId, slot) {
+  const validSlots = ['active', 'passive', 'buff'];
+  if (!validSlots.includes(slot)) throw new Error('Invalid slot');
+  db.prepare(`UPDATE user_operators SET ${slot}_level = ${slot}_level + 1 WHERE user_id = ? AND operator_id = ?`).run(userId, operatorId);
+}
 
 // currency statements
 const addGold = db.prepare('UPDATE users SET gold = gold + ? WHERE id = ?');
@@ -138,6 +167,7 @@ const applyDeath = db.transaction((userId) => {
   deleteUserSkills.run(userId);
   deleteUserWeapons.run(userId);
   deleteUserPerks.run(userId);
+  resetOperatorUpgrades.run(userId);
   incrementDeaths.run(userId);
   return { xp: newXp, gold: 0, diamonds: user.diamonds };
 });
@@ -149,4 +179,6 @@ module.exports = {
   getUserPerks, buyPerk, deleteUserPerks,
   addGold, setGold, addDiamonds, upgradeWeaponStat,
   addStats, getStats, incrementRescues, updatePassword,
+  getUserOperators, getOperator, buyOperator, setActiveOperator,
+  resetOperatorUpgrades, upgradeOperatorSlot,
 };
