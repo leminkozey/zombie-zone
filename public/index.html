@@ -78,8 +78,7 @@
     gap: 10px;
   }
   #overlay {
-    background: rgba(6,6,10,0.92);
-    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.008) 2px, rgba(255,255,255,0.008) 4px);
+    background: #06060a;
     pointer-events: auto;
   }
   #pause-screen {
@@ -478,7 +477,9 @@
     </div>
 
     <!-- ARSENAL panel -->
-    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:row">
+    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:row;position:relative">
+      <!-- Gold display in arsenal -->
+      <div id="arsenal-gold" style="position:absolute;top:12px;right:340px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#ddaa00;letter-spacing:1px;z-index:2"></div>
       <!-- Left: Weapon list -->
       <div id="arsenal-sidebar" style="width:220px;background:#0a0d10;border-right:1px solid #141a20;padding:16px 0;overflow-y:auto">
         <div style="font-size:10px;letter-spacing:3px;color:#3a4450;padding:0 16px;margin-bottom:12px">WAFFENLAGER</div>
@@ -4155,6 +4156,10 @@ function renderArsenal() {
   const weaponList = document.getElementById('weapon-list');
   if (!weaponList) return;
   weaponList.innerHTML = '';
+
+  // Update gold display in arsenal
+  const arsenalGold = document.getElementById('arsenal-gold');
+  if (arsenalGold) arsenalGold.textContent = globalGold + ' G';
 
   const level = getLevelFromXp(globalXp);
   const gold = globalGold;
