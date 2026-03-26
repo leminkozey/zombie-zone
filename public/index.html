@@ -71,7 +71,6 @@
   #overlay, #pause-screen {
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.88);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -79,45 +78,59 @@
     z-index: 20;
     gap: 10px;
   }
+  #overlay {
+    background: rgba(6,6,10,0.92);
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.008) 2px, rgba(255,255,255,0.008) 4px);
+  }
+  #pause-screen {
+    background: rgba(6,6,10,0.6);
+    backdrop-filter: blur(8px) saturate(0.7);
+  }
   #overlay h1 {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 80px;
-    color: #cc2200;
-    letter-spacing: 12px;
-    text-shadow: 0 0 40px #cc220088, 0 0 80px #cc220044;
+    font-size: 86px;
+    color: #ee2200;
+    letter-spacing: 14px;
     line-height: 1;
+    position: relative;
+    text-shadow: 0 0 50px #ee220066, 0 0 100px #ee220033;
   }
-  #overlay .sub { color: #555; font-size: 12px; letter-spacing: 3px; }
-  #overlay .hint { color: #444; font-size: 11px; line-height: 2.2; text-align: center; }
+  #overlay .sub { color: #505060; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 4px; }
+  #overlay .hint { color: #404050; font-family: 'JetBrains Mono', monospace; font-size: 10px; line-height: 2.4; text-align: center; letter-spacing: 1px; }
   .start-btn {
     margin-top: 12px;
-    border: 1px solid #cc2200;
-    color: #cc2200;
+    border: 1px solid #ee2200;
+    color: #ee2200;
     padding: 12px 48px;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 22px;
+    font-family: 'Oswald', 'Bebas Neue', sans-serif;
+    font-weight: 600;
+    font-size: 18px;
     letter-spacing: 6px;
     cursor: pointer;
     background: transparent;
     transition: all 0.2s;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
+    position: relative;
+    text-transform: uppercase;
   }
   .start-btn:hover {
-    background: #cc2200;
-    color: #000;
-    box-shadow: 0 0 20px #cc220066;
+    background: #ee2200;
+    color: #0c0c0e;
+    box-shadow: 0 0 25px #ee220055;
     transform: scale(1.03);
+    background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(255,255,255,0.06) 1px, rgba(255,255,255,0.06) 2px);
   }
   .start-btn:active {
     transform: scale(0.97);
   }
   .btn-secondary {
-    border-color: #555;
-    color: #555;
+    border-color: #404050;
+    color: #606070;
   }
   .btn-secondary:hover {
-    background: #555;
-    color: #000;
-    box-shadow: 0 0 20px #55555566;
+    background: #404050;
+    color: #0c0c0e;
+    box-shadow: 0 0 20px rgba(60,60,70,0.4);
   }
   #wave-banner {
     position: absolute;
@@ -152,21 +165,38 @@
   #auth-screen {
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.92);
+    background: #0c0c0e;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.008) 2px, rgba(255,255,255,0.008) 4px),
+      radial-gradient(ellipse at 50% 30%, rgba(238,34,0,0.04) 0%, transparent 60%);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     z-index: 30;
     gap: 12px;
+    overflow: hidden;
   }
+  #auth-screen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.15) 1px, rgba(0,0,0,0.15) 2px);
+    animation: scanlines 8s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+  @keyframes scanlines { from { transform: translateY(0); } to { transform: translateY(4px); } }
+  #auth-screen > * { position: relative; z-index: 2; }
   #auth-screen h1 {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 60px;
-    color: #cc2200;
-    letter-spacing: 10px;
-    text-shadow: 0 0 40px #cc220088;
+    font-size: 72px;
+    color: #ee2200;
+    letter-spacing: 14px;
     margin-bottom: 8px;
+    position: relative;
+    z-index: 2;
+    text-shadow: 0 0 50px #ee220066, 3px 0 #ee220022, -3px 0 #2200ee11;
   }
   .auth-tabs {
     display: flex;
@@ -174,40 +204,47 @@
   }
   .auth-tab {
     padding: 8px 24px;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
     letter-spacing: 2px;
     background: transparent;
-    border: 1px solid #333;
-    color: #555;
+    border: 1px solid #252530;
+    color: #505060;
     cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
   }
+  .auth-tab:hover { border-color: #404050; color: #808090; }
   .auth-tab.active {
-    color: #cc2200;
-    border-color: #cc2200;
-    background: rgba(204,34,0,0.1);
+    color: #ee2200;
+    border-color: #ee2200;
+    background: rgba(238,34,0,0.08);
   }
   .auth-input {
-    background: #111;
-    border: 1px solid #333;
-    color: #ddd;
-    padding: 10px 16px;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 14px;
-    width: 260px;
+    background: #0a0a10;
+    border: 1px solid #252530;
+    color: #d0d0d8;
+    padding: 11px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    width: 280px;
     outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
   }
-  .auth-input:focus { border-color: #cc2200; }
+  .auth-input:focus { border-color: #ee2200; box-shadow: 0 0 12px rgba(238,34,0,0.15); }
+  .auth-input::placeholder { color: #353540; }
   #auth-error {
-    color: #cc2200;
-    font-size: 11px;
+    color: #ee2200;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
     letter-spacing: 1px;
     min-height: 16px;
   }
   #user-display {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: #555;
-    letter-spacing: 2px;
+    color: #505060;
+    letter-spacing: 3px;
   }
   #xp-bar-wrap {
     position: absolute;
@@ -305,7 +342,7 @@
   <div id="level-up-banner">LEVEL UP!</div>
 
   <div id="auth-screen">
-    <div class="sub" style="color:#555;font-size:11px;letter-spacing:3px">TOP-DOWN SURVIVAL</div>
+    <div class="sub" style="color:#505060;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:4px">TOP-DOWN SURVIVAL</div>
     <h1>DEAD ZONE</h1>
     <div class="auth-tabs">
       <button class="auth-tab active" onclick="switchAuthTab('login')">LOGIN</button>
@@ -315,8 +352,8 @@
     <input class="auth-input" id="auth-pass" type="password" placeholder="Passwort">
     <div id="auth-error"></div>
     <button class="start-btn" id="auth-btn" onclick="doAuth()">LOGIN</button>
-    <div id="logout-hint" style="color:#333;font-size:10px;margin-top:20px;letter-spacing:1px;display:none">
-      Eingeloggt als <span id="logged-name"></span> — <a href="#" onclick="doLogout();return false" style="color:#cc2200">Abmelden</a>
+    <div id="logout-hint" style="color:#353540;font-family:'JetBrains Mono',monospace;font-size:10px;margin-top:20px;letter-spacing:1px;display:none">
+      Eingeloggt als <span id="logged-name"></span> — <a href="#" onclick="doLogout();return false" style="color:#ee2200">Abmelden</a>
     </div>
   </div>
 
@@ -324,23 +361,23 @@
     <div class="sub">TOP-DOWN SURVIVAL</div>
     <h1>DEAD ZONE</h1>
     <div id="user-display"></div>
-    <div id="lobby-stats" style="color:#666;font-size:13px;letter-spacing:2px;margin:8px 0"></div>
-    <div id="last-run" style="color:#cc2200;font-size:12px;letter-spacing:1px;min-height:18px"></div>
+    <div id="lobby-stats" style="color:#606070;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:2px;margin:8px 0"></div>
+    <div id="last-run" style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;min-height:18px"></div>
     <div class="hint">
       WASD — Bewegen &nbsp;|&nbsp; MAUS — Zielen &nbsp;|&nbsp; LINKSKLICK — Schie&szlig;en<br>
       R — Nachladen &nbsp;|&nbsp; SPACE — Dash &nbsp;|&nbsp; F halten — Rescue &nbsp;|&nbsp; ESC — Pause
     </div>
     <button class="start-btn" id="start-btn">STARTEN</button>
     <button class="start-btn btn-secondary" id="skilltree-btn" style="margin-top:4px">SKILL TREE</button>
-    <div style="margin-top:16px"><a href="#" onclick="doLogout();return false" style="color:#444;font-size:10px;letter-spacing:2px">ABMELDEN</a></div>
+    <div style="margin-top:16px"><a href="#" onclick="doLogout();return false" style="color:#404050;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;transition:color 0.2s" onmouseover="this.style.color='#ee2200'" onmouseout="this.style.color='#404050'">ABMELDEN</a></div>
   </div>
 
   <div id="pause-screen" style="display:none">
-    <div class="sub" style="color:#555;letter-spacing:4px">PAUSE</div>
-    <h1 style="font-family:'Bebas Neue',sans-serif;font-size:60px;color:#cc2200;letter-spacing:10px">DEAD ZONE</h1>
+    <div class="sub" style="color:#505060;letter-spacing:5px;font-family:'JetBrains Mono',monospace;font-size:11px">// PAUSE //</div>
+    <h1 style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:#ee2200;letter-spacing:12px;text-shadow:0 0 40px #ee220055">DEAD ZONE</h1>
     <button class="start-btn" id="resume-btn">WEITER</button>
     <button class="start-btn btn-secondary" id="quit-btn">ZUR LOBBY</button>
-    <div style="color:#cc2200;font-size:10px;letter-spacing:1px;margin-top:8px">ACHTUNG: VERLASSEN = TOD-STRAFE</div>
+    <div style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;margin-top:10px;opacity:0.7">ACHTUNG: VERLASSEN = TOD-STRAFE</div>
   </div>
 
   <div id="skill-tree-screen" style="display:none">
