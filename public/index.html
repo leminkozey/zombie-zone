@@ -293,11 +293,21 @@
     opacity: 0;
     transition: opacity 0.3s;
   }
-  #skill-tree-screen { position: absolute; inset: 0; background: #050510; z-index: 25; }
+  #skill-tree-screen { position: absolute; inset: 0; background: #06080a; z-index: 25; }
   #skill-tree-canvas { width: 100%; height: 100%; }
-  #st-survival:not(.btn-secondary) { border-color: #33cc44; color: #33cc44; }
-  #st-mobility:not(.btn-secondary) { border-color: #33aaff; color: #33aaff; }
-  #st-rescue:not(.btn-secondary) { border-color: #ffaa00; color: #ffaa00; }
+  #st-scanline { position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    background: repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255,255,255,0.01) 2px, rgba(255,255,255,0.01) 4px); }
+  #st-hud-top { background: rgba(6,8,10,0.85); border-bottom: 1px solid #1a1e22; padding: 8px 0 !important; }
+  #st-hud-top .start-btn { border: none !important; border-bottom: 2px solid transparent !important; background: transparent !important;
+    font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; font-weight: 500 !important;
+    padding: 6px 20px !important; letter-spacing: 3px !important; color: #404855 !important; transition: all 0.15s !important; }
+  #st-hud-top .start-btn:hover { color: #8090a0 !important; }
+  #st-survival:not(.btn-secondary) { border-bottom-color: #33cc44 !important; color: #33cc44 !important; }
+  #st-mobility:not(.btn-secondary) { border-bottom-color: #33aaff !important; color: #33aaff !important; }
+  #st-rescue:not(.btn-secondary) { border-bottom-color: #ffaa00 !important; color: #ffaa00 !important; }
+  #st-points { font-family: 'JetBrains Mono', monospace !important; font-size: 11px !important; color: #556070 !important; }
+  #st-tooltip { background: rgba(8,12,16,0.96) !important; border: 1px solid #1e2530 !important; border-left: 3px solid #445 !important;
+    font-family: 'JetBrains Mono', monospace !important; padding: 12px 14px !important; }
   @keyframes pulse { from { opacity:1; } to { opacity:0.5; } }
   @keyframes blink-border { 0%,100% { border-color: #ee2200; color: #ee2200; } 50% { border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 12px #ffaa0044; } }
   .blink-notify { animation: blink-border 1.2s ease-in-out infinite !important; border-color: #ee2200 !important; color: #ee2200 !important; }
@@ -381,6 +391,7 @@
 
   <div id="skill-tree-screen" style="display:none">
     <canvas id="skill-tree-canvas" style="position:absolute;inset:0;cursor:grab"></canvas>
+    <div id="st-scanline"></div>
     <div id="st-hud-top" style="position:absolute;top:12px;left:0;right:0;display:flex;justify-content:center;gap:0;z-index:10">
       <button class="start-btn" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:4px 0 0 4px" id="st-survival">SURVIVAL</button>
       <button class="start-btn btn-secondary" style="font-size:14px;padding:8px 24px;letter-spacing:3px;border-radius:0" id="st-mobility">MOBILITY</button>
@@ -3096,15 +3107,10 @@ let stHovered = null;
 let stTime = 0;
 
 const ST_COLORS = {
-  survival: { main: '#33cc44', dim: '#1a6622', glow: 'rgba(51,204,68,0.25)', bg: 'rgba(51,204,68,0.08)', nebula: 'rgba(51,204,68,0.03)' },
-  mobility: { main: '#33aaff', dim: '#1a5580', glow: 'rgba(51,170,255,0.25)', bg: 'rgba(51,170,255,0.08)', nebula: 'rgba(51,170,255,0.03)' },
-  rescue:   { main: '#ffaa00', dim: '#805500', glow: 'rgba(255,170,0,0.25)',  bg: 'rgba(255,170,0,0.08)',  nebula: 'rgba(255,170,0,0.03)' },
+  survival: { main: '#33cc44', dim: '#1a3a1e', glow: 'rgba(51,204,68,0.3)', bg: 'rgba(51,204,68,0.1)', line: '#1e4a22' },
+  mobility: { main: '#33aaff', dim: '#152a40', glow: 'rgba(51,170,255,0.3)', bg: 'rgba(51,170,255,0.1)', line: '#183050' },
+  rescue:   { main: '#ffaa00', dim: '#3a2a0a', glow: 'rgba(255,170,0,0.3)',  bg: 'rgba(255,170,0,0.1)',  line: '#4a3510' },
 };
-
-const stStars = [];
-for (let i = 0; i < 400; i++) {
-  stStars.push({ x: (Math.random()-0.5)*2000, y: (Math.random()-0.5)*2000, r: Math.random()*1.2, a: 0.15+Math.random()*0.35, tw: Math.random()*Math.PI*2 });
-}
 
 function stWorldToScreen(wx, wy) {
   return { x: (wx - stCamX) * stZoom + stCanvas.width/2, y: (wy - stCamY) * stZoom + stCanvas.height/2 };
@@ -3147,6 +3153,27 @@ async function investSkillPoint(skillId) {
   } catch {}
 }
 
+// Draw hexagon path helper
+function stHexPath(ctx, x, y, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 6 + (Math.PI / 3) * i;
+    const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// Draw diamond path helper
+function stDiamondPath(ctx, x, y, r) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 1.2);
+  ctx.lineTo(x + r, y);
+  ctx.lineTo(x, y + r * 1.2);
+  ctx.lineTo(x - r, y);
+  ctx.closePath();
+}
+
 function drawSkillTree() {
   if (!stActive) return;
   stTime += 0.016;
@@ -3158,51 +3185,83 @@ function drawSkillTree() {
 
   stCtx.clearRect(0, 0, sw, sh);
 
-  // Background
-  const grad = stCtx.createRadialGradient(sw/2, sh/2, 0, sw/2, sh/2, sw*0.7);
-  grad.addColorStop(0, '#0a0a18'); grad.addColorStop(1, '#040410');
-  stCtx.fillStyle = grad;
+  // Background — dark tactical
+  stCtx.fillStyle = '#06080a';
   stCtx.fillRect(0, 0, sw, sh);
 
-  // Stars
-  for (const s of stStars) {
-    const p = stWorldToScreen(s.x, s.y);
-    if (p.x < -10 || p.x > sw+10 || p.y < -10 || p.y > sh+10) continue;
-    stCtx.globalAlpha = s.a * (0.5 + 0.5 * Math.sin(stTime * 1.5 + s.tw));
-    stCtx.fillStyle = '#fff';
-    stCtx.beginPath();
-    stCtx.arc(p.x, p.y, s.r * Math.min(stZoom, 1.5), 0, Math.PI * 2);
-    stCtx.fill();
+  // Hex grid background
+  const hexSize = 40 * stZoom;
+  if (hexSize > 8) {
+    stCtx.strokeStyle = '#0e1014';
+    stCtx.lineWidth = 0.5;
+    const hexH = hexSize * Math.sqrt(3);
+    const startCol = Math.floor((-sw/2/stZoom + stCamX) / (hexSize * 1.5)) - 1;
+    const endCol = startCol + Math.ceil(sw / (hexSize * 1.5 * stZoom)) + 3;
+    const startRow = Math.floor((-sh/2/stZoom + stCamY) / hexH) - 1;
+    const endRow = startRow + Math.ceil(sh / (hexH * stZoom)) + 3;
+    for (let col = startCol; col < endCol; col++) {
+      for (let row = startRow; row < endRow; row++) {
+        const wx = col * hexSize * 1.5;
+        const wy = row * hexH + (col % 2 ? hexH / 2 : 0);
+        const p = stWorldToScreen(wx, wy);
+        if (p.x < -hexSize*2 || p.x > sw+hexSize*2 || p.y < -hexSize*2 || p.y > sh+hexSize*2) continue;
+        stHexPath(stCtx, p.x, p.y, hexSize * 0.55);
+        stCtx.stroke();
+      }
+    }
   }
-  stCtx.globalAlpha = 1;
 
   const col = ST_COLORS[stActivePath];
   const activeSkillDefs = SKILLS.filter(s => s.path === stActivePath);
   const activeConns = SKILL_CONNECTIONS.filter(c => c.path === stActivePath);
 
-  // Nebula
-  const center = stWorldToScreen(0, -200);
-  stCtx.beginPath();
-  stCtx.ellipse(center.x, center.y, 350*stZoom, 300*stZoom, 0, 0, Math.PI*2);
-  stCtx.fillStyle = col.nebula;
-  stCtx.fill();
-
-  // Connections
+  // Connections — angular lines with flow dots
   for (const c of activeConns) {
     const from = SKILL_MAP[c.from], to = SKILL_MAP[c.to];
     const p1 = stWorldToScreen(from.x, from.y), p2 = stWorldToScreen(to.x, to.y);
-    stCtx.save();
-    stCtx.strokeStyle = col.glow; stCtx.lineWidth = 5 * stZoom;
-    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
-    stCtx.strokeStyle = col.dim; stCtx.lineWidth = 1.5 * stZoom;
-    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
-    for (let i = 0; i < 2; i++) {
-      const t = ((stTime * 0.3 + i / 2) % 1);
-      stCtx.beginPath();
-      stCtx.arc(p1.x + (p2.x-p1.x)*t, p1.y + (p2.y-p1.y)*t, 1.5*stZoom, 0, Math.PI*2);
-      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.4; stCtx.fill(); stCtx.globalAlpha = 1;
+    const fromInvested = getSkillLevel(from.id) > 0 || from.tier === 0;
+    const toInvested = getSkillLevel(to.id) > 0;
+    const active = fromInvested;
+
+    // Line glow (only for active connections)
+    if (active) {
+      stCtx.save();
+      stCtx.strokeStyle = col.glow; stCtx.lineWidth = 4 * stZoom;
+      stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
+      stCtx.restore();
     }
-    stCtx.restore();
+
+    // Main line
+    stCtx.strokeStyle = active ? col.line : '#111418';
+    stCtx.lineWidth = (active ? 2 : 1) * stZoom;
+    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
+
+    // Flow dots (only on active connections)
+    if (active) {
+      for (let i = 0; i < 3; i++) {
+        const t = ((stTime * 0.25 + i / 3) % 1);
+        const fx = p1.x + (p2.x - p1.x) * t;
+        const fy = p1.y + (p2.y - p1.y) * t;
+        stCtx.fillStyle = col.main;
+        stCtx.globalAlpha = 0.5 * (1 - Math.abs(t - 0.5) * 2);
+        stCtx.beginPath(); stCtx.arc(fx, fy, 1.5 * stZoom, 0, Math.PI * 2); stCtx.fill();
+      }
+      stCtx.globalAlpha = 1;
+
+      // Arrow tip at 70% along line
+      const at = 0.7;
+      const ax = p1.x + (p2.x - p1.x) * at;
+      const ay = p1.y + (p2.y - p1.y) * at;
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      const arrowSize = 4 * stZoom;
+      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.6;
+      stCtx.beginPath();
+      stCtx.moveTo(ax + Math.cos(angle) * arrowSize, ay + Math.sin(angle) * arrowSize);
+      stCtx.lineTo(ax + Math.cos(angle + 2.5) * arrowSize * 0.7, ay + Math.sin(angle + 2.5) * arrowSize * 0.7);
+      stCtx.lineTo(ax + Math.cos(angle - 2.5) * arrowSize * 0.7, ay + Math.sin(angle - 2.5) * arrowSize * 0.7);
+      stCtx.fill();
+      stCtx.globalAlpha = 1;
+    }
   }
 
   // Nodes
@@ -3213,73 +3272,135 @@ function drawSkillTree() {
     const invested = getSkillLevel(s.id);
     const unlockable = isSkillUnlockable(s);
     const hasInvestment = invested > 0;
+    const isTier3 = s.tier === 3;
+    const isStart = s.tier === 0;
+    const isLocked = !hasInvestment && !unlockable && !isStart;
 
-    if (isHovered || s.tier === 3 || hasInvestment) {
+    // Glow for invested/hovered nodes
+    if ((hasInvestment || isHovered) && !isStart) {
       stCtx.save();
-      stCtx.shadowBlur = isHovered ? 35 : hasInvestment ? 20 : 15;
+      stCtx.shadowBlur = isHovered ? 30 : 18;
       stCtx.shadowColor = col.main;
-      stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI*2);
+      isTier3 ? stDiamondPath(stCtx, p.x, p.y, r) : stHexPath(stCtx, p.x, p.y, r);
       stCtx.fillStyle = 'rgba(0,0,0,0.01)'; stCtx.fill();
       stCtx.restore();
     }
 
-    if (s.tier === 3) {
-      const pulseR = r + 6*stZoom + Math.sin(stTime*2)*3*stZoom;
+    // Tier 3 outer ring — pulsing diamond
+    if (isTier3) {
+      const pulse = r + 5*stZoom + Math.sin(stTime * 2) * 2*stZoom;
       stCtx.save();
-      stCtx.beginPath(); stCtx.arc(p.x, p.y, pulseR, 0, Math.PI*2);
-      stCtx.strokeStyle = col.dim; stCtx.lineWidth = stZoom;
-      stCtx.globalAlpha = 0.4 + Math.sin(stTime*2)*0.2;
-      stCtx.setLineDash([4*stZoom, 4*stZoom]); stCtx.stroke();
+      stDiamondPath(stCtx, p.x, p.y, pulse);
+      stCtx.strokeStyle = hasInvestment ? col.main : col.dim;
+      stCtx.lineWidth = stZoom;
+      stCtx.globalAlpha = 0.3 + Math.sin(stTime * 2) * 0.15;
+      stCtx.setLineDash([3*stZoom, 3*stZoom]); stCtx.stroke();
       stCtx.restore();
     }
 
+    // Node shape
     stCtx.save();
-    stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI*2);
-    stCtx.fillStyle = hasInvestment ? col.bg : isHovered ? 'rgba(20,20,40,0.9)' : 'rgba(10,10,20,0.85)';
+    if (isTier3) {
+      stDiamondPath(stCtx, p.x, p.y, r);
+    } else if (isStart) {
+      stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    } else {
+      stHexPath(stCtx, p.x, p.y, r);
+    }
+
+    // Fill
+    if (hasInvestment) {
+      stCtx.fillStyle = col.bg;
+    } else if (isStart) {
+      stCtx.fillStyle = 'rgba(15,18,22,0.9)';
+    } else if (isLocked) {
+      stCtx.fillStyle = '#0a0c0e';
+    } else if (isHovered) {
+      stCtx.fillStyle = 'rgba(20,25,30,0.95)';
+    } else {
+      stCtx.fillStyle = '#0c0e12';
+    }
     stCtx.fill();
-    stCtx.strokeStyle = hasInvestment ? col.main : unlockable ? col.dim : '#222';
-    stCtx.lineWidth = (isHovered ? 2.5 : hasInvestment ? 2 : 1.5) * stZoom;
+
+    // Border
+    if (hasInvestment) {
+      stCtx.strokeStyle = col.main;
+      stCtx.lineWidth = 2 * stZoom;
+    } else if (unlockable) {
+      stCtx.strokeStyle = col.dim;
+      stCtx.lineWidth = 1.5 * stZoom;
+    } else if (isStart) {
+      stCtx.strokeStyle = col.dim;
+      stCtx.lineWidth = 1.5 * stZoom;
+    } else {
+      stCtx.strokeStyle = '#1a1e22';
+      stCtx.lineWidth = 1 * stZoom;
+    }
     stCtx.stroke();
     stCtx.restore();
 
-    if (s.tier === 0) {
-      stCtx.save(); stCtx.beginPath(); stCtx.arc(p.x, p.y, r*0.5, 0, Math.PI*2);
-      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.3; stCtx.fill(); stCtx.restore();
-    }
-
-    if (stZoom > 0.35) {
+    // Start node — inner marker
+    if (isStart) {
       stCtx.save();
-      stCtx.font = Math.max(12, r*0.75) + 'px serif';
-      stCtx.textAlign = 'center'; stCtx.textBaseline = 'middle';
-      stCtx.globalAlpha = hasInvestment || s.tier === 0 ? 1 : unlockable ? 0.7 : 0.3;
-      stCtx.fillText(s.icon, p.x, p.y + 1);
+      stCtx.beginPath(); stCtx.arc(p.x, p.y, r * 0.4, 0, Math.PI * 2);
+      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.4; stCtx.fill();
       stCtx.restore();
     }
 
+    // Locked redaction lines
+    if (isLocked && stZoom > 0.5) {
+      stCtx.save();
+      stCtx.globalAlpha = 0.15;
+      stCtx.strokeStyle = '#333';
+      stCtx.lineWidth = 2 * stZoom;
+      const lw = r * 0.6;
+      stCtx.beginPath();
+      stCtx.moveTo(p.x - lw, p.y - 1*stZoom); stCtx.lineTo(p.x + lw, p.y - 1*stZoom);
+      stCtx.moveTo(p.x - lw*0.7, p.y + 3*stZoom); stCtx.lineTo(p.x + lw*0.7, p.y + 3*stZoom);
+      stCtx.stroke();
+      stCtx.restore();
+    }
+
+    // Icon
+    if (stZoom > 0.35 && !isLocked) {
+      stCtx.save();
+      stCtx.font = Math.max(12, r * 0.7) + 'px serif';
+      stCtx.textAlign = 'center'; stCtx.textBaseline = 'middle';
+      stCtx.globalAlpha = hasInvestment || isStart ? 1 : 0.6;
+      stCtx.fillText(s.icon, p.x, p.y);
+      stCtx.restore();
+    }
+
+    // Name label
     if (stZoom > 0.55) {
       stCtx.save();
-      stCtx.font = Math.max(8, 10*stZoom) + "px 'Share Tech Mono', monospace";
+      stCtx.font = Math.max(8, 9*stZoom) + "px 'JetBrains Mono', monospace";
       stCtx.textAlign = 'center';
-      stCtx.fillStyle = hasInvestment ? col.main : isHovered ? '#888' : '#444';
-      stCtx.fillText(s.name, p.x, p.y + r + 14*stZoom);
+      stCtx.fillStyle = hasInvestment ? col.main : isHovered ? '#778' : isLocked ? '#222' : '#445';
+      const labelY = isTier3 ? p.y + r * 1.3 + 10*stZoom : p.y + r + 12*stZoom;
+      stCtx.fillText(s.name, p.x, labelY);
       stCtx.restore();
     }
 
+    // Level pips
     if (s.maxLvl > 0 && stZoom > 0.5) {
-      const pipW = 6*stZoom, pipH = 3*stZoom, gap = 3*stZoom;
+      const pipW = 5*stZoom, pipH = 2.5*stZoom, gap = 2*stZoom;
       const totalW = s.maxLvl * (pipW + gap) - gap;
-      const startX = p.x - totalW/2;
-      const pipY = p.y - r - 8*stZoom;
+      const startX = p.x - totalW / 2;
+      const pipY = isTier3 ? p.y - r * 1.3 - 6*stZoom : p.y - r - 6*stZoom;
       for (let i = 0; i < s.maxLvl; i++) {
-        stCtx.fillStyle = i < invested ? col.main : col.dim;
-        stCtx.globalAlpha = i < invested ? 1 : 0.3;
-        stCtx.fillRect(startX + i*(pipW+gap), pipY, pipW, pipH);
+        stCtx.fillStyle = i < invested ? col.main : '#1a1e22';
+        stCtx.globalAlpha = i < invested ? 1 : 0.5;
+        stCtx.fillRect(startX + i * (pipW + gap), pipY, pipW, pipH);
       }
       stCtx.globalAlpha = 1;
     }
   }
 
-  document.getElementById('st-points').textContent = 'VERFUEGBARE PUNKTE: ' + getAvailableSkillPoints();
+  // HUD text
+  const pts = getAvailableSkillPoints();
+  document.getElementById('st-points').textContent = 'PUNKTE: ' + pts;
+  document.getElementById('st-points').style.color = pts > 0 ? col.main : '#556070';
 
   requestAnimationFrame(drawSkillTree);
 }
@@ -3311,20 +3432,26 @@ stCanvas.addEventListener('mousemove', e => {
     const s = stHovered;
     const c = ST_COLORS[s.path];
     const lvl = getSkillLevel(s.id);
-    let html = '<h3 style="font-family:Bebas Neue;font-size:20px;letter-spacing:3px;color:' + c.main + ';margin-bottom:4px">' + s.name + '</h3>';
-    html += '<div style="font-size:10px;color:#888;line-height:1.6;margin-bottom:8px">' + s.desc + '</div>';
+    const isLocked = lvl === 0 && !isSkillUnlockable(s) && s.tier > 0;
+    let html = '<div style="font-size:8px;color:#334;letter-spacing:2px;margin-bottom:4px">' + (s.tier === 3 ? 'CAPSTONE' : 'TIER ' + s.tier) + '</div>';
+    html += '<div style="font-family:Oswald,sans-serif;font-size:16px;letter-spacing:2px;color:' + c.main + ';margin-bottom:6px">' + s.name + '</div>';
+    if (isLocked) {
+      html += '<div style="font-size:10px;color:#334;letter-spacing:1px">[CLASSIFIED]</div>';
+    } else {
+      html += '<div style="font-size:10px;color:#667;line-height:1.6;margin-bottom:8px">' + s.desc + '</div>';
+    }
     if (s.maxLvl > 0) {
-      html += '<div style="font-size:10px;color:#666;margin-bottom:4px">Level: ' + lvl + ' / ' + s.maxLvl + '</div>';
+      html += '<div style="font-size:9px;color:#556;margin-bottom:4px;letter-spacing:1px">LVL ' + lvl + '/' + s.maxLvl + '</div>';
       if (s.effect && lvl > 0) {
         const fx = s.effect(lvl);
         const entries = Object.entries(fx).filter(([k,v]) => v !== 0);
         if (entries.length > 0) {
-          html += '<div style="font-size:10px;color:#aaa;border-top:1px solid #222;padding-top:6px">';
-          for (const [k, v] of entries) html += k + ': <span style="color:#55cc33">' + (v > 0 ? '+' : '') + v + '</span><br>';
+          html += '<div style="font-size:9px;color:#889;border-top:1px solid #1a1e22;padding-top:6px;margin-top:4px">';
+          for (const [k, v] of entries) html += k + ': <span style="color:' + c.main + '">' + (v > 0 ? '+' : '') + v + '</span><br>';
           html += '</div>';
         }
       }
-      if (s.req) html += '<div style="font-size:9px;color:#cc2200;margin-top:6px">Braucht: ' + SKILL_MAP[s.req].name + '</div>';
+      if (s.req) html += '<div style="font-size:8px;color:#cc2200;margin-top:6px;letter-spacing:1px">REQ: ' + SKILL_MAP[s.req].name + '</div>';
     }
     tt.innerHTML = html;
     let tx = e.clientX + 16, ty = e.clientY - 10;
