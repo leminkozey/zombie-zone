@@ -306,6 +306,7 @@
     <h1 style="font-family:'Bebas Neue',sans-serif;font-size:60px;color:#cc2200;letter-spacing:10px">DEAD ZONE</h1>
     <button class="start-btn" id="resume-btn">WEITER</button>
     <button class="start-btn btn-secondary" id="quit-btn">ZUR LOBBY</button>
+    <div style="color:#cc2200;font-size:10px;letter-spacing:1px;margin-top:8px">ACHTUNG: VERLASSEN = TOD-STRAFE</div>
   </div>
 </div>
 
@@ -375,9 +376,11 @@ async function showGameMenu() {
       });
       if (res.ok) {
         const data = await res.json();
-        const totalLevel = getLevelFromXp(data.xp);
+        globalXp = data.xp;
+        const totalLevel = getLevelFromXp(globalXp);
+        const skillPoints = totalLevel - 1;
         document.getElementById('lobby-stats').textContent =
-          'LVL ' + totalLevel + '  |  ' + data.xp + ' XP TOTAL';
+          'LVL ' + totalLevel + '  |  ' + globalXp + ' XP  |  ' + skillPoints + ' SKILL PUNKTE';
       }
     } catch {}
   }
@@ -551,11 +554,16 @@ let healthpacks, ammopacks;
 let lastHealthpackSpawn, lastAmmopackSpawn;
 let nextHealthpackAt, nextAmmopackAt;
 let hurtFlash, mouseX, mouseY, running;
-let score, frameCount, sessionXp;
+let score, frameCount;
 let currentLevel;
 let keys = {};
 
-function init() {
+let globalXp = 0;        // total XP from server
+let pendingXp = 0;       // XP earned this session, not yet synced
+let lastXpSync = 0;      // timestamp of last sync
+const XP_SYNC_INTERVAL = 10000; // 10 seconds
+
+async function init() {
   // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
   generateMap();
   rebuildSpawnEdges();
@@ -578,9 +586,25 @@ function init() {
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
   wave = 0; waveKills = 0; waveTotal = 0; waveActive = false;
   reloading = false; reloadStart = 0;
-  hurtFlash = 0; score = 0; frameCount = 0; sessionXp = 0; currentLevel = 1;
+  hurtFlash = 0; score = 0; frameCount = 0;
   mouseX = W/2; mouseY = H/2;
   running = true;
+
+  if (authToken) {
+    try {
+      const res = await fetch('/api/profile', {
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        globalXp = data.xp;
+      }
+    } catch {}
+  }
+  pendingXp = 0;
+  lastXpSync = performance.now();
+  currentLevel = getLevelFromXp(globalXp);
+
   updateHUD();
   startNextWave();
 }
@@ -724,25 +748,22 @@ function tryShoot() {
 }
 
 // ── XP SYSTEM ─────────────────────────────────────────
-const XP_THRESHOLDS = [0, 50, 150, 300, 500];
-
-function getXpForLevel(level) {
-  if (level <= 1) return 0;
-  if (level <= XP_THRESHOLDS.length) return XP_THRESHOLDS[level - 1];
-  return XP_THRESHOLDS[XP_THRESHOLDS.length - 1] + (level - XP_THRESHOLDS.length) * 250;
+function xpForLevel(n) {
+  return Math.floor(50 * Math.pow(n, 1.5));
 }
 
 function getLevelFromXp(totalXp) {
   let level = 1;
-  while (getXpForLevel(level + 1) <= totalXp) level++;
+  while (xpForLevel(level + 1) <= totalXp) level++;
   return level;
 }
 
 function updateXpBar() {
-  const level = getLevelFromXp(sessionXp);
-  const currentThreshold = getXpForLevel(level);
-  const nextThreshold = getXpForLevel(level + 1);
-  const progress = (sessionXp - currentThreshold) / (nextThreshold - currentThreshold);
+  const totalXp = globalXp + pendingXp;
+  const level = getLevelFromXp(totalXp);
+  const currentThreshold = xpForLevel(level);
+  const nextThreshold = xpForLevel(level + 1);
+  const progress = (totalXp - currentThreshold) / (nextThreshold - currentThreshold);
 
   document.getElementById('xp-bar').style.width = (progress * 100) + '%';
   document.getElementById('xp-level').textContent = 'LVL ' + level;
@@ -944,7 +965,7 @@ function updateBullets() {
           tryDropHealthpack(z.x, z.y);
           tryDropAmmopack(z.x, z.y);
           score += z.xp;
-          sessionXp += z.xp;
+          pendingXp += z.xp;
           updateXpBar();
           waveKills++;
           spawnBlood(z.x, z.y, 16);
@@ -1467,23 +1488,54 @@ function updateHUD() {
   }
 }
 
+// ── XP SYNC ─────────────────────────────────────────
+function syncXp() {
+  if (!authToken || pendingXp <= 0) return;
+  const xpToSync = pendingXp;
+  pendingXp = 0;
+  globalXp += xpToSync;
+  fetch('/api/xp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+    body: JSON.stringify({ xp: xpToSync })
+  }).catch(() => {
+    pendingXp += xpToSync;
+    globalXp -= xpToSync;
+  });
+}
+
 // ── GAME OVER ────────────────────────────────────────
-function gameOver() {
+async function gameOver() {
   running = false;
 
-  // send xp to backend
-  if (authToken && sessionXp > 0) {
-    fetch('/api/xp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + authToken
-      },
-      body: JSON.stringify({ xp: sessionXp })
-    }).catch(() => {});
+  if (authToken) {
+    if (pendingXp > 0) {
+      const xpToSync = pendingXp;
+      pendingXp = 0;
+      globalXp += xpToSync;
+      try {
+        await fetch('/api/xp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ xp: xpToSync })
+        });
+      } catch {}
+    }
+
+    try {
+      const res = await fetch('/api/death', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        globalXp = data.xp;
+      }
+    } catch {}
   }
 
-  lastRunText = 'LETZTE RUNDE: Wave ' + wave + '  |  +' + sessionXp + ' XP';
+  const totalEarned = score;
+  lastRunText = 'GESTORBEN: Wave ' + wave + '  |  +' + totalEarned + ' XP  |  75% VERLOREN';
   showGameMenu();
 }
 
@@ -1499,6 +1551,12 @@ function loop(now) {
   updateSpitterProjectiles();
   updateParticles();
   updateReload(now);
+
+  if (pendingXp > 0 && now - lastXpSync > XP_SYNC_INTERVAL) {
+    syncXp();
+    lastXpSync = now;
+  }
+
   tryTimerHealthpack();
   tryTimerAmmopack();
   updateHealthpacks();
@@ -1557,19 +1615,37 @@ document.getElementById('resume-btn').addEventListener('click', () => {
   togglePause();
 });
 
-document.getElementById('quit-btn').addEventListener('click', () => {
+document.getElementById('quit-btn').addEventListener('click', async () => {
   paused = false;
   running = false;
   document.getElementById('pause-screen').style.display = 'none';
-  lastRunText = 'ABGEBROCHEN: Wave ' + wave + '  |  +' + sessionXp + ' XP';
-  // xp trotzdem senden
-  if (authToken && sessionXp > 0) {
-    fetch('/api/xp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-      body: JSON.stringify({ xp: sessionXp })
-    }).catch(() => {});
+
+  if (authToken) {
+    if (pendingXp > 0) {
+      const xpToSync = pendingXp;
+      pendingXp = 0;
+      globalXp += xpToSync;
+      try {
+        await fetch('/api/xp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ xp: xpToSync })
+        });
+      } catch {}
+    }
+    try {
+      const res = await fetch('/api/death', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        globalXp = data.xp;
+      }
+    } catch {}
   }
+
+  lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
   showGameMenu();
 });
 </script>
