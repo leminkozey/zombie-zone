@@ -2909,8 +2909,22 @@ function tryDash() {
   dashStartY = player.y;
 
   const dist = getPlayerStat('dashDistance');
-  dashTargetX = player.x + Math.cos(player.angle) * dist;
-  dashTargetY = player.y + Math.sin(player.angle) * dist;
+  // Dash direction from WASD input, not mouse aim
+  let ddx = 0, ddy = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    ddy -= 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  ddy += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  ddx -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) ddx += 1;
+  // Fallback to aim direction if no movement keys held
+  if (ddx === 0 && ddy === 0) {
+    ddx = Math.cos(player.angle);
+    ddy = Math.sin(player.angle);
+  } else {
+    const dl = Math.sqrt(ddx*ddx + ddy*ddy);
+    ddx /= dl; ddy /= dl;
+  }
+  dashTargetX = player.x + ddx * dist;
+  dashTargetY = player.y + ddy * dist;
 
   if (hasSkill('phantom_dash')) {
     player.dashInvulnerable = true;
