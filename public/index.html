@@ -632,25 +632,7 @@ async function showGameMenu() {
 
     renderArsenal();
 
-    // Update skill points display everywhere
-    const totalLevel = getLevelFromXp(globalXp);
-    const totalPoints = totalLevel - 1;
-    const usedPoints = activeSkills.reduce((sum, s) => sum + s.level, 0);
-    const availPts = totalPoints - usedPoints;
-    const stTab = document.querySelector('.menu-tab[data-tab="skilltree"]');
-    if (availPts > 0) {
-      stTab.classList.add('blink-notify');
-      stTab.textContent = 'SKILL TREE (' + availPts + ')';
-    } else {
-      stTab.classList.remove('blink-notify');
-      stTab.textContent = 'SKILL TREE';
-    }
-    // Also update the skill tree points display
-    const stPts = document.getElementById('st-points');
-    if (stPts) {
-      stPts.textContent = 'PUNKTE: ' + availPts;
-      stPts.style.color = availPts > 0 ? '#33cc44' : '#556070';
-    }
+    updateSkillTreeTab();
   }
 }
 
@@ -3588,8 +3570,30 @@ async function investSkillPoint(skillId) {
     if (res.ok) {
       const data = await res.json();
       activeSkills = data.skills.map(s => ({ skillId: s.skill_id, level: s.level }));
+      updateSkillTreeTab();
     }
   } catch {}
+}
+
+function updateSkillTreeTab() {
+  const totalLevel = getLevelFromXp(globalXp);
+  const totalPoints = totalLevel - 1;
+  const usedPoints = activeSkills.reduce((sum, s) => sum + s.level, 0);
+  const availPts = totalPoints - usedPoints;
+  const stTab = document.querySelector('.menu-tab[data-tab="skilltree"]');
+  if (!stTab) return;
+  if (availPts > 0) {
+    stTab.classList.add('blink-notify');
+    stTab.textContent = 'SKILL TREE (' + availPts + ')';
+  } else {
+    stTab.classList.remove('blink-notify');
+    stTab.textContent = 'SKILL TREE';
+  }
+  const stPts = document.getElementById('st-points');
+  if (stPts) {
+    stPts.textContent = 'PUNKTE: ' + availPts;
+    stPts.style.color = availPts > 0 ? '#33cc44' : '#556070';
+  }
 }
 
 // Draw hexagon path helper
