@@ -755,6 +755,10 @@ const BASE_STATS = {
   rescueExpiryTime: 60,
   rescueCircleRadiusPct: 0,
   rescueDecayReduction: 0,
+  vampHeal: 0,
+  adrenalinSpeedPct: 0,
+  berserkerMaxBonus: 0,
+  ghostReduction: 0,
 };
 
 let activeSkills = []; // { skillId, level } loaded from server
@@ -799,6 +803,16 @@ const SKILLS = [
   { id: 'thick_skin', path: 'survival', req: 'field_medic', tier: 2, maxLvl: 3,
     icon: '🧱', name: 'THICK SKIN', desc: 'Reduziert eingehenden Schaden.',
     x: 220, y: -260, r: 20, effect: (lvl) => ({ damageReductionPct: 0.05 * lvl }) },
+  // SURVIVAL — Tier 2 (new)
+  { id: 'vampirism', path: 'survival', req: 'field_medic', tier: 2, maxLvl: 3,
+    icon: '🩸', name: 'VAMPIRISM', desc: 'Heilt HP bei jedem Kill.',
+    x: 300, y: -180, r: 20, effect: (lvl) => ({ vampHeal: lvl }) },
+  { id: 'adrenalin', path: 'survival', req: 'vitality', tier: 2, maxLvl: 3,
+    icon: '💉', name: 'ADRENALIN', desc: 'Unter 30% HP: Speed-Boost.',
+    x: -100, y: -280, r: 20, effect: (lvl) => ({ adrenalinSpeedPct: 0.1 * lvl }) },
+  { id: 'berserker', path: 'survival', req: 'thick_skin', tier: 2, maxLvl: 3,
+    icon: '🔥', name: 'BERSERKER', desc: 'Mehr Schaden je niedriger HP.',
+    x: 320, y: -340, r: 22, effect: (lvl) => ({ berserkerMaxBonus: 0.2 * lvl }) },
   // SURVIVAL — Tier 3
   { id: 'fortress', path: 'survival', req: 'shield', tier: 3, maxLvl: 1,
     icon: '🏰', name: 'FORTRESS', desc: '2x Shield-Regen. +10% Speed bei vollem Shield.',
@@ -806,6 +820,9 @@ const SKILLS = [
   { id: 'second_wind', path: 'survival', req: 'regen', tier: 3, maxLvl: 1,
     icon: '💀', name: 'SECOND WIND', desc: '1x pro Run: Ueberlebst toedlichen Treffer mit 30% HP.',
     x: 140, y: -420, r: 28, effect: () => ({}) },
+  { id: 'iron_skin', path: 'survival', req: 'berserker', tier: 3, maxLvl: 1,
+    icon: '🛡', name: 'IRON SKIN', desc: 'Alle 60s: naechster Treffer wird komplett geblockt.',
+    x: 340, y: -480, r: 28, effect: () => ({}) },
   // MOBILITY — Start
   { id: 'mob_start', path: 'mobility', req: null, tier: 0, maxLvl: 0,
     icon: '⚡', name: 'MOBILITY', desc: 'Startknoten des Mobility-Pfads.',
@@ -814,7 +831,14 @@ const SKILLS = [
   { id: 'swift', path: 'mobility', req: 'mob_start', tier: 1, maxLvl: 5,
     icon: '👟', name: 'SWIFT', desc: 'Erhoehte Laufgeschwindigkeit.',
     x: -100, y: -130, r: 22, effect: (lvl) => ({ moveSpeedPct: 0.08 * lvl }) },
+  // MOBILITY — Tier 1 (new)
+  { id: 'kill_rush', path: 'mobility', req: 'mob_start', tier: 1, maxLvl: 3,
+    icon: '💀', name: 'KILL RUSH', desc: 'Bei Kill: kurzer Speed-Boost.',
+    x: 120, y: -130, r: 20, effect: (lvl) => ({ killRushSpeedPct: 0.15 + 0.1 * lvl, killRushDuration: 120 }) },
   // MOBILITY — Tier 2
+  { id: 'ghost', path: 'mobility', req: 'kill_rush', tier: 2, maxLvl: 3,
+    icon: '👤', name: 'GHOST', desc: 'Weniger Nahkampf-Schaden von Zombies.',
+    x: 180, y: -280, r: 20, effect: (lvl) => ({ ghostReduction: 0.1 * lvl }) },
   { id: 'dash', path: 'mobility', req: 'swift', tier: 2, maxLvl: 1,
     icon: '💨', name: 'DASH', desc: 'Schaltet Dash frei. Leertaste.',
     x: -40, y: -290, r: 26, effect: () => ({ dashUnlocked: 1 }) },
@@ -868,6 +892,9 @@ const SKILLS = [
   { id: 'fortified_lz', path: 'rescue', req: 'ext_window', tier: 3, maxLvl: 1,
     icon: '🏗', name: 'FORTIFIED LZ', desc: '-50% Schaden im Rettungskreis.',
     x: 100, y: -460, r: 28, effect: () => ({}) },
+  { id: 'last_stand', path: 'rescue', req: 'safe_zone', tier: 2, maxLvl: 1,
+    icon: '⚔', name: 'LAST STAND', desc: 'Waehrend Extraction: +50% Feuerrate.',
+    x: 300, y: -370, r: 24, effect: () => ({}) },
 ];
 
 const SKILL_MAP = {};
@@ -1228,6 +1255,10 @@ async function init() {
     maxShield: getPlayerStat('shieldHp'),
     shieldRegenTimer: 0,
     secondWindUsed: false,
+    ironSkinReady: hasSkill('iron_skin'),
+    ironSkinCooldown: 0,
+    killRushTimer: 0,
+    killRushBoost: 0,
     dashCharges: [],
     dashInvulnerable: false,
   };
@@ -1700,7 +1731,16 @@ function tryShoot() {
   const fireRate = Math.max(1, Math.round(getWeaponStat(activeWeaponId, 'rate')));
   const magSize = getWeaponStat(activeWeaponId, 'mag');
   const spread = getWeaponStat(activeWeaponId, 'acc');
-  const dmg = getWeaponStat(activeWeaponId, 'dmg');
+  let dmg = getWeaponStat(activeWeaponId, 'dmg');
+  // Berserker — more damage at low HP
+  const berserkerMax = getPlayerStat('berserkerMaxBonus');
+  if (berserkerMax > 0) {
+    const hpPct = player.hp / getPlayerStat('maxHp');
+    if (hpPct < 0.5) {
+      const berserkerMult = 1 + berserkerMax * (1 - hpPct * 2); // scales from 0 at 50% HP to max at 0% HP
+      dmg *= berserkerMult;
+    }
+  }
   const range = Math.round(getWeaponStat(activeWeaponId, 'range'));
 
   if (reloading || player.ammo <= 0 || player.shootCooldown > 0) return;
@@ -1714,6 +1754,11 @@ function tryShoot() {
     }
   } else {
     player.shootCooldown = fireRate;
+  }
+
+  // Last Stand — +50% fire rate during rescue extraction
+  if (typeof rescueState !== 'undefined' && rescueState === 'extracting' && hasSkill('last_stand')) {
+    player.shootCooldown = Math.max(1, Math.round(player.shootCooldown * 0.5));
   }
 
   player.ammo--;
@@ -1966,6 +2011,16 @@ function movePlayer() {
   if (hasSkill('fortress') && player.shield >= player.maxShield && player.maxShield > 0) {
     speed *= 1.10;
   }
+  // Adrenalin — speed boost under 30% HP
+  const adrenalinPct = getPlayerStat('adrenalinSpeedPct');
+  if (adrenalinPct > 0 && player.hp < getPlayerStat('maxHp') * 0.3) {
+    speed *= (1 + adrenalinPct);
+  }
+  // Kill Rush — temp speed boost
+  if (player.killRushTimer > 0) {
+    speed *= (1 + (player.killRushBoost || 0));
+    player.killRushTimer--;
+  }
   if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0) {
     speed *= 0.7;
   }
@@ -1984,9 +2039,24 @@ function movePlayer() {
 }
 
 // ── DAMAGE PIPELINE ─────────────────────────────────
-function damagePlayer(rawDamage) {
+function damagePlayer(rawDamage, source) {
+  // source: 'melee' or 'ranged' (spitter projectile)
   const reduction = getPlayerStat('damageReductionPct');
   let damage = Math.round(rawDamage * (1 - reduction));
+
+  // Ghost — reduce melee damage
+  if (source === 'melee') {
+    const ghostRed = getPlayerStat('ghostReduction');
+    if (ghostRed > 0) damage = Math.round(damage * (1 - ghostRed));
+  }
+
+  // Iron Skin — block next hit every 60s
+  if (hasSkill('iron_skin') && player.ironSkinReady) {
+    player.ironSkinReady = false;
+    player.ironSkinCooldown = 3600; // 60s at 60fps
+    showWaveBanner('IRON SKIN!');
+    return;
+  }
 
   if (typeof rescueState !== 'undefined' && rescueState === 'extracting' && hasSkill('fortified_lz')) {
     damage = Math.round(damage * 0.5);
@@ -2246,7 +2316,7 @@ function updateZombies() {
     if (dist < PLAYER_R + z.radius - 2) {
       if (!z.hitting || frameCount - z.lastHit > 40) {
         z.lastHit = frameCount;
-        damagePlayer(8);
+        damagePlayer(8, 'melee');
       }
       z.hitting = true;
     } else {
@@ -2273,6 +2343,20 @@ function onZombieKill(z) {
   runStats[z.type + 'Kills']++;
   tryDropHealthpack(z.x, z.y);
   tryDropAmmopack(z.x, z.y);
+
+  // Vampirism — heal on kill
+  const vampHeal = getPlayerStat('vampHeal');
+  if (vampHeal > 0) {
+    player.hp = Math.min(player.hp + vampHeal, getPlayerStat('maxHp'));
+    runStats.healed += vampHeal;
+  }
+
+  // Kill Rush — speed boost on kill
+  const killRushLvl = getSkillLevel('kill_rush');
+  if (killRushLvl > 0) {
+    player.killRushTimer = 120; // 2 seconds at 60fps
+    player.killRushBoost = 0.15 + 0.1 * killRushLvl;
+  }
   score += z.xp;
   runStats.xpEarned += z.xp;
   pendingXp += z.xp;
@@ -2396,7 +2480,7 @@ function updateSpitterProjectiles() {
     const dx = p.x - player.x, dy = p.y - player.y;
     if (dx*dx + dy*dy < (6 + PLAYER_R)**2) {
       spitterProjectiles.splice(i, 1);
-      damagePlayer(10);
+      damagePlayer(10, 'ranged');
     }
   }
 }
@@ -3759,6 +3843,14 @@ function loop(now) {
     const timeSinceDamage = (frameCount - player.lastDamageTime) / 60;
     if (timeSinceDamage > 3) {
       player.hp = Math.min(Math.round((player.hp + regenRate / 60) * 10) / 10, getPlayerStat('maxHp'));
+    }
+  }
+
+  // Iron Skin cooldown
+  if (player.ironSkinCooldown > 0) {
+    player.ironSkinCooldown--;
+    if (player.ironSkinCooldown <= 0 && hasSkill('iron_skin')) {
+      player.ironSkinReady = true;
     }
   }
 

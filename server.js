@@ -122,9 +122,9 @@ app.post('/api/skills/invest', auth, (req, res) => {
   }
 
   const SKILL_MAX_LEVELS = {
-    vitality: 5, field_medic: 3, shield: 5, regen: 3, thick_skin: 3, fortress: 1, second_wind: 1,
-    swift: 5, dash: 1, dash_range: 3, dash_cd: 3, dash_charges: 2, phantom_dash: 1, bullet_time: 1,
-    quick_call: 5, fast_extract: 4, survival_instinct: 5, rapid_redial: 3, ext_window: 3, safe_zone: 3, steady_hands: 3, evac_chopper: 1, fortified_lz: 1,
+    vitality: 5, field_medic: 3, shield: 5, regen: 3, thick_skin: 3, vampirism: 3, adrenalin: 3, berserker: 3, fortress: 1, second_wind: 1, iron_skin: 1,
+    swift: 5, kill_rush: 3, ghost: 3, dash: 1, dash_range: 3, dash_cd: 3, dash_charges: 2, phantom_dash: 1, bullet_time: 1,
+    quick_call: 5, fast_extract: 4, survival_instinct: 5, rapid_redial: 3, ext_window: 3, safe_zone: 3, steady_hands: 3, last_stand: 1, evac_chopper: 1, fortified_lz: 1,
   };
   const maxLvl = SKILL_MAX_LEVELS[skillId];
   if (!maxLvl) return res.status(400).json({ error: 'Unknown skill' });
