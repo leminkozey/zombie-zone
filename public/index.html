@@ -735,6 +735,15 @@ let dashAfterimage = null;
 let bulletTimeTimer = 0;
 let bulletTimeX = 0, bulletTimeY = 0;
 
+let rescueState = 'idle';
+let rescueHoldStart = 0;
+let rescueSurvivalTimer = 0;
+let rescueExpiryTimer = 0;
+let rescueExtractProgress = 0;
+let rescueCircle = null;
+let rescueCooldownUntil = 0;
+let rescueRunTime = 0;
+
 let globalXp = 0;        // total XP from server
 let pendingXp = 0;       // XP earned this session, not yet synced
 let lastXpSync = 0;      // timestamp of last sync
@@ -775,6 +784,15 @@ async function init() {
   dashActive = false;
   dashAfterimage = null;
   bulletTimeTimer = 0;
+
+  rescueState = 'idle';
+  rescueHoldStart = 0;
+  rescueSurvivalTimer = 0;
+  rescueExpiryTimer = 0;
+  rescueExtractProgress = 0;
+  rescueCircle = null;
+  rescueCooldownUntil = 0;
+  rescueRunTime = 0;
 
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = [];
@@ -833,6 +851,15 @@ function spawnZombie() {
 
   if (attempts >= 20) return; // skip this zombie if no valid spawn found
 
+  if (rescueCircle) {
+    const rdx = edge.x - rescueCircle.x;
+    const rdy = edge.y - rescueCircle.y;
+    if (Math.sqrt(rdx*rdx + rdy*rdy) < rescueCircle.radius + 6 * TILE) {
+      const otherEdge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
+      edge = otherEdge;
+    }
+  }
+
   const type = pickZombieType(wave);
   const cfg = ZOMBIE_CONFIGS[type];
   const baseSpd = 0.7 + wave * 0.12 + Math.random() * 0.3;
@@ -864,6 +891,228 @@ function showWaveBanner(txt) {
   setTimeout(() => { el.style.opacity = 0; }, 1800);
 }
 
+// ── RESCUE ──────────────────────────────────────────
+function spawnRescueCircle() {
+  const baseRadius = 60;
+  const radius = baseRadius * (1 + getPlayerStat('rescueCircleRadiusPct'));
+  const minWallDist = 3 * TILE;
+  const minBorderDist = 5 * TILE;
+  const mapW = COLS * TILE;
+  const mapH = ROWS * TILE;
+
+  let best = null;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const x = minBorderDist + Math.random() * (mapW - 2 * minBorderDist);
+    const y = minBorderDist + Math.random() * (mapH - 2 * minBorderDist);
+
+    let tooClose = false;
+    const checkRadius = Math.ceil(minWallDist / TILE);
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    for (let r = -checkRadius; r <= checkRadius && !tooClose; r++) {
+      for (let c = -checkRadius; c <= checkRadius && !tooClose; c++) {
+        const cr = ty + r, cc = tx + c;
+        if (cr >= 0 && cr < ROWS && cc >= 0 && cc < COLS && MAP[cr][cc] === 1) {
+          const wx = cc * TILE + TILE/2, wy = cr * TILE + TILE/2;
+          const ddx = x - wx, ddy = y - wy;
+          if (Math.sqrt(ddx*ddx + ddy*ddy) < minWallDist) tooClose = true;
+        }
+      }
+    }
+
+    if (!tooClose) { best = { x, y, radius }; break; }
+  }
+
+  if (!best) {
+    const x = 3*TILE + Math.random() * (mapW - 6*TILE);
+    const y = 3*TILE + Math.random() * (mapH - 6*TILE);
+    best = { x, y, radius };
+  }
+
+  rescueCircle = best;
+}
+
+function updateRescue(now) {
+  rescueRunTime++;
+
+  switch (rescueState) {
+    case 'idle':
+      break;
+
+    case 'holding_f':
+      if (!keys['KeyF']) { rescueState = 'idle'; break; }
+      if (now - rescueHoldStart >= 3000) {
+        rescueState = 'survival_phase';
+        rescueSurvivalTimer = getPlayerStat('rescueSurvivalTime') * 60;
+        showWaveBanner('RESCUE ANGEFORDERT');
+      }
+      break;
+
+    case 'survival_phase':
+      rescueSurvivalTimer--;
+      if (rescueSurvivalTimer <= 0) {
+        rescueState = 'circle_spawned';
+        spawnRescueCircle();
+        rescueExpiryTimer = getPlayerStat('rescueExpiryTime') * 60;
+        showWaveBanner('RETTUNGSZONE AKTIV');
+      }
+      break;
+
+    case 'circle_spawned':
+    case 'extracting': {
+      rescueExpiryTimer--;
+
+      const cdx = player.x - rescueCircle.x;
+      const cdy = player.y - rescueCircle.y;
+      const inCircle = Math.sqrt(cdx*cdx + cdy*cdy) < rescueCircle.radius;
+
+      if (rescueState === 'circle_spawned' && inCircle) {
+        rescueState = 'extracting';
+        rescueExtractProgress = 0;
+      } else if (rescueState === 'extracting' && !inCircle) {
+        rescueState = 'circle_spawned';
+        rescueExtractProgress = 0;
+      }
+
+      if (rescueState === 'extracting') {
+        const standFrames = getPlayerStat('rescueStandTime') * 60;
+        rescueExtractProgress += 1 / standFrames;
+        if (rescueExtractProgress >= 1) {
+          rescueState = 'success';
+          rescueSuccess();
+          return;
+        }
+      }
+
+      // Evac Chopper
+      if (hasSkill('evac_chopper') && rescueCircle) {
+        const speed = getPlayerStat('moveSpeed') * 0.5;
+        const ecx = player.x - rescueCircle.x;
+        const ecy = player.y - rescueCircle.y;
+        const ecdist = Math.sqrt(ecx*ecx + ecy*ecy);
+        if (ecdist > 10) {
+          rescueCircle.x += (ecx/ecdist) * speed;
+          rescueCircle.y += (ecy/ecdist) * speed;
+        }
+      }
+
+      if (rescueExpiryTimer <= 0) {
+        rescueState = 'idle';
+        rescueCircle = null;
+        rescueCooldownUntil = performance.now() + getPlayerStat('rescueCooldown') * 1000;
+        showWaveBanner('RESCUE FEHLGESCHLAGEN');
+      }
+      break;
+    }
+  }
+}
+
+async function rescueSuccess() {
+  running = false;
+
+  if (authToken) {
+    if (pendingXp > 0) {
+      const xpToSync = pendingXp;
+      pendingXp = 0;
+      globalXp += xpToSync;
+      try {
+        await fetch('/api/xp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ xp: xpToSync })
+        });
+      } catch {}
+    }
+
+    try {
+      await fetch('/api/rescue', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + authToken }
+      });
+    } catch {}
+  }
+
+  lastRunText = 'GERETTET! Wave ' + wave + '  |  +' + score + ' XP  |  ALLES BEHALTEN';
+  showGameMenu();
+}
+
+function drawRescueCircle() {
+  if (!rescueCircle) return;
+  ctx.save();
+  const pulse = 0.6 + Math.sin(frameCount * 0.08) * 0.4;
+  ctx.strokeStyle = 'rgba(100, 255, 150, ' + pulse + ')';
+  ctx.lineWidth = 3;
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = '#66ff9988';
+  ctx.beginPath();
+  ctx.arc(rescueCircle.x, rescueCircle.y, rescueCircle.radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(100, 255, 150, ' + (pulse * 0.08) + ')';
+  ctx.fill();
+
+  if (rescueState === 'extracting') {
+    const barW = rescueCircle.radius * 2;
+    const barH = 6;
+    const barX = rescueCircle.x - barW/2;
+    const barY = rescueCircle.y - rescueCircle.radius - 20;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = '#66ff99';
+    ctx.fillRect(barX, barY, barW * rescueExtractProgress, barH);
+  }
+  ctx.restore();
+}
+
+function drawRescueHUD() {
+  ctx.save();
+  ctx.font = "10px 'Share Tech Mono'";
+  ctx.textAlign = 'center';
+
+  if (rescueState === 'idle') {
+    const activationFrames = getPlayerStat('rescueActivationTime') * 60;
+    if (rescueRunTime < activationFrames) {
+      const secsLeft = Math.ceil((activationFrames - rescueRunTime) / 60);
+      ctx.fillStyle = '#333';
+      ctx.fillText('RESCUE IN ' + secsLeft + 's', W/2, H - 20);
+    } else if (performance.now() < rescueCooldownUntil) {
+      const secsLeft = Math.ceil((rescueCooldownUntil - performance.now()) / 1000);
+      ctx.fillStyle = '#555';
+      ctx.fillText('RESCUE COOLDOWN ' + secsLeft + 's', W/2, H - 20);
+    } else {
+      ctx.fillStyle = '#555';
+      ctx.fillText('F HALTEN \u2014 RESCUE ANFORDERN', W/2, H - 20);
+    }
+  }
+
+  if (rescueState === 'holding_f') {
+    const prog = Math.min((performance.now() - rescueHoldStart) / 3000, 1);
+    const barW = 200, barH = 8;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(W/2 - barW/2, H/2 + 40, barW, barH);
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillRect(W/2 - barW/2, H/2 + 40, barW * prog, barH);
+    ctx.font = "12px 'Share Tech Mono'";
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText('RESCUE ANFRAGE...', W/2, H/2 + 35);
+  }
+
+  if (rescueState === 'survival_phase') {
+    const secs = Math.ceil(rescueSurvivalTimer / 60);
+    ctx.font = "16px 'Bebas Neue'";
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText('UEBERLEBE: ' + secs + 's', W/2, 60);
+  }
+
+  if (rescueState === 'circle_spawned' || rescueState === 'extracting') {
+    const secs = Math.ceil(rescueExpiryTimer / 60);
+    ctx.font = "16px 'Bebas Neue'";
+    ctx.fillStyle = secs < 15 ? '#cc2200' : '#ffaa00';
+    ctx.fillText('RETTUNGSZONE: ' + secs + 's', W/2, 60);
+  }
+
+  ctx.restore();
+}
+
 // ── INPUT ────────────────────────────────────────────
 let paused = false;
 
@@ -886,6 +1135,13 @@ document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyR' && !reloading && player.ammo < MAX_AMMO) startReload();
   if (e.code === 'Space') { tryDash(); e.preventDefault(); return; }
+  if (e.code === 'KeyF' && rescueState === 'idle' && running && !paused) {
+    const activationFrames = getPlayerStat('rescueActivationTime') * 60;
+    if (rescueRunTime >= activationFrames && performance.now() >= rescueCooldownUntil) {
+      rescueState = 'holding_f';
+      rescueHoldStart = performance.now();
+    }
+  }
   e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1747,6 +2003,16 @@ function drawMinimap() {
   for (const a of ammopacks) {
     ctx.fillRect(ox + (a.x/TILE)*S - 1, oy + (a.y/TILE)*S - 1, 3, 3);
   }
+  // Rescue circle
+  if (rescueCircle) {
+    ctx.save();
+    ctx.strokeStyle = frameCount % 30 < 15 ? '#66ff99' : 'transparent';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(ox + (rescueCircle.x/TILE)*S, oy + (rescueCircle.y/TILE)*S, (rescueCircle.radius/TILE)*S, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
   // Player
   ctx.fillStyle = '#00ff88';
   ctx.fillRect(ox + (player.x/TILE)*S - 2, oy + (player.y/TILE)*S - 2, 4, 4);
@@ -1938,6 +2204,7 @@ function loop(now) {
 
   movePlayer();
   updateDash();
+  updateRescue(performance.now());
   if (mouseDown) tryShoot();
   updateZombies();
   updateBullets();
@@ -1993,6 +2260,7 @@ function loop(now) {
   drawBloodDecals();
   drawHealthpacks();
   drawAmmopacks();
+  drawRescueCircle();
   drawParticles();
   drawBullets();
   drawSpitterProjectiles();
@@ -2015,6 +2283,8 @@ function loop(now) {
   ctx.textAlign = 'right';
   ctx.fillText(`SCORE: ${score}`, W - 14, H - 12);
   ctx.restore();
+
+  drawRescueHUD();
 
   requestAnimationFrame(loop);
 }
