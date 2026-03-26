@@ -30,9 +30,9 @@ Player upgrades via a constellation-style skill tree with 3 paths (Survival, Mob
 | 1 | 0 | — |
 | 2 | 141 | 141 |
 | 5 | 559 | 159 |
-| 10 | 1,581 | 199 |
-| 20 | 4,472 | 258 |
-| 50 | 17,677 | 395 |
+| 10 | 1,581 | 231 |
+| 20 | 4,472 | 331 |
+| 50 | 17,677 | 527 |
 
 Tuned so Level 3-4 is achievable in a first run (~10 minutes).
 
@@ -111,7 +111,7 @@ Adding a new skill = adding one object to the array. No system changes needed.
 |-------|------|-----|------------------|
 | Vitality | 1 | 5 | +15 Max HP (100 → 175) |
 | Field Medic | 1 | 3 | +30% Healthpack heal (25 → 47 HP) |
-| Shield | 2 | 5 | +10 Shield HP, -1s regen delay (10/8s → 60/3s) |
+| Shield | 2 | 5 | +10 Shield HP, -1s regen delay (10/8s → 50/3s) |
 | Regeneration | 2 | 3 | +0.5 HP/s passive (0.5 → 1.5) |
 | Thick Skin | 2 | 3 | -5% incoming damage (max -15%) |
 | **Fortress** | 3 | 1 | 2x shield regen, +10% speed at full shield |
