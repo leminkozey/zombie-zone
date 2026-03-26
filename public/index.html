@@ -317,10 +317,10 @@
         <div id="shield-bar" style="height:3px;background:#3399ff;width:0%;transition:width 0.2s;box-shadow:0 0 6px #3399ff66"></div>
       </div>
     </div>
-    <!-- Bottom-right: Ammo -->
-    <div class="hud-box" style="position:absolute;bottom:20px;right:16px;text-align:right">
-      <div class="hud-label">Ammo</div>
-      <div class="hud-val" id="ammo-val">30</div>
+    <!-- Bottom-right: Dash + Ammo (no box) -->
+    <div style="position:absolute;bottom:16px;right:16px;text-align:right;pointer-events:none">
+      <div id="dash-display" style="display:none;justify-content:flex-end;gap:3px;margin-bottom:6px"></div>
+      <div class="hud-val" id="ammo-val" style="font-size:28px;color:#ddaa00">30</div>
       <div id="ammo-display"></div>
     </div>
     <!-- Top-left: Username -->
@@ -335,7 +335,6 @@
     <div id="reload-bar-bg"><div id="reload-bar"></div></div>
   </div>
 
-  <div id="dash-display" style="position:absolute;bottom:80px;right:16px;display:none;z-index:5;pointer-events:none;display:flex;gap:2px"></div>
 
   <div id="xp-bar-wrap"><div id="xp-bar"></div></div>
   <div id="xp-level">LVL 1</div>
