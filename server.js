@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -13,6 +14,13 @@ const {
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// rate limiting
+const apiLimiter = rateLimit({ windowMs: 60000, max: 60 }); // 60 req/min
+const authLimiter = rateLimit({ windowMs: 300000, max: 10 }); // 10 auth attempts per 5 min
+app.use('/api/', apiLimiter);
+app.use('/api/login', authLimiter);
+app.use('/api/register', authLimiter);
 
 // jwt secret
 const secretPath = path.join(__dirname, 'data', 'secret.key');
@@ -53,6 +61,8 @@ const MAX_UPGRADE_LEVEL = 10;
 app.post('/api/register', (req, res) => {
   const { name, password } = req.body;
   if (!name || !password) return res.status(400).json({ error: 'Name and password required' });
+  if (name.length > 30) return res.status(400).json({ error: 'Name too long' });
+  if (password.length > 200) return res.status(400).json({ error: 'Password too long' });
   if (findUserByName.get(name)) return res.status(409).json({ error: 'Name already taken' });
   const hash = bcrypt.hashSync(password, 10);
   const result = createUser.run(name, hash);
@@ -82,7 +92,7 @@ app.get('/api/profile', auth, (req, res) => {
 // add xp
 app.post('/api/xp', auth, (req, res) => {
   const { xp } = req.body;
-  if (typeof xp !== 'number' || xp < 0) return res.status(400).json({ error: 'Invalid XP value' });
+  if (typeof xp !== 'number' || xp < 0 || xp > 500) return res.status(400).json({ error: 'Invalid XP value' });
   addXp.run(xp, req.user.id);
   const user = getUser.get(req.user.id);
   res.json({ xp: user.xp });
@@ -196,7 +206,7 @@ app.post('/api/weapons/upgrade', auth, (req, res) => {
     return res.status(400).json({ error: 'Stat already at max level' });
   }
 
-  const cost = baseCost * (currentLevel + 1);
+  const cost = baseCost * (1 + currentLevel * 0.8);
   const user = getUser.get(req.user.id);
   if (user.gold < cost) {
     return res.status(400).json({ error: 'Not enough gold' });
@@ -276,14 +286,8 @@ app.post('/api/perks/buy', auth, (req, res) => {
 // POST /api/gold
 app.post('/api/gold', auth, (req, res) => {
   const { gold, diamonds } = req.body;
-  if (gold !== undefined) {
-    if (typeof gold !== 'number' || gold < 0) return res.status(400).json({ error: 'Invalid gold value' });
-    addGold.run(gold, req.user.id);
-  }
-  if (diamonds !== undefined) {
-    if (typeof diamonds !== 'number' || diamonds < 0) return res.status(400).json({ error: 'Invalid diamonds value' });
-    addDiamonds.run(diamonds, req.user.id);
-  }
+  if (typeof gold === 'number' && gold > 0 && gold <= 50000) addGold.run(gold, req.user.id);
+  if (typeof diamonds === 'number' && diamonds > 0 && diamonds <= 5) addDiamonds.run(diamonds, req.user.id);
   const user = getUser.get(req.user.id);
   res.json({ gold: user.gold, diamonds: user.diamonds });
 });
@@ -313,10 +317,11 @@ app.get('/api/stats', auth, (req, res) => {
 // POST /api/stats — sync run stats
 app.post('/api/stats', auth, (req, res) => {
   const { kills, normalKills, runnerKills, tankKills, spitterKills, damageDealt, damageTaken, healed, xpEarned, maxWave } = req.body;
+  const safeNum = (v) => Math.max(0, Math.floor(Number(v) || 0));
   addStats.run(
-    kills || 0, normalKills || 0, runnerKills || 0, tankKills || 0, spitterKills || 0,
-    damageDealt || 0, damageTaken || 0, healed || 0, xpEarned || 0,
-    maxWave || 0, maxWave || 0,
+    safeNum(kills), safeNum(normalKills), safeNum(runnerKills), safeNum(tankKills), safeNum(spitterKills),
+    safeNum(damageDealt), safeNum(damageTaken), safeNum(healed), safeNum(xpEarned),
+    safeNum(maxWave), safeNum(maxWave),
     req.user.id
   );
   res.json({ ok: true });
