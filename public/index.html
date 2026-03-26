@@ -2925,24 +2925,68 @@ function drawPlayer() {
   ctx.fillRect(0, 0, 10, 3.5);
   ctx.restore();
 
-  // Weapon — detailed gun
-  // Gun stock
-  ctx.fillStyle = '#3d3525';
-  ctx.fillRect(2 - recoil, -2.5, 6, 5);
-  // Gun body / receiver
-  ctx.fillStyle = '#2a2a2a';
-  ctx.fillRect(8 - recoil, -2, 10, 4);
-  // Barrel
-  ctx.fillStyle = '#1a1a1a';
-  ctx.fillRect(18 - recoil, -1.2, 7, 2.4);
-  // Muzzle brake
-  ctx.fillStyle = '#333';
-  ctx.fillRect(24 - recoil, -1.8, 3, 3.6);
-  ctx.fillStyle = '#222';
-  ctx.fillRect(24.5 - recoil, -0.5, 2, 1);
-  // Magazine
-  ctx.fillStyle = '#252520';
-  ctx.fillRect(10 - recoil, 2, 3, 4);
+  // Weapon — drawn based on activeWeaponId
+  ctx.save();
+  ctx.translate(-recoil, 0);
+  if (activeWeaponId === 'pistol') {
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(4, -2, 12, 4);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(16, -1, 6, 2);
+  } else if (activeWeaponId === 'smg') {
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(2, -2.5, 16, 5);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(18, -1.5, 8, 3);
+    ctx.fillStyle = '#252520';
+    ctx.fillRect(8, 2.5, 3, 5);
+  } else if (activeWeaponId === 'shotgun') {
+    ctx.fillStyle = '#3d3525';
+    ctx.fillRect(-2, -2, 8, 4);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(6, -2.5, 12, 5);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(18, -2.5, 10, 5);
+  } else if (activeWeaponId === 'assault_rifle') {
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(0, -2.5, 18, 5);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(18, -1.5, 10, 3);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(27, -2, 3, 4);
+    ctx.fillStyle = '#252520';
+    ctx.fillRect(8, 2.5, 4, 5);
+    ctx.fillStyle = '#3a3a30';
+    ctx.fillRect(2, -4, 14, 1.5);
+  } else if (activeWeaponId === 'sniper') {
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-4, -2, 18, 4);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(14, -1.2, 18, 2.4);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(30, -2, 4, 4);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, -5, 12, 2.5);
+    ctx.fillStyle = '#1a2a44';
+    ctx.beginPath(); ctx.arc(0, -3.8, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(12, -3.8, 1.2, 0, Math.PI*2); ctx.fill();
+  } else if (activeWeaponId === 'minigun') {
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(-2, -4, 14, 8);
+    ctx.fillStyle = '#1a1a1a';
+    for (let i = -2; i <= 2; i++) {
+      ctx.fillRect(12, i*2 - 0.6, 16, 1.2);
+    }
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(20, 0, 4, 0, Math.PI*2); ctx.stroke();
+  } else {
+    // Fallback
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(4, -2, 14, 4);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(18, -1, 6, 2);
+  }
+  ctx.restore();
 
   // Body — rounded rect torso with tactical vest
   ctx.fillStyle = '#556644';
