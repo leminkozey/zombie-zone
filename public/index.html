@@ -429,7 +429,7 @@
       <button class="menu-tab" data-tab="skilltree">SKILL TREE</button>
       <button class="menu-tab" data-tab="arsenal">ARSENAL</button>
       <button class="menu-tab" data-tab="skins">OPERATORS <span class="soon-badge">SOON</span></button>
-      <button class="menu-tab" data-tab="shop">SHOP <span class="soon-badge">SOON</span></button>
+      <button class="menu-tab" data-tab="shop">SHOP</button>
     </div>
 
     <!-- LOBBY panel -->
@@ -452,7 +452,7 @@
       <div id="last-run" style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;min-height:18px"></div>
       <div class="hint">
         WASD — Bewegen &nbsp;|&nbsp; MAUS — Zielen &nbsp;|&nbsp; LINKSKLICK — Schie&szlig;en<br>
-        R — Nachladen &nbsp;|&nbsp; SPACE — Dash &nbsp;|&nbsp; F halten — Rescue &nbsp;|&nbsp; ESC — Pause
+        R — Nachladen &nbsp;|&nbsp; E — Perk &nbsp;|&nbsp; SPACE — Dash &nbsp;|&nbsp; F halten — Rescue &nbsp;|&nbsp; ESC — Pause
       </div>
       <div style="position:absolute;bottom:24px;left:24px">
         <div style="font-size:11px;letter-spacing:3px;color:#3a4450;margin-bottom:10px">KARTE</div>
@@ -506,8 +506,15 @@
     </div>
 
     <!-- SHOP panel -->
-    <div class="menu-panel" id="panel-shop" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
-      <span style="font-family:'Oswald',sans-serif;font-size:18px;color:#404855;letter-spacing:6px">COMING SOON</span>
+    <div class="menu-panel" id="panel-shop" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;overflow-y:auto;padding:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding:0 8px">
+        <div style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:600;letter-spacing:4px;color:#8090a0">PERK SHOP</div>
+        <div style="display:flex;gap:16px">
+          <span id="shop-gold" style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#ddaa00;letter-spacing:1px">0 G</span>
+          <span id="shop-diamonds" style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#44bbff;letter-spacing:1px">0 D</span>
+        </div>
+      </div>
+      <div id="perk-shop-grid" style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center"></div>
     </div>
 
     <!-- OPERATORS panel -->
@@ -678,6 +685,14 @@ async function showGameMenu() {
         playerWeapons = wpnData.weapons;
         ownedWeaponIds = ['pistol', ...wpnData.weapons.map(w => w.weapon_id)];
         if (!ownedWeaponIds.includes(activeWeaponId)) setActiveWeapon('pistol');
+      }
+    } catch {}
+
+    try {
+      const perkRes = await fetch('/api/perks', { headers: { 'Authorization': 'Bearer ' + authToken } });
+      if (perkRes.ok) {
+        const perkData = await perkRes.json();
+        ownedPerks = perkData.perks;
       }
     } catch {}
 
@@ -922,6 +937,26 @@ const WEAPONS = {
 };
 
 const UPGRADE_BASE_COSTS = { dmg: 100, range: 80, rate: 120, reload: 80, mag: 100, acc: 60 };
+
+// ── PERK DEFINITIONS ───────────────────────────────────
+const PERK_DEFS = {
+  pistol_akimbo:      { weaponId: 'pistol', type: 'active', name: 'AKIMBO', desc: 'Dual-Wield: doppelte Feuerrate, doppelter Spread fuer 1 Magazin.', icon: '\u{1F52B}\u{1F52B}', cooldown: 1200, duration: 0, diamonds: 3, gold: 1000 },
+  pistol_hollow:      { weaponId: 'pistol', type: 'passive', name: 'HOLLOW POINT', desc: '+50% Schaden gegen Normal-Zombies.', icon: '\u{1F4A2}', diamonds: 3, gold: 1000 },
+  smg_drum:           { weaponId: 'smg', type: 'active', name: 'DRUM MAG', desc: 'Naechstes Magazin hat 3x Kapazitaet.', icon: '\u{1F941}', cooldown: 1800, diamonds: 5, gold: 2000 },
+  smg_incendiary:     { weaponId: 'smg', type: 'passive', name: 'INCENDIARY', desc: 'Getroffene Zombies brennen 3s (2 DPS).', icon: '\u{1F525}', diamonds: 5, gold: 2000 },
+  shotgun_dragon:     { weaponId: 'shotgun', type: 'active', name: "DRAGON'S BREATH", desc: 'Brandgeschosse: Zombies brennen bei Treffer.', icon: '\u{1F409}', cooldown: 1500, diamonds: 7, gold: 3500 },
+  shotgun_slug:       { weaponId: 'shotgun', type: 'active', name: 'SLUG ROUND', desc: '1 Magazin: einzelne schwere Kugel (5x Schaden, keine Streuung).', icon: '\u{1F3AF}', cooldown: 1500, diamonds: 7, gold: 3500 },
+  ar_grenade:         { weaponId: 'assault_rifle', type: 'active', name: 'GRANATE', desc: 'Feuert 1 Granate (AoE Explosion, 60px Radius).', icon: '\u{1F4A3}', cooldown: 2700, diamonds: 10, gold: 5000 },
+  ar_fmj:             { weaponId: 'assault_rifle', type: 'passive', name: 'FMJ', desc: 'Kugeln durchschlagen 1 Zombie.', icon: '\u{1F529}', diamonds: 10, gold: 5000 },
+  sniper_wallpen:     { weaponId: 'sniper', type: 'active', name: 'WALL PEN', desc: '1 Magazin: durch Waende schiessen.', icon: '\u{1F9F1}', cooldown: 2100, diamonds: 12, gold: 7000 },
+  sniper_explosive:   { weaponId: 'sniper', type: 'passive', name: 'EXPLOSIVE', desc: 'Treffer verursacht AoE-Explosion (40px Radius).', icon: '\u{1F4A5}', diamonds: 12, gold: 7000 },
+  minigun_overdrive:  { weaponId: 'minigun', type: 'active', name: 'OVERDRIVE', desc: '5s: kein Spin-Up, kein Movement-Penalty.', icon: '\u26A1', cooldown: 2400, diamonds: 15, gold: 10000 },
+  minigun_cryo:       { weaponId: 'minigun', type: 'passive', name: 'CRYO', desc: 'Getroffene Zombies 30% langsamer fuer 2s.', icon: '\u2744\uFE0F', diamonds: 15, gold: 10000 },
+};
+
+let ownedPerks = []; // perk IDs from server
+let activePerkCooldowns = {}; // { perkId: framesRemaining }
+let activePerkActive = {}; // { perkId: true/false } — currently activated
 
 let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
 let activeWeaponId = localStorage.getItem('dz_activeWeapon') || 'pistol';
@@ -1286,6 +1321,9 @@ async function init() {
   rescueCooldownUntil = 0;
   rescueRunTime = 0;
 
+  activePerkCooldowns = {};
+  activePerkActive = {};
+
   runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
@@ -1387,6 +1425,8 @@ function spawnZombie() {
     avoidDir: 0,
     shootCooldown: type === 'spitter' ? 150 : 0,
     throwAnim: 0,
+    burnTimer: 0, burnDps: 0,
+    cryoTimer: 0,
   });
 }
 
@@ -1681,6 +1721,49 @@ document.addEventListener('keydown', e => {
     minigunSpinup = 0;
     updateHUD();
   }
+  if (e.code === 'KeyE' && running && !paused) {
+    const wpnPerks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === activeWeaponId && p.type === 'active' && ownedPerks.includes(id));
+    for (const [perkId, perk] of wpnPerks) {
+      if (activePerkCooldowns[perkId] > 0) continue;
+      activePerkCooldowns[perkId] = perk.cooldown;
+      activePerkActive[perkId] = true;
+      showWaveBanner(perk.name + ' AKTIVIERT!');
+      if (perkId === 'minigun_overdrive') {
+        setTimeout(() => { activePerkActive['minigun_overdrive'] = false; }, 5000);
+      }
+      if (perkId === 'shotgun_dragon') {
+        setTimeout(() => { activePerkActive['shotgun_dragon'] = false; }, 5000);
+      }
+      if (perkId === 'sniper_wallpen') {
+        // Active for 1 magazine — deactivated on reload
+      }
+      if (perkId === 'pistol_akimbo') {
+        // Active for 1 magazine — deactivated on reload
+      }
+      if (perkId === 'shotgun_slug') {
+        // Active for 1 magazine — deactivated on reload
+      }
+      if (perkId === 'smg_drum') {
+        // Immediately give 3x mag
+        player.ammo = getWeaponStat(activeWeaponId, 'mag') * 3;
+        player.maxAmmo = getWeaponStat(activeWeaponId, 'mag') * 3;
+        activePerkActive['smg_drum'] = false;
+        updateHUD();
+      }
+      if (perkId === 'ar_grenade') {
+        // Fire a grenade projectile
+        const gAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        bullets.push({
+          x: player.x, y: player.y,
+          dx: Math.cos(gAngle) * 6,
+          dy: Math.sin(gAngle) * 6,
+          life: 60, damage: 0, pierce: false, isGrenade: true, grenadeDmg: 8,
+        });
+        activePerkActive['ar_grenade'] = false;
+      }
+      break;
+    }
+  }
   if (e.code === keybinds.dash) { tryDash(); e.preventDefault(); return; }
   if (e.code === keybinds.rescue && rescueState === 'idle' && running && !paused) {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
@@ -1725,32 +1808,85 @@ function updateReload(now) {
 }
 
 // ── SHOOTING ─────────────────────────────────────────
+function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
+  // Hollow Point — +50% damage to normal zombies (pistol passive)
+  if (ownedPerks.includes('pistol_hollow') && weaponId === 'pistol' && z.type === 'normal') {
+    effectiveDmg *= 1.5;
+  }
+  z.hp -= effectiveDmg;
+  runStats.damageDealt += effectiveDmg;
+
+  // Incendiary — SMG passive: burn 3s at 2 DPS
+  if (ownedPerks.includes('smg_incendiary') && weaponId === 'smg') {
+    z.burnTimer = 180; z.burnDps = 2;
+  }
+  // Dragon's Breath — shotgun active: burn on hit
+  if (activePerkActive['shotgun_dragon'] && weaponId === 'shotgun') {
+    z.burnTimer = 180; z.burnDps = 3;
+  }
+  // Cryo — minigun passive: slow 30% for 2s
+  if (ownedPerks.includes('minigun_cryo') && weaponId === 'minigun') {
+    z.cryoTimer = 120;
+  }
+  // Explosive — sniper passive: AoE on hit
+  if (ownedPerks.includes('sniper_explosive') && weaponId === 'sniper' && z.alive) {
+    const aoeR = 40;
+    for (const oz of zombies) {
+      if (oz === z || !oz.alive) continue;
+      const odx = oz.x - z.x, ody = oz.y - z.y;
+      if (odx*odx + ody*ody < aoeR*aoeR) {
+        oz.hp -= effectiveDmg * 0.5;
+        runStats.damageDealt += effectiveDmg * 0.5;
+        spawnBlood(oz.x, oz.y, 4);
+        if (oz.hp <= 0) { oz.alive = false; oz.deathTimer = 30; onZombieKill(oz); }
+      }
+    }
+    // Explosion particles
+    for (let i = 0; i < 8; i++) {
+      const ea = Math.random() * Math.PI * 2;
+      particles.push({ x: z.x, y: z.y, dx: Math.cos(ea)*4, dy: Math.sin(ea)*4, life: 15, maxLife: 15, color: '#ff6600', r: 4 });
+    }
+  }
+}
+
 function tryShoot() {
   const wpn = WEAPONS[activeWeaponId];
   if (!wpn) return;
-  const fireRate = Math.max(1, Math.round(getWeaponStat(activeWeaponId, 'rate')));
+  let fireRate = Math.max(1, Math.round(getWeaponStat(activeWeaponId, 'rate')));
   const magSize = getWeaponStat(activeWeaponId, 'mag');
-  const spread = getWeaponStat(activeWeaponId, 'acc');
+  let spread = getWeaponStat(activeWeaponId, 'acc');
   let dmg = getWeaponStat(activeWeaponId, 'dmg');
   // Berserker — more damage at low HP
   const berserkerMax = getPlayerStat('berserkerMaxBonus');
   if (berserkerMax > 0) {
     const hpPct = player.hp / getPlayerStat('maxHp');
     if (hpPct < 0.5) {
-      const berserkerMult = 1 + berserkerMax * (1 - hpPct * 2); // scales from 0 at 50% HP to max at 0% HP
+      const berserkerMult = 1 + berserkerMax * (1 - hpPct * 2);
       dmg *= berserkerMult;
     }
   }
   const range = Math.round(getWeaponStat(activeWeaponId, 'range'));
 
+  // Akimbo — double fire rate, double spread
+  const akimboActive = activePerkActive['pistol_akimbo'] && activeWeaponId === 'pistol';
+  if (akimboActive) {
+    fireRate = Math.max(1, Math.round(fireRate / 2));
+    spread *= 2;
+  }
+
   if (reloading || player.ammo <= 0 || player.shootCooldown > 0) return;
 
   if (wpn.special === 'spinup') {
-    minigunSpinup++;
-    if (minigunSpinup < 30) {
-      player.shootCooldown = Math.max(fireRate, Math.round(fireRate * 3 / (1 + minigunSpinup * 0.1)));
-    } else {
+    // Overdrive — skip spinup
+    if (activePerkActive['minigun_overdrive']) {
       player.shootCooldown = fireRate;
+    } else {
+      minigunSpinup++;
+      if (minigunSpinup < 30) {
+        player.shootCooldown = Math.max(fireRate, Math.round(fireRate * 3 / (1 + minigunSpinup * 0.1)));
+      } else {
+        player.shootCooldown = fireRate;
+      }
     }
   } else {
     player.shootCooldown = fireRate;
@@ -1766,7 +1902,11 @@ function tryShoot() {
   updateHUD();
 
   const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
-  const useHitscan = wpn.type === 'Auto' || activeWeaponId === 'sniper'; // Auto + Sniper = hitscan
+
+  // Slug Round — shotgun fires single heavy bullet
+  const slugActive = activePerkActive['shotgun_slug'] && activeWeaponId === 'shotgun';
+
+  const useHitscan = wpn.type === 'Auto' || activeWeaponId === 'sniper';
 
   if (useHitscan) {
     // Hitscan — instant ray, no bullet object
@@ -1774,27 +1914,30 @@ function tryShoot() {
     const rayAngle = angle + bulletSpread;
     const rayDx = Math.cos(rayAngle);
     const rayDy = Math.sin(rayAngle);
-    const maxDist = range * BULLET_SPD; // convert frame-life to pixel distance
+    const maxDist = range * BULLET_SPD;
 
-    // Find closest zombie along ray
     let hitZombie = null;
     let hitDist = maxDist;
     let hitX = player.x + rayDx * maxDist;
     let hitY = player.y + rayDy * maxDist;
 
-    // Check wall hit first (step along ray)
-    for (let d = 0; d < maxDist; d += TILE * 0.5) {
-      const wx = player.x + rayDx * d;
-      const wy = player.y + rayDy * d;
-      if (wallCollide(wx, wy, 2)) {
-        hitDist = d;
-        hitX = wx; hitY = wy;
-        break;
+    // Wall Penetration — sniper active: skip wall check
+    const wallPenActive = activePerkActive['sniper_wallpen'] && activeWeaponId === 'sniper';
+    if (!wallPenActive) {
+      for (let d = 0; d < maxDist; d += TILE * 0.5) {
+        const wx = player.x + rayDx * d;
+        const wy = player.y + rayDy * d;
+        if (wallCollide(wx, wy, 2)) {
+          hitDist = d;
+          hitX = wx; hitY = wy;
+          break;
+        }
       }
     }
 
-    // Check zombies along ray — pierce hits ALL, normal hits first
-    const isPierce = wpn.special === 'pierce';
+    // FMJ — AR passive: pierce 1 extra zombie
+    const fmjActive = ownedPerks.includes('ar_fmj') && activeWeaponId === 'assault_rifle';
+    const isPierce = wpn.special === 'pierce' || fmjActive;
     const hitZombies = [];
     for (const z of zombies) {
       if (!z.alive) continue;
@@ -1808,63 +1951,44 @@ function tryShoot() {
         hitZombies.push({ z, proj });
       }
     }
-    // Sort by distance
     hitZombies.sort((a, b) => a.proj - b.proj);
 
-    // Apply damage — pierce hits all, normal hits first only
-    // Sniper max damage = instant kill
     const sniperExecute = activeWeaponId === 'sniper' && playerWeapons.find(w => w.weapon_id === 'sniper' && w.dmg_level >= 10);
-    const toHit = isPierce ? hitZombies : hitZombies.slice(0, 1);
+    // FMJ pierces 2 (first + 1), sniper pierce = all
+    const maxHits = fmjActive ? 2 : (isPierce ? hitZombies.length : 1);
+    const toHit = hitZombies.slice(0, maxHits);
     for (const { z, proj } of toHit) {
       if (sniperExecute) {
         z.hp = 0;
         runStats.damageDealt += z.maxHp;
       } else {
-        z.hp -= dmg;
-        runStats.damageDealt += dmg;
+        applyPerkDamageEffects(z, dmg, activeWeaponId);
       }
       spawnBlood(z.x, z.y, sniperExecute ? 12 : 6, rayAngle);
-      if (z.hp <= 0) {
+      if (z.hp <= 0 && z.alive) {
         z.alive = false;
         z.deathTimer = 30;
         onZombieKill(z);
       }
     }
-    // Update trail endpoint to first hit or wall
     if (hitZombies.length > 0 && !isPierce) {
       hitX = player.x + rayDx * hitZombies[0].proj;
       hitY = player.y + rayDy * hitZombies[0].proj;
     }
 
-    // Visual tracer — style varies per weapon
+    // Visual tracer
     if (activeWeaponId === 'sniper') {
-      // Sniper: thick bright tracer that lingers, with glow
-      hitTrails.push({
-        x1: player.x, y1: player.y, x2: hitX, y2: hitY,
-        life: 12, maxLife: 12, style: 'sniper',
-      });
+      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 12, maxLife: 12, style: 'sniper' });
     } else if (activeWeaponId === 'minigun') {
-      // Minigun: very thin fast streaks
-      hitTrails.push({
-        x1: player.x, y1: player.y, x2: hitX, y2: hitY,
-        life: 3, maxLife: 3, style: 'minigun',
-      });
+      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 3, maxLife: 3, style: 'minigun' });
     } else if (activeWeaponId === 'assault_rifle') {
-      // AR: smaller version of sniper tracer
-      hitTrails.push({
-        x1: player.x, y1: player.y, x2: hitX, y2: hitY,
-        life: 8, maxLife: 8, style: 'rifle',
-      });
+      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 8, maxLife: 8, style: 'rifle' });
     } else {
-      // SMG: thin fast lines
-      hitTrails.push({
-        x1: player.x, y1: player.y, x2: hitX, y2: hitY,
-        life: 4, maxLife: 4, style: 'auto',
-      });
+      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 4, maxLife: 4, style: 'auto' });
     }
 
-  } else if (wpn.special === 'shotgun') {
-    // Shotgun keeps projectiles (5 pellets, short range — few objects)
+  } else if (wpn.special === 'shotgun' && !slugActive) {
+    // Shotgun keeps projectiles (5 pellets, short range)
     for (let p = 0; p < 5; p++) {
       const pelletSpread = (p - 2) * 0.12 + (Math.random() - 0.5) * spread;
       bullets.push({
@@ -1872,17 +1996,39 @@ function tryShoot() {
         dx: Math.cos(angle + pelletSpread) * BULLET_SPD,
         dy: Math.sin(angle + pelletSpread) * BULLET_SPD,
         life: range, damage: dmg, pierce: false,
+        weaponId: activeWeaponId,
       });
     }
+  } else if (slugActive) {
+    // Slug Round — single heavy bullet, no spread, 5x damage
+    bullets.push({
+      x: player.x, y: player.y,
+      dx: Math.cos(angle) * BULLET_SPD * 1.2,
+      dy: Math.sin(angle) * BULLET_SPD * 1.2,
+      life: range * 1.5, damage: dmg * 5, pierce: false,
+      weaponId: activeWeaponId,
+    });
   } else {
-    // Pistol, Sniper — keep projectiles (low fire rate, few objects)
+    // Pistol — keep projectiles (low fire rate, few objects)
     const bulletSpread = (Math.random() - 0.5) * spread;
     bullets.push({
       x: player.x, y: player.y,
       dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
       dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
       life: range, damage: dmg, pierce: wpn.special === 'pierce',
+      weaponId: activeWeaponId,
     });
+    // Akimbo — fire second bullet
+    if (akimboActive) {
+      const bulletSpread2 = (Math.random() - 0.5) * spread;
+      bullets.push({
+        x: player.x, y: player.y,
+        dx: Math.cos(angle + bulletSpread2) * BULLET_SPD,
+        dy: Math.sin(angle + bulletSpread2) * BULLET_SPD,
+        life: range, damage: dmg, pierce: false,
+        weaponId: activeWeaponId,
+      });
+    }
   }
 
   // Muzzle particles
@@ -1896,7 +2042,13 @@ function tryShoot() {
     });
   }
 
-  if (player.ammo === 0) startReload();
+  if (player.ammo === 0) {
+    // Deactivate magazine-based perks on empty
+    activePerkActive['pistol_akimbo'] = false;
+    activePerkActive['shotgun_slug'] = false;
+    activePerkActive['sniper_wallpen'] = false;
+    startReload();
+  }
 }
 
 // ── XP SYSTEM ─────────────────────────────────────────
@@ -2021,7 +2173,7 @@ function movePlayer() {
     speed *= (1 + (player.killRushBoost || 0));
     player.killRushTimer--;
   }
-  if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0) {
+  if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0 && !activePerkActive['minigun_overdrive']) {
     speed *= 0.7;
   }
   const nx = player.x + dx * speed;
@@ -2106,6 +2258,19 @@ function damagePlayer(rawDamage, source) {
 function updateZombies() {
   for (const z of zombies) {
     if (!z.alive) continue;
+
+    // Burn DOT
+    if (z.burnTimer > 0) {
+      z.burnTimer--;
+      z.hp -= z.burnDps / 60;
+      // Fire particles
+      if (z.frame % 6 === 0) {
+        particles.push({ x: z.x + (Math.random()-0.5)*10, y: z.y + (Math.random()-0.5)*10, dx: (Math.random()-0.5)*2, dy: -1 - Math.random(), life: 12, maxLife: 12, color: '#ff6600', r: 3 });
+      }
+      if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = 30; onZombieKill(z); continue; }
+    }
+    // Cryo slow tick
+    if (z.cryoTimer > 0) z.cryoTimer--;
 
     // Movement collision radius — smaller than visual to prevent corner-catching
     const moveR = z.radius * 0.6;
@@ -2253,7 +2418,8 @@ function updateZombies() {
         const btdx = z.x - bulletTimeX, btdy = z.y - bulletTimeY;
         if (btdx*btdx + btdy*btdy < 200*200) bulletTimeMult = 0.5;
       }
-      const finalSpeed = spd * aggroMult * bulletTimeMult;
+      const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
+      const finalSpeed = spd * aggroMult * bulletTimeMult * cryoMult;
 
       const dirX = dx / dist;
       const dirY = dy / dist;
@@ -2407,20 +2573,53 @@ function updateBullets() {
       continue;
     }
 
+    // Grenade — explode on zombie hit or end of life
+    if (b.isGrenade) {
+      let explode = false;
+      let explodeX = b.x, explodeY = b.y;
+      for (const z of zombies) {
+        if (!z.alive) continue;
+        const gdx = b.x - z.x, gdy = b.y - z.y;
+        if (gdx*gdx + gdy*gdy < (10 + z.radius)**2) { explode = true; break; }
+      }
+      if (b.life <= 1 || wallCollide(b.x, b.y, 4)) explode = true;
+      if (explode) {
+        // AoE damage in 60px radius
+        const aoeR = 60;
+        for (const z of zombies) {
+          if (!z.alive) continue;
+          const adx = z.x - b.x, ady = z.y - b.y;
+          if (adx*adx + ady*ady < aoeR*aoeR) {
+            z.hp -= b.grenadeDmg;
+            runStats.damageDealt += b.grenadeDmg;
+            spawnBlood(z.x, z.y, 6);
+            if (z.hp <= 0) { z.alive = false; z.deathTimer = 30; onZombieKill(z); }
+          }
+        }
+        // Explosion particles
+        for (let ep = 0; ep < 16; ep++) {
+          const ea = Math.random() * Math.PI * 2;
+          particles.push({ x: b.x, y: b.y, dx: Math.cos(ea)*5, dy: Math.sin(ea)*5, life: 20, maxLife: 20, color: '#ff4400', r: 5 });
+        }
+        bullets.splice(i, 1);
+        continue;
+      }
+    }
+
     let hit = false;
     for (const z of zombies) {
       if (!z.alive) continue;
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx*dx + dy*dy < (BULLET_R + z.radius)**2) {
-        z.hp -= b.damage || 1;
-        runStats.damageDealt += (b.damage || 1);
+        const bWpnId = b.weaponId || 'pistol';
+        applyPerkDamageEffects(z, b.damage || 1, bWpnId);
         const bulletDir = Math.atan2(b.dy, b.dx);
         spawnBlood(z.x, z.y, 6, bulletDir);
         if (!b.pierce) {
           bullets.splice(i, 1);
           hit = true;
         }
-        if (z.hp <= 0) {
+        if (z.hp <= 0 && z.alive) {
           z.alive = false;
           z.deathTimer = 30;
           onZombieKill(z);
@@ -3662,11 +3861,14 @@ async function gameOver() {
     } catch {}
   }
 
-  // Reset weapons on death — back to pistol only
+  // Reset weapons and perks on death — back to pistol only
   playerWeapons = [];
   ownedWeaponIds = ['pistol'];
   setActiveWeapon('pistol');
   globalGold = 0;
+  ownedPerks = [];
+  activePerkCooldowns = {};
+  activePerkActive = {};
 
   const totalEarned = score;
   lastRunText = 'GESTORBEN: Wave ' + wave + '  |  +' + totalEarned + ' XP  |  75% VERLOREN';
@@ -3823,6 +4025,11 @@ function loop(now) {
   updateHitTrails();
   updateReload(now);
 
+  // Perk cooldown ticks
+  for (const perkId in activePerkCooldowns) {
+    if (activePerkCooldowns[perkId] > 0) activePerkCooldowns[perkId]--;
+  }
+
   // Shield regen
   if (player.maxShield > 0) {
     if (player.shield < player.maxShield) {
@@ -3914,6 +4121,33 @@ function loop(now) {
   ctx.textAlign = 'right';
   ctx.fillText(`SCORE  ${score}`, W - 14, H - 14);
   ctx.restore();
+
+  // Perk HUD — show perks for current weapon
+  {
+    const wpnPerks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === activeWeaponId && ownedPerks.includes(id));
+    let py = H - 100;
+    ctx.save();
+    for (const [perkId, perk] of wpnPerks) {
+      const cd = activePerkCooldowns[perkId] || 0;
+      const isActive = activePerkActive[perkId];
+      ctx.font = "10px 'JetBrains Mono'";
+      ctx.textAlign = 'left';
+      if (perk.type === 'active') {
+        if (cd > 0 && !isActive) {
+          ctx.fillStyle = '#555';
+          ctx.fillText('[E] ' + perk.name + ' ' + Math.ceil(cd / 60) + 's', 16, py);
+        } else {
+          ctx.fillStyle = isActive ? '#33cc44' : '#ffaa00';
+          ctx.fillText('[E] ' + perk.name + (isActive ? ' AKTIV' : ' BEREIT'), 16, py);
+        }
+      } else {
+        ctx.fillStyle = '#8866cc';
+        ctx.fillText(perk.icon + ' ' + perk.name, 16, py);
+      }
+      py -= 16;
+    }
+    ctx.restore();
+  }
 
   drawRescueHUD();
 
@@ -4749,6 +4983,132 @@ function renderArsenal() {
       } catch {}
     });
   });
+
+  // Perk slots for selected weapon
+  const perkSection = document.createElement('div');
+  perkSection.style.cssText = 'margin-top:24px;padding-top:16px;border-top:1px solid #141a20';
+  perkSection.innerHTML = '<div style="font-family:Oswald,sans-serif;font-size:15px;font-weight:600;letter-spacing:3px;color:#8090a0;margin-bottom:14px">PERKS</div>';
+
+  const wpnPerks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === selectedArsenalWeapon);
+  const perkRow = document.createElement('div');
+  perkRow.style.cssText = 'display:flex;gap:12px';
+
+  for (const [perkId, perk] of wpnPerks) {
+    const owned = ownedPerks.includes(perkId);
+    const slot = document.createElement('div');
+    slot.style.cssText = 'width:56px;height:56px;border:1px solid ' + (owned ? '#33cc44' : '#1a1e22') + ';background:' + (owned ? 'rgba(51,204,68,0.06)' : 'rgba(255,255,255,0.02)') + ';display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;transition:all 0.2s';
+    // Diamond shape via transform
+    slot.style.transform = 'rotate(45deg)';
+    const inner = document.createElement('div');
+    inner.style.cssText = 'transform:rotate(-45deg);text-align:center;font-size:9px;letter-spacing:1px;line-height:1.3';
+    if (owned) {
+      inner.innerHTML = '<div style="font-size:18px">' + perk.icon + '</div><div style="color:#33cc44;font-size:7px">' + perk.name + '</div>';
+    } else {
+      inner.innerHTML = '<div style="font-size:18px;color:#333">+</div><div style="color:#333;font-size:7px">SHOP</div>';
+    }
+    slot.appendChild(inner);
+    if (!owned) {
+      slot.addEventListener('click', () => switchMenuTab('shop'));
+    }
+    // Tooltip on hover
+    slot.title = perk.name + ' — ' + perk.desc;
+    perkRow.appendChild(slot);
+  }
+  perkSection.appendChild(perkRow);
+  statsContainer.appendChild(perkSection);
+}
+
+// ── PERK SHOP ───────────────────────────────────────
+function renderShop() {
+  const grid = document.getElementById('perk-shop-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  document.getElementById('shop-gold').textContent = globalGold + ' G';
+  document.getElementById('shop-diamonds').textContent = globalDiamonds + ' D';
+
+  const level = getLevelFromXp(globalXp);
+
+  // Group by weapon
+  const weaponOrder = ['pistol', 'smg', 'shotgun', 'assault_rifle', 'sniper', 'minigun'];
+  for (const wpnId of weaponOrder) {
+    const wpn = WEAPONS[wpnId];
+    const wpnOwned = ownedWeaponIds.includes(wpnId);
+    const perks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === wpnId);
+    if (perks.length === 0) continue;
+
+    // Weapon group header
+    const header = document.createElement('div');
+    header.style.cssText = 'width:100%;font-family:Oswald,sans-serif;font-size:14px;font-weight:600;letter-spacing:3px;color:#4a5460;padding:8px 0 4px 8px;border-bottom:1px solid #141a20;margin-top:8px';
+    header.textContent = wpn.name;
+    if (!wpnOwned) header.textContent += ' (NICHT FREIGESCHALTET)';
+    grid.appendChild(header);
+
+    const row = document.createElement('div');
+    row.style.cssText = 'width:100%;display:flex;gap:12px;flex-wrap:wrap';
+    grid.appendChild(row);
+
+    for (const [perkId, perk] of perks) {
+      const owned = ownedPerks.includes(perkId);
+      const canAfford = globalGold >= perk.gold && globalDiamonds >= perk.diamonds;
+      const canBuy = wpnOwned && canAfford && !owned;
+
+      const card = document.createElement('div');
+      card.style.cssText = 'width:240px;background:#0c0f14;border:1px solid ' + (owned ? '#33cc44' : canBuy ? '#ddaa00' : '#1a1e22') + ';padding:16px;position:relative;transition:border-color 0.2s';
+
+      const typeBadge = perk.type === 'active' ? '<span style="font-size:9px;color:#ffaa00;border:1px solid #665500;padding:1px 5px;letter-spacing:1px">AKTIV</span>' : '<span style="font-size:9px;color:#8866cc;border:1px solid #443366;padding:1px 5px;letter-spacing:1px">PASSIV</span>';
+
+      let actionHtml = '';
+      if (owned) {
+        actionHtml = '<div style="font-size:10px;letter-spacing:2px;color:#33cc44;margin-top:10px">FREIGESCHALTET</div>';
+      } else if (!wpnOwned) {
+        actionHtml = '<div style="font-size:10px;letter-spacing:2px;color:#333;margin-top:10px">WAFFE BENOETIGT</div>';
+      } else if (!canAfford) {
+        actionHtml = '<div style="font-size:10px;letter-spacing:2px;color:#661100;margin-top:10px">NICHT GENUG RESSOURCEN</div>';
+      } else {
+        actionHtml = '<button class="perk-buy-btn" data-perk="' + perkId + '" style="font-family:Oswald,sans-serif;font-size:12px;letter-spacing:2px;color:#ddaa00;background:transparent;border:1px solid #665500;padding:6px 20px;cursor:pointer;margin-top:10px;transition:all 0.2s">KAUFEN</button>';
+      }
+
+      card.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-family:Oswald,sans-serif;font-size:15px;font-weight:500;letter-spacing:2px;color:${owned ? '#33cc44' : '#c0ccd8'}">${perk.icon} ${perk.name}</span>
+          ${typeBadge}
+        </div>
+        <div style="font-size:10px;color:#556070;line-height:1.6;min-height:32px">${perk.desc}</div>
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;letter-spacing:1px">
+          <span style="color:#ddaa00">${perk.gold} G</span>
+          <span style="color:#44bbff">${perk.diamonds} D</span>
+        </div>
+        ${actionHtml}
+      `;
+      row.appendChild(card);
+    }
+  }
+
+  // Wire buy buttons
+  grid.querySelectorAll('.perk-buy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const perkId = btn.dataset.perk;
+      try {
+        const res = await fetch('/api/perks/buy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ perkId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          ownedPerks = data.perks;
+          globalGold = data.gold;
+          globalDiamonds = data.diamonds;
+          renderShop();
+          renderArsenal();
+        } else {
+          const err = await res.json();
+          showWaveBanner(err.error || 'Kauf fehlgeschlagen');
+        }
+      } catch {}
+    });
+  });
 }
 
 // Tab switching
@@ -4772,6 +5132,7 @@ function switchMenuTab(tabName) {
   }
 
   if (tabName === 'arsenal') { selectedArsenalWeapon = activeWeaponId; renderArsenal(); }
+  if (tabName === 'shop') { renderShop(); }
 }
 
 document.querySelectorAll('.menu-tab').forEach(tab => {
@@ -4850,11 +5211,14 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
     } catch {}
   }
 
-  // Reset weapons on quit — back to pistol only
+  // Reset weapons and perks on quit — back to pistol only
   playerWeapons = [];
   ownedWeaponIds = ['pistol'];
   setActiveWeapon('pistol');
   globalGold = 0;
+  ownedPerks = [];
+  activePerkCooldowns = {};
+  activePerkActive = {};
 
   lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
   showGameMenu();
