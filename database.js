@@ -62,6 +62,15 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS user_perks (
+    user_id INTEGER NOT NULL,
+    perk_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, perk_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )
+`);
+
 // remove deprecated skills
 db.prepare("DELETE FROM user_skills WHERE skill_id IN ('quick_reload', 'trigger_finger')").run();
 
@@ -82,6 +91,11 @@ const getUserWeapons = db.prepare('SELECT * FROM user_weapons WHERE user_id = ?'
 const getWeapon = db.prepare('SELECT * FROM user_weapons WHERE user_id = ? AND weapon_id = ?');
 const buyWeapon = db.prepare('INSERT INTO user_weapons (user_id, weapon_id) VALUES (?, ?)');
 const deleteUserWeapons = db.prepare('DELETE FROM user_weapons WHERE user_id = ?');
+
+// perk statements
+const getUserPerks = db.prepare('SELECT perk_id FROM user_perks WHERE user_id = ?');
+const buyPerk = db.prepare('INSERT OR IGNORE INTO user_perks (user_id, perk_id) VALUES (?, ?)');
+const deleteUserPerks = db.prepare('DELETE FROM user_perks WHERE user_id = ?');
 
 // currency statements
 const addGold = db.prepare('UPDATE users SET gold = gold + ? WHERE id = ?');
@@ -123,6 +137,7 @@ const applyDeath = db.transaction((userId) => {
   setGold.run(0, userId);
   deleteUserSkills.run(userId);
   deleteUserWeapons.run(userId);
+  deleteUserPerks.run(userId);
   incrementDeaths.run(userId);
   return { xp: newXp, gold: 0, diamonds: user.diamonds };
 });
@@ -131,6 +146,7 @@ module.exports = {
   createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill,
   deleteUserSkills, setXp, applyDeath,
   getUserWeapons, getWeapon, buyWeapon, deleteUserWeapons,
+  getUserPerks, buyPerk, deleteUserPerks,
   addGold, setGold, addDiamonds, upgradeWeaponStat,
   addStats, getStats, incrementRescues, updatePassword,
 };

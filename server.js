@@ -6,6 +6,7 @@ const path = require('path');
 const {
   createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath,
   getUserWeapons, getWeapon, buyWeapon, addGold, setGold, addDiamonds, upgradeWeaponStat,
+  getUserPerks, buyPerk,
   addStats, getStats, incrementRescues, updatePassword,
 } = require('./database');
 
@@ -206,6 +207,70 @@ app.post('/api/weapons/upgrade', auth, (req, res) => {
   const weapons = getUserWeapons.all(req.user.id);
   const updatedUser = getUser.get(req.user.id);
   res.json({ weapons, gold: updatedUser.gold });
+});
+
+// perk definitions
+const PERK_DEFS = {
+  // Pistol (Tier 1)
+  pistol_akimbo:      { weaponId: 'pistol', type: 'active', name: 'Akimbo', diamonds: 3, gold: 1000 },
+  pistol_hollow:      { weaponId: 'pistol', type: 'passive', name: 'Hollow Point', diamonds: 3, gold: 1000 },
+  // SMG (Tier 2)
+  smg_drum:           { weaponId: 'smg', type: 'active', name: 'Drum Mag', diamonds: 5, gold: 2000 },
+  smg_incendiary:     { weaponId: 'smg', type: 'passive', name: 'Incendiary Rounds', diamonds: 5, gold: 2000 },
+  // Shotgun (Tier 3)
+  shotgun_dragon:     { weaponId: 'shotgun', type: 'active', name: "Dragon's Breath", diamonds: 7, gold: 3500 },
+  shotgun_slug:       { weaponId: 'shotgun', type: 'active', name: 'Slug Round', diamonds: 7, gold: 3500 },
+  // Assault Rifle (Tier 4)
+  ar_grenade:         { weaponId: 'assault_rifle', type: 'active', name: 'Grenade Launcher', diamonds: 10, gold: 5000 },
+  ar_fmj:             { weaponId: 'assault_rifle', type: 'passive', name: 'FMJ Rounds', diamonds: 10, gold: 5000 },
+  // Sniper (Tier 5)
+  sniper_wallpen:     { weaponId: 'sniper', type: 'active', name: 'Wall Penetration', diamonds: 12, gold: 7000 },
+  sniper_explosive:   { weaponId: 'sniper', type: 'passive', name: 'Explosive Rounds', diamonds: 12, gold: 7000 },
+  // Minigun (Tier 6)
+  minigun_overdrive:  { weaponId: 'minigun', type: 'active', name: 'Overdrive', diamonds: 15, gold: 10000 },
+  minigun_cryo:       { weaponId: 'minigun', type: 'passive', name: 'Cryo Rounds', diamonds: 15, gold: 10000 },
+};
+
+// GET /api/perk-defs
+app.get('/api/perk-defs', (req, res) => {
+  res.json(PERK_DEFS);
+});
+
+// GET /api/perks
+app.get('/api/perks', auth, (req, res) => {
+  const perks = getUserPerks.all(req.user.id).map(p => p.perk_id);
+  res.json({ perks });
+});
+
+// POST /api/perks/buy
+app.post('/api/perks/buy', auth, (req, res) => {
+  const { perkId } = req.body;
+  const def = PERK_DEFS[perkId];
+  if (!def) return res.status(400).json({ error: 'Unknown perk' });
+
+  const user = getUser.get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  // Check if weapon is owned
+  const weapon = getWeapon.get(req.user.id, def.weaponId);
+  if (!weapon && def.weaponId !== 'pistol') return res.status(400).json({ error: 'Weapon not owned' });
+
+  // Check if already owned
+  const existing = getUserPerks.all(req.user.id).map(p => p.perk_id);
+  if (existing.includes(perkId)) return res.status(400).json({ error: 'Perk already owned' });
+
+  // Check cost (needs BOTH diamonds AND gold)
+  if (user.diamonds < def.diamonds) return res.status(400).json({ error: 'Not enough diamonds' });
+  if (user.gold < def.gold) return res.status(400).json({ error: 'Not enough gold' });
+
+  // Deduct both currencies
+  addGold.run(-def.gold, req.user.id);
+  addDiamonds.run(-def.diamonds, req.user.id);
+  buyPerk.run(req.user.id, perkId);
+
+  const perks = getUserPerks.all(req.user.id).map(p => p.perk_id);
+  const updatedUser = getUser.get(req.user.id);
+  res.json({ perks, gold: updatedUser.gold, diamonds: updatedUser.diamonds });
 });
 
 // POST /api/gold
