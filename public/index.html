@@ -716,6 +716,7 @@ function pickZombieType(wave) {
 // ── MAP ─────────────────────────────────────────────
 // 0=floor, 1=wall — dynamisch generiert
 let COLS, ROWS, MAP;
+let _floorNoise = null;
 
 function generateMap() {
   _floorNoise = null; // reset floor tile cache
@@ -1973,8 +1974,7 @@ function drawSpitterProjectiles() {
 }
 
 // ── DRAW ─────────────────────────────────────────────
-// Pre-generate floor tile noise for performance (seeded per tile)
-let _floorNoise = null;
+// Floor tile noise cache (declared near MAP at line 719)
 function getFloorNoise(col, row) {
   if (!_floorNoise || !_floorNoise[row] || !_floorNoise[row][col]) {
     _floorNoise = [];
