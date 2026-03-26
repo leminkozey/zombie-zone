@@ -92,7 +92,7 @@ app.get('/api/profile', auth, (req, res) => {
 // add xp
 app.post('/api/xp', auth, (req, res) => {
   const { xp } = req.body;
-  if (typeof xp !== 'number' || xp < 0 || xp > 500) return res.status(400).json({ error: 'Invalid XP value' });
+  if (typeof xp !== 'number' || xp < 0 || xp > 5000) return res.status(400).json({ error: 'Invalid XP value' });
   addXp.run(xp, req.user.id);
   const user = getUser.get(req.user.id);
   res.json({ xp: user.xp });
@@ -286,8 +286,8 @@ app.post('/api/perks/buy', auth, (req, res) => {
 // POST /api/gold
 app.post('/api/gold', auth, (req, res) => {
   const { gold, diamonds } = req.body;
-  if (typeof gold === 'number' && gold > 0 && gold <= 50000) addGold.run(gold, req.user.id);
-  if (typeof diamonds === 'number' && diamonds > 0 && diamonds <= 5) addDiamonds.run(diamonds, req.user.id);
+  if (typeof gold === 'number' && gold > 0 && gold <= 500000) addGold.run(gold, req.user.id);
+  if (typeof diamonds === 'number' && diamonds > 0 && diamonds <= 20) addDiamonds.run(diamonds, req.user.id);
   const user = getUser.get(req.user.id);
   res.json({ gold: user.gold, diamonds: user.diamonds });
 });

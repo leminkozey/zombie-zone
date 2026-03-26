@@ -222,12 +222,6 @@
     letter-spacing: 1px;
     min-height: 16px;
   }
-  #user-display {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: #505060;
-    letter-spacing: 3px;
-  }
   #xp-bar-wrap {
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -429,7 +423,6 @@
       </div>
       <div class="sub">TOP-DOWN SURVIVAL</div>
       <h1>DEAD ZONE</h1>
-      <div id="user-display"></div>
       <div id="lobby-stats" style="color:#606070;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:2px;margin:8px 0"></div>
       <div id="last-run" style="color:#ee2200;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:1px;min-height:18px"></div>
       <div class="hint">
@@ -642,7 +635,6 @@ async function showGameMenu() {
   // Reset to lobby tab
   switchMenuTab('lobby');
 
-  document.getElementById('user-display').textContent = currentUser ? currentUser.toUpperCase() : '';
   document.getElementById('last-run').textContent = lastRunText;
   document.getElementById('lobby-stats').textContent = '';
   document.getElementById('lobby-player-name').textContent = currentUser ? currentUser.toUpperCase() : '';
@@ -816,6 +808,8 @@ function sfxShoot(freq, duration, vol, decay) {
   osc.connect(gain).connect(audioCtx.destination);
   noise.connect(noiseGain).connect(audioCtx.destination);
 
+  osc.onended = () => { osc.disconnect(); gain.disconnect(); };
+  noise.onended = () => { noise.disconnect(); noiseGain.disconnect(); };
   osc.start(); osc.stop(audioCtx.currentTime + duration);
   noise.start(); noise.stop(audioCtx.currentTime + duration + 0.05);
 }
@@ -1007,6 +1001,7 @@ function sfxExplosion(vol) {
   gain.gain.setValueAtTime(vol, audioCtx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
   noise.connect(filter).connect(gain).connect(audioCtx.destination);
+  noise.onended = () => { noise.disconnect(); filter.disconnect(); gain.disconnect(); };
   noise.start(); noise.stop(audioCtx.currentTime + 0.4);
 }
 
@@ -1529,7 +1524,7 @@ let runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitter
 
 const DEFAULT_KEYBINDS = {
   moveUp: 'KeyW', moveDown: 'KeyS', moveLeft: 'KeyA', moveRight: 'KeyD',
-  reload: 'KeyR', dash: 'Space', rescue: 'KeyF', pause: 'Escape',
+  reload: 'KeyR', dash: 'Space', rescue: 'KeyF', pause: 'Escape', perk: 'KeyE',
 };
 let keybinds = JSON.parse(localStorage.getItem('dz_keybinds') || 'null') || { ...DEFAULT_KEYBINDS };
 let mouseSensitivity = parseFloat(localStorage.getItem('dz_sensitivity') || '1');
@@ -2041,7 +2036,7 @@ document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === keybinds.reload && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
   const weaponKeys = { 'Digit1': 'pistol', 'Digit2': 'smg', 'Digit3': 'shotgun', 'Digit4': 'assault_rifle', 'Digit5': 'sniper', 'Digit6': 'minigun' };
-  if (weaponKeys[e.code] && ownedWeaponIds.includes(weaponKeys[e.code])) {
+  if (weaponKeys[e.code] && ownedWeaponIds.includes(weaponKeys[e.code]) && running && !paused) {
     setActiveWeapon(weaponKeys[e.code]);
     player.ammo = getWeaponStat(activeWeaponId, 'mag');
     player.maxAmmo = getWeaponStat(activeWeaponId, 'mag');
@@ -2050,7 +2045,7 @@ document.addEventListener('keydown', e => {
     minigunSpinup = 0;
     updateHUD();
   }
-  if (e.code === 'KeyE' && running && !paused) {
+  if (e.code === keybinds.perk && running && !paused) {
     const wpnPerks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === activeWeaponId && p.type === 'active' && ownedPerks.includes(id));
     for (const [perkId, perk] of wpnPerks) {
       if (activePerkCooldowns[perkId] > 0) continue;
@@ -2123,6 +2118,10 @@ function startReload() {
   reloadStart = performance.now();
   playSound('reload');
   document.getElementById('reload-bar-wrap').style.display = 'block';
+  // Deactivate magazine-based perks on reload
+  activePerkActive['pistol_akimbo'] = false;
+  activePerkActive['sniper_wallpen'] = false;
+  activePerkActive['shotgun_slug'] = false;
 }
 
 function updateReload(now) {
@@ -2307,7 +2306,7 @@ function tryShoot() {
         z.deathTimer = 30;
         onZombieKill(z);
       } else if (z.alive) {
-        playSoundThrottled('hit', 30);
+        playSoundThrottled('zombie_hit', 80);
       }
     }
     if (hitZombies.length > 0 && !isPierce) {
@@ -2968,7 +2967,7 @@ function updateBullets() {
           z.deathTimer = 30;
           onZombieKill(z);
         } else if (z.alive) {
-          playSoundThrottled('hit', 30);
+          playSoundThrottled('zombie_hit', 80);
         }
         if (!b.pierce) break;
       }
@@ -4146,6 +4145,8 @@ function syncXp() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
     body: JSON.stringify({ xp: xpToSync })
+  }).then(res => {
+    if (!res.ok) { pendingXp += xpToSync; globalXp -= xpToSync; }
   }).catch(() => {
     pendingXp += xpToSync;
     globalXp -= xpToSync;
@@ -4165,6 +4166,8 @@ function syncGold() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
     body: JSON.stringify({ gold: goldToSync, diamonds: diaToSync })
+  }).then(res => {
+    if (!res.ok) { pendingGold += goldToSync; pendingDiamonds += diaToSync; globalGold -= goldToSync; globalDiamonds -= diaToSync; }
   }).catch(() => {
     pendingGold += goldToSync;
     pendingDiamonds += diaToSync;
@@ -5604,7 +5607,7 @@ function renderKeybinds() {
   list.innerHTML = '';
   const labels = {
     moveUp: 'NACH OBEN', moveDown: 'NACH UNTEN', moveLeft: 'NACH LINKS', moveRight: 'NACH RECHTS',
-    reload: 'NACHLADEN', dash: 'DASH', rescue: 'RESCUE', pause: 'PAUSE',
+    reload: 'NACHLADEN', dash: 'DASH', rescue: 'RESCUE', pause: 'PAUSE', perk: 'PERK AKTIVIEREN',
   };
   Object.entries(keybinds).forEach(([action, key]) => {
     const row = document.createElement('div');
