@@ -7,7 +7,7 @@
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&display=swap');
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    background: #0a0a0a;
+    background: #0c0c0e;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -656,6 +656,7 @@ function pickZombieType(wave) {
 let COLS, ROWS, MAP;
 
 function generateMap() {
+  _floorNoise = null; // reset floor tile cache
   COLS = Math.floor(W / TILE);
   ROWS = Math.floor(H / TILE);
   if (COLS < 10) COLS = 10;
@@ -1835,28 +1836,120 @@ function drawSpitterProjectiles() {
 }
 
 // ── DRAW ─────────────────────────────────────────────
+// Pre-generate floor tile noise for performance (seeded per tile)
+let _floorNoise = null;
+function getFloorNoise(col, row) {
+  if (!_floorNoise || !_floorNoise[row] || !_floorNoise[row][col]) {
+    _floorNoise = [];
+    for (let r = 0; r < ROWS; r++) {
+      _floorNoise[r] = [];
+      for (let c = 0; c < COLS; c++) {
+        const seed = (r * 137 + c * 311) % 1000 / 1000;
+        const variant = seed < 0.33 ? '#0c0c0e' : seed < 0.66 ? '#101014' : '#0e0e12';
+        // Debris dots (pre-computed positions)
+        const debris = [];
+        const debrisCount = Math.floor(seed * 5);
+        for (let d = 0; d < debrisCount; d++) {
+          const dseed = ((r * 53 + c * 97 + d * 31) % 1000) / 1000;
+          const dseed2 = ((r * 71 + c * 43 + d * 67) % 1000) / 1000;
+          debris.push({
+            ox: dseed * (TILE - 4) + 2,
+            oy: dseed2 * (TILE - 4) + 2,
+            r: 0.5 + dseed * 1,
+            color: dseed > 0.5 ? '#1a1a1e' : '#16161a'
+          });
+        }
+        _floorNoise[r][c] = { variant, debris };
+      }
+    }
+  }
+  return _floorNoise[row][col];
+}
+
 function drawMap() {
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const cell = MAP[row][col];
       const x = col * TILE, y = row * TILE;
       if (cell === 1) {
-        // Wall
-        ctx.fillStyle = '#1c1c1c';
+        // Wall — 3D beveled concrete block
+        // Side face (darker)
+        ctx.fillStyle = '#141418';
         ctx.fillRect(x, y, TILE, TILE);
-        // Top highlight
-        ctx.fillStyle = '#2a2a2a';
-        ctx.fillRect(x, y, TILE, 3);
-        // Inner shadow
-        ctx.fillStyle = '#111';
-        ctx.fillRect(x+2, y+3, TILE-4, TILE-5);
+
+        // Top face (lighter, gives depth)
+        ctx.fillStyle = '#2a2a30';
+        ctx.fillRect(x, y, TILE, 6);
+
+        // Left edge highlight
+        ctx.fillStyle = '#252530';
+        ctx.fillRect(x, y, 3, TILE);
+
+        // Main body with brick-like horizontal lines
+        ctx.fillStyle = '#1a1a20';
+        ctx.fillRect(x + 3, y + 6, TILE - 6, TILE - 9);
+
+        // Brick lines
+        ctx.strokeStyle = '#16161c';
+        ctx.lineWidth = 0.6;
+        const brickY1 = y + Math.floor(TILE * 0.35);
+        const brickY2 = y + Math.floor(TILE * 0.65);
+        ctx.beginPath();
+        ctx.moveTo(x + 4, brickY1); ctx.lineTo(x + TILE - 4, brickY1);
+        ctx.moveTo(x + 4, brickY2); ctx.lineTo(x + TILE - 4, brickY2);
+        ctx.stroke();
+
+        // Right edge shadow
+        ctx.fillStyle = '#0e0e12';
+        ctx.fillRect(x + TILE - 2, y, 2, TILE);
+
+        // Bottom edge shadow
+        ctx.fillStyle = '#0a0a0e';
+        ctx.fillRect(x, y + TILE - 3, TILE, 3);
+
+        // Top-left bevel highlight
+        ctx.fillStyle = '#333340';
+        ctx.fillRect(x, y, TILE, 1);
+        ctx.fillRect(x, y, 1, TILE);
+
       } else {
-        // Floor with subtle grid
-        ctx.fillStyle = '#141414';
+        // Floor — cracked concrete with noise variation
+        const noise = getFloorNoise(col, row);
+        ctx.fillStyle = noise.variant;
         ctx.fillRect(x, y, TILE, TILE);
-        ctx.strokeStyle = '#1a1a1a';
-        ctx.lineWidth = 0.5;
+
+        // Subtle grid lines (very faint)
+        ctx.strokeStyle = '#181820';
+        ctx.lineWidth = 0.3;
         ctx.strokeRect(x, y, TILE, TILE);
+
+        // Debris dots
+        for (const d of noise.debris) {
+          ctx.fillStyle = d.color;
+          ctx.fillRect(x + d.ox, y + d.oy, d.r, d.r);
+        }
+
+        // Shadow along wall bases — check adjacent walls
+        if (row > 0 && MAP[row-1][col] === 1) {
+          // Wall above — cast shadow down
+          ctx.fillStyle = 'rgba(0,0,0,0.25)';
+          ctx.fillRect(x, y, TILE, 4);
+        }
+        if (col > 0 && MAP[row][col-1] === 1) {
+          // Wall to the left — cast shadow right
+          ctx.fillStyle = 'rgba(0,0,0,0.2)';
+          ctx.fillRect(x, y, 3, TILE);
+        }
+        if (row < ROWS-1 && MAP[row+1][col] === 1) {
+          // Wall below — subtle top shadow
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(x, y + TILE - 2, TILE, 2);
+        }
+        if (col < COLS-1 && MAP[row][col+1] === 1) {
+          // Wall to the right — subtle left shadow
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(x + TILE - 2, y, 2, TILE);
+        }
       }
     }
   }
@@ -2202,7 +2295,7 @@ function drawMinimap() {
   ctx.fillRect(ox-2, oy-2, COLS*S+4, ROWS*S+4);
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      ctx.fillStyle = MAP[r][c] === 1 ? '#444' : '#1a1a1a';
+      ctx.fillStyle = MAP[r][c] === 1 ? '#2a2a30' : '#0e0e12';
       ctx.fillRect(ox + c*S, oy + r*S, S-1, S-1);
     }
   }
