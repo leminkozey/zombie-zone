@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
-const { createUser, findUserByName, addXp, getUser } = require('./database');
+const { createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath } = require('./database');
 
 const app = express();
 app.use(express.json());
@@ -69,6 +69,71 @@ app.post('/api/xp', auth, (req, res) => {
   addXp.run(xp, req.user.id);
   const user = getUser.get(req.user.id);
   res.json({ xp: user.xp });
+});
+
+// level helpers
+function xpForLevel(n) {
+  return Math.floor(50 * Math.pow(n, 1.5));
+}
+
+function getLevelFromXp(totalXp) {
+  let level = 1;
+  while (xpForLevel(level + 1) <= totalXp) level++;
+  return level;
+}
+
+// GET /api/skills
+app.get('/api/skills', auth, (req, res) => {
+  const skills = getUserSkills.all(req.user.id);
+  res.json({ skills });
+});
+
+// POST /api/skills/invest
+app.post('/api/skills/invest', auth, (req, res) => {
+  const { skillId } = req.body;
+  if (!skillId) return res.status(400).json({ error: 'skillId required' });
+
+  const user = getUser.get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const currentSkills = getUserSkills.all(req.user.id);
+  const totalInvested = currentSkills.reduce((sum, s) => sum + s.level, 0);
+  const level = getLevelFromXp(user.xp);
+  const availablePoints = level - 1;
+
+  if (totalInvested >= availablePoints) {
+    return res.status(400).json({ error: 'No skill points available' });
+  }
+
+  const SKILL_MAX_LEVELS = {
+    vitality: 5, field_medic: 3, shield: 5, regen: 3, thick_skin: 3, fortress: 1, second_wind: 1,
+    swift: 5, quick_reload: 3, dash: 1, dash_range: 3, dash_cd: 3, dash_charges: 2, trigger_finger: 3, phantom_dash: 1, bullet_time: 1,
+    quick_call: 5, fast_extract: 4, survival_instinct: 5, rapid_redial: 3, ext_window: 3, safe_zone: 3, evac_chopper: 1, fortified_lz: 1,
+  };
+  const maxLvl = SKILL_MAX_LEVELS[skillId];
+  if (!maxLvl) return res.status(400).json({ error: 'Unknown skill' });
+  const current = currentSkills.find(s => s.skill_id === skillId);
+  if (current && current.level >= maxLvl) {
+    return res.status(400).json({ error: 'Skill already at max level' });
+  }
+
+  upsertSkill.run(req.user.id, skillId);
+  const skills = getUserSkills.all(req.user.id);
+  res.json({ skills });
+});
+
+// POST /api/death
+app.post('/api/death', auth, (req, res) => {
+  const result = applyDeath(req.user.id);
+  if (!result) return res.status(404).json({ error: 'User not found' });
+  res.json(result);
+});
+
+// POST /api/rescue
+app.post('/api/rescue', auth, (req, res) => {
+  const user = getUser.get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({ name: user.name, xp: user.xp });
 });
 
 const PORT = process.env.PORT || 4444;
