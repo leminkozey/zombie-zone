@@ -1767,11 +1767,18 @@ function tryShoot() {
     hitZombies.sort((a, b) => a.proj - b.proj);
 
     // Apply damage — pierce hits all, normal hits first only
+    // Sniper max damage = instant kill
+    const sniperExecute = activeWeaponId === 'sniper' && playerWeapons.find(w => w.weapon_id === 'sniper' && w.dmg_level >= 10);
     const toHit = isPierce ? hitZombies : hitZombies.slice(0, 1);
     for (const { z, proj } of toHit) {
-      z.hp -= dmg;
-      runStats.damageDealt += dmg;
-      spawnBlood(z.x, z.y, 6, rayAngle);
+      if (sniperExecute) {
+        z.hp = 0;
+        runStats.damageDealt += z.maxHp;
+      } else {
+        z.hp -= dmg;
+        runStats.damageDealt += dmg;
+      }
+      spawnBlood(z.x, z.y, sniperExecute ? 12 : 6, rayAngle);
       if (z.hp <= 0) {
         z.alive = false;
         z.deathTimer = 30;
