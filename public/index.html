@@ -739,7 +739,6 @@ function computeFlowfield() {
   const pTileX = Math.floor(player.x / TILE);
   const pTileY = Math.floor(player.y / TILE);
 
-  // BFS from player position
   flowfield = [];
   for (let r = 0; r < ROWS; r++) {
     flowfield[r] = [];
@@ -752,8 +751,9 @@ function computeFlowfield() {
     flowfield[pTileY][pTileX].dist = 0;
   }
 
+  // BFS with cardinal + diagonal neighbors
   const queue = [{ x: pTileX, y: pTileY }];
-  const neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+  const neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 
   while (queue.length > 0) {
     const cur = queue.shift();
@@ -763,11 +763,15 @@ function computeFlowfield() {
       const tx = cur.x + nx;
       const ty = cur.y + ny;
       if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
-      if (MAP[ty][tx] === 1) continue; // wall
-      const newDist = curDist + 1;
+      if (MAP[ty][tx] === 1) continue;
+      // Diagonal: both adjacent cardinal tiles must be free (no corner cutting)
+      if (nx !== 0 && ny !== 0) {
+        if (MAP[cur.y][cur.x + nx] === 1 || MAP[cur.y + ny][cur.x] === 1) continue;
+      }
+      const cost = (nx !== 0 && ny !== 0) ? 1.41 : 1;
+      const newDist = curDist + cost;
       if (newDist < flowfield[ty][tx].dist) {
         flowfield[ty][tx].dist = newDist;
-        // Direction points BACK toward where we came from (toward player)
         flowfield[ty][tx].dx = -nx;
         flowfield[ty][tx].dy = -ny;
         queue.push({ x: tx, y: ty });
@@ -1138,15 +1142,25 @@ function drawRescueHUD() {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
     if (rescueRunTime < activationFrames) {
       const secsLeft = Math.ceil((activationFrames - rescueRunTime) / 60);
-      ctx.fillStyle = '#333';
-      ctx.fillText('RESCUE IN ' + secsLeft + 's', W/2, H - 20);
+      const prog = rescueRunTime / activationFrames;
+      // Progress bar
+      const barW = 140, barH = 4;
+      const barX = W/2 - barW/2, barY = H - 32;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillRect(barX, barY, barW * prog, barH);
+      // Label
+      ctx.fillStyle = '#555';
+      ctx.fillText('RESCUE ' + secsLeft + 's', W/2, H - 38);
     } else if (performance.now() < rescueCooldownUntil) {
       const secsLeft = Math.ceil((rescueCooldownUntil - performance.now()) / 1000);
       ctx.fillStyle = '#555';
       ctx.fillText('RESCUE COOLDOWN ' + secsLeft + 's', W/2, H - 20);
     } else {
-      ctx.fillStyle = '#555';
-      ctx.fillText('F HALTEN \u2014 RESCUE ANFORDERN', W/2, H - 20);
+      ctx.fillStyle = '#ffaa00';
+      ctx.font = "12px 'Share Tech Mono'";
+      ctx.fillText('[ F HALTEN ] RESCUE BEREIT', W/2, H - 20);
     }
   }
 
@@ -1480,33 +1494,24 @@ function updateZombies() {
 
       const finalSpeed = spd * aggroMult * bulletTimeMult;
 
-      // Use flowfield for pathfinding when far from player, direct chase when close
+      // Flowfield pathfinding — zombies always follow the field, direct only when very close
       let moveX, moveY;
-      if (dist < TILE * 2.5) {
-        // Close enough — go directly at player
+      const ztx = Math.floor(z.x / TILE);
+      const zty = Math.floor(z.y / TILE);
+      const hasFF = flowfield && ztx >= 0 && ztx < COLS && zty >= 0 && zty < ROWS && flowfield[zty][ztx].dist < Infinity;
+
+      if (dist < TILE * 1.5) {
+        // Very close — direct chase
         moveX = (dx/dist) * finalSpeed;
         moveY = (dy/dist) * finalSpeed;
-      } else if (flowfield) {
-        // Use flowfield
-        const ztx = Math.floor(z.x / TILE);
-        const zty = Math.floor(z.y / TILE);
-        if (ztx >= 0 && ztx < COLS && zty >= 0 && zty < ROWS && flowfield[zty][ztx].dist < Infinity) {
-          const ff = flowfield[zty][ztx];
-          // Blend flowfield direction with direct direction for smoother movement
-          const ffWeight = 0.7;
-          const directWeight = 0.3;
-          const dirX = ff.dx * ffWeight + (dx/dist) * directWeight;
-          const dirY = ff.dy * ffWeight + (dy/dist) * directWeight;
-          const dirLen = Math.sqrt(dirX*dirX + dirY*dirY);
-          if (dirLen > 0) {
-            moveX = (dirX/dirLen) * finalSpeed;
-            moveY = (dirY/dirLen) * finalSpeed;
-          } else {
-            moveX = (dx/dist) * finalSpeed;
-            moveY = (dy/dist) * finalSpeed;
-          }
+      } else if (hasFF) {
+        // Follow flowfield direction (includes diagonals)
+        const ff = flowfield[zty][ztx];
+        const ffLen = Math.sqrt(ff.dx*ff.dx + ff.dy*ff.dy);
+        if (ffLen > 0) {
+          moveX = (ff.dx/ffLen) * finalSpeed;
+          moveY = (ff.dy/ffLen) * finalSpeed;
         } else {
-          // No flowfield data, go direct
           moveX = (dx/dist) * finalSpeed;
           moveY = (dy/dist) * finalSpeed;
         }
@@ -1515,12 +1520,15 @@ function updateZombies() {
         moveY = (dy/dist) * finalSpeed;
       }
 
-      // Apply movement with wall collision
-      if (!wallCollide(z.x + moveX, z.y, z.radius - 2)) {
+      // Apply movement — try full move, then try axes separately
+      const canFull = !wallCollide(z.x + moveX, z.y + moveY, z.radius - 2);
+      if (canFull) {
         z.x += moveX;
-      }
-      if (!wallCollide(z.x, z.y + moveY, z.radius - 2)) {
         z.y += moveY;
+      } else {
+        // Try each axis independently (wall sliding)
+        if (!wallCollide(z.x + moveX, z.y, z.radius - 2)) z.x += moveX;
+        if (!wallCollide(z.x, z.y + moveY, z.radius - 2)) z.y += moveY;
       }
     }
 
