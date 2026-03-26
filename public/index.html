@@ -1417,15 +1417,36 @@ function tryShoot() {
     life: 55,
   });
 
-  // Muzzle particles
-  for (let i = 0; i < 4; i++) {
-    const a = angle + (Math.random()-0.5)*0.4;
+  // Muzzle flash — multi-layer (white core, yellow mid, orange outer)
+  const muzzleX = player.x + Math.cos(angle) * 22;
+  const muzzleY = player.y + Math.sin(angle) * 22;
+  // White core
+  particles.push({
+    x: muzzleX, y: muzzleY,
+    dx: Math.cos(angle) * 2, dy: Math.sin(angle) * 2,
+    life: 4, maxLife: 4,
+    color: '#ffffff', r: 4,
+  });
+  // Yellow mid
+  for (let i = 0; i < 3; i++) {
+    const a = angle + (Math.random()-0.5)*0.5;
     particles.push({
-      x: player.x, y: player.y,
-      dx: Math.cos(a)*3*(Math.random()+0.5),
-      dy: Math.sin(a)*3*(Math.random()+0.5),
+      x: muzzleX, y: muzzleY,
+      dx: Math.cos(a)*4*(Math.random()+0.5),
+      dy: Math.sin(a)*4*(Math.random()+0.5),
+      life: 6, maxLife: 6,
+      color: '#ffcc22', r: 3,
+    });
+  }
+  // Orange outer
+  for (let i = 0; i < 3; i++) {
+    const a = angle + (Math.random()-0.5)*0.7;
+    particles.push({
+      x: muzzleX, y: muzzleY,
+      dx: Math.cos(a)*3*(Math.random()+0.3),
+      dy: Math.sin(a)*3*(Math.random()+0.3),
       life: 8, maxLife: 8,
-      color: '#ffcc00', r: 2,
+      color: '#ff6600', r: 2.5,
     });
   }
 
@@ -1462,35 +1483,69 @@ function updateXpBar() {
 function showLevelUp() {
   const el = document.getElementById('level-up-banner');
   el.style.opacity = 1;
-  setTimeout(() => { el.style.opacity = 0; }, 2000);
-  // green particles
-  for (let i = 0; i < 20; i++) {
+  setTimeout(() => { el.style.opacity = 0; }, 2500);
+  // Expanding ring of particles (2 concentric rings)
+  for (let ring = 0; ring < 2; ring++) {
+    const ringCount = ring === 0 ? 24 : 16;
+    const ringSpeed = ring === 0 ? 4 : 2.5;
+    const ringDelay = ring * 3;
+    for (let i = 0; i < ringCount; i++) {
+      const a = (i / ringCount) * Math.PI * 2;
+      particles.push({
+        x: player.x, y: player.y,
+        dx: Math.cos(a) * (ringSpeed + Math.random()),
+        dy: Math.sin(a) * (ringSpeed + Math.random()),
+        life: 25 + ringDelay + Math.random()*10,
+        maxLife: 38,
+        color: ring === 0 ? '#44ff44' : '#88ff88',
+        r: ring === 0 ? 4 + Math.random()*2 : 2 + Math.random()*2,
+      });
+    }
+  }
+  // Central burst
+  for (let i = 0; i < 8; i++) {
     const a = Math.random() * Math.PI * 2;
     particles.push({
       x: player.x, y: player.y,
-      dx: Math.cos(a) * (2 + Math.random()*3),
-      dy: Math.sin(a) * (2 + Math.random()*3),
-      life: 20 + Math.random()*15,
-      maxLife: 35,
-      color: '#55cc33',
-      r: 3 + Math.random()*3,
+      dx: Math.cos(a) * (1 + Math.random()*2),
+      dy: Math.sin(a) * (1 + Math.random()*2),
+      life: 30, maxLife: 30,
+      color: '#ffffff', r: 2,
     });
   }
 }
 
 // ── PARTICLES ────────────────────────────────────────
-function spawnBlood(x, y, count = 8) {
+function spawnBlood(x, y, count = 8, dirAngle = null) {
   if (bloodDecals.length > 200) bloodDecals.shift();
-  bloodDecals.push({ x, y, r: 6 + Math.random()*6, alpha: 0.55 });
+  // Main splatter decal
+  bloodDecals.push({ x, y, r: 6 + Math.random()*6, alpha: 0.5, shape: 'circle' });
+  // Secondary directional splatter decals
+  if (dirAngle !== null) {
+    for (let i = 0; i < 2; i++) {
+      const splatDist = 8 + Math.random() * 12;
+      const splatAngle = dirAngle + (Math.random() - 0.5) * 0.8;
+      bloodDecals.push({
+        x: x + Math.cos(splatAngle) * splatDist,
+        y: y + Math.sin(splatAngle) * splatDist,
+        r: 3 + Math.random()*4,
+        alpha: 0.35,
+        shape: 'splat'
+      });
+    }
+  }
+  // Particles — spray in a direction if provided
   for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const spd = 1 + Math.random() * 3;
+    const a = dirAngle !== null
+      ? dirAngle + (Math.random() - 0.5) * 1.2
+      : Math.random() * Math.PI * 2;
+    const spd = 1.5 + Math.random() * 3.5;
     particles.push({
       x, y,
       dx: Math.cos(a)*spd, dy: Math.sin(a)*spd,
-      life: 12 + Math.random()*10,
-      maxLife: 22,
-      color: `hsl(${0 + Math.random()*20},80%,${25+Math.random()*15}%)`,
+      life: 12 + Math.random()*12,
+      maxLife: 24,
+      color: `hsl(${Math.random()*15},85%,${20+Math.random()*18}%)`,
       r: 2 + Math.random()*3,
     });
   }
@@ -1825,7 +1880,8 @@ function updateBullets() {
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx*dx + dy*dy < (BULLET_R + z.radius)**2) {
         z.hp--;
-        spawnBlood(z.x, z.y, 6);
+        const bulletDir = Math.atan2(b.dy, b.dx);
+        spawnBlood(z.x, z.y, 6, bulletDir);
         bullets.splice(i, 1);
         hit = true;
         if (z.hp <= 0) {
@@ -1837,7 +1893,7 @@ function updateBullets() {
           pendingXp += z.xp;
           updateXpBar();
           waveKills++;
-          spawnBlood(z.x, z.y, 16);
+          spawnBlood(z.x, z.y, 16, bulletDir);
           updateHUD();
           // Wave clear?
           if (waveKills >= waveTotal && zombies.filter(z=>z.alive).length === 0) {
@@ -1885,11 +1941,30 @@ function updateSpitterProjectiles() {
 function drawSpitterProjectiles() {
   for (const p of spitterProjectiles) {
     ctx.save();
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#663399';
-    ctx.fillStyle = '#99ff66';
+    // Toxic trail
+    const trailAngle = Math.atan2(p.dy, p.dx);
+    const trailX = p.x - Math.cos(trailAngle) * 10;
+    const trailY = p.y - Math.sin(trailAngle) * 10;
+    const grad = ctx.createLinearGradient(trailX, trailY, p.x, p.y);
+    grad.addColorStop(0, 'rgba(100,255,50,0)');
+    grad.addColorStop(1, 'rgba(100,255,50,0.4)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(trailX, trailY);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    // Outer glow
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#55aa22';
+    ctx.fillStyle = '#66dd22';
     ctx.beginPath();
     ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+    ctx.fill();
+    // Inner bright core
+    ctx.fillStyle = '#99ff66';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
   }
@@ -2187,10 +2262,28 @@ function drawBloodDecals() {
   for (const d of bloodDecals) {
     ctx.save();
     ctx.globalAlpha = d.alpha;
-    ctx.fillStyle = '#3a0000';
-    ctx.beginPath();
-    ctx.ellipse(d.x, d.y, d.r, d.r * 0.7, Math.random()*0.5, 0, Math.PI*2);
-    ctx.fill();
+    if (d.shape === 'splat') {
+      // Irregular splatter shape
+      ctx.fillStyle = '#380000';
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y, d.r * 1.3, d.r * 0.5, d.x % 3, 0, Math.PI*2);
+      ctx.fill();
+      // Small droplets around splat
+      ctx.fillStyle = '#300000';
+      ctx.beginPath();
+      ctx.arc(d.x + d.r, d.y + 2, d.r * 0.25, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#3a0000';
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y, d.r, d.r * 0.7, d.x % 2, 0, Math.PI*2);
+      ctx.fill();
+      // Darker center
+      ctx.fillStyle = '#280000';
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r * 0.4, 0, Math.PI*2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 }
@@ -2208,12 +2301,28 @@ function drawParticles() {
 }
 
 function drawBullets() {
-  ctx.fillStyle = '#ffee88';
   for (const b of bullets) {
     ctx.save();
-    ctx.shadowBlur = 8;
+    // Bullet trail — short luminous streak behind
+    const trailLen = 12;
+    const angle = Math.atan2(b.dy, b.dx);
+    const trailX = b.x - Math.cos(angle) * trailLen;
+    const trailY = b.y - Math.sin(angle) * trailLen;
+    const grad = ctx.createLinearGradient(trailX, trailY, b.x, b.y);
+    grad.addColorStop(0, 'rgba(255,204,0,0)');
+    grad.addColorStop(0.7, 'rgba(255,220,50,0.3)');
+    grad.addColorStop(1, 'rgba(255,255,170,0.8)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(trailX, trailY);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+
+    // Bullet head — bright
+    ctx.shadowBlur = 6;
     ctx.shadowColor = '#ffcc00';
-    ctx.fillStyle = '#ffffaa';
+    ctx.fillStyle = '#ffffcc';
     ctx.beginPath();
     ctx.arc(b.x, b.y, BULLET_R - 1, 0, Math.PI*2);
     ctx.fill();
@@ -2990,9 +3099,14 @@ function loop(now) {
   drawPlayer();
   drawMinimap();
 
-  // Hurt flash
+  // Hurt flash — red vignette from edges
   if (hurtFlash > 0) {
-    ctx.fillStyle = `rgba(180,0,0,${(hurtFlash/18)*0.35})`;
+    const intensity = (hurtFlash / 18) * 0.6;
+    const vignetteGrad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.25, W/2, H/2, Math.min(W,H)*0.7);
+    vignetteGrad.addColorStop(0, 'rgba(180,0,0,0)');
+    vignetteGrad.addColorStop(0.6, `rgba(180,0,0,${intensity * 0.15})`);
+    vignetteGrad.addColorStop(1, `rgba(200,0,0,${intensity})`);
+    ctx.fillStyle = vignetteGrad;
     ctx.fillRect(0, 0, W, H);
     hurtFlash--;
   }
