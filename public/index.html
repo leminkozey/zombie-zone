@@ -479,7 +479,26 @@
     </div>
 
     <!-- ARSENAL panel -->
-    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
+    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:row">
+      <!-- Left: Weapon list -->
+      <div id="arsenal-sidebar" style="width:220px;background:#0a0d10;border-right:1px solid #141a20;padding:16px 0;overflow-y:auto">
+        <div style="font-size:8px;letter-spacing:3px;color:#3a4450;padding:0 16px;margin-bottom:10px">WAFFENLAGER</div>
+        <div id="weapon-list"></div>
+      </div>
+      <!-- Center: Weapon display -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center">
+        <div style="text-align:center">
+          <div id="arsenal-wpn-name" style="font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:8px;color:#c0ccd8"></div>
+          <div id="arsenal-wpn-type" style="font-size:9px;letter-spacing:3px;color:#3a4450;margin-bottom:20px"></div>
+          <div id="arsenal-wpn-icon" style="font-size:72px;margin-bottom:16px"></div>
+          <div id="arsenal-wpn-action"></div>
+        </div>
+      </div>
+      <!-- Right: Stats -->
+      <div id="arsenal-stats" style="width:280px;background:#0a0d10;border-left:1px solid #141a20;padding:20px;overflow-y:auto">
+        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;letter-spacing:3px;color:#8090a0;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #141a20">WAFFENDATEN</div>
+        <div id="stats-container"></div>
+      </div>
     </div>
 
     <!-- SHOP panel -->
@@ -609,6 +628,8 @@ async function showGameMenu() {
         if (!ownedWeaponIds.includes(activeWeaponId)) activeWeaponId = 'pistol';
       }
     } catch {}
+
+    renderArsenal();
 
     // Blink skill tree tab if points available
     const totalLevel = getLevelFromXp(globalXp);
@@ -837,6 +858,7 @@ const UPGRADE_BASE_COSTS = { dmg: 100, range: 80, rate: 120, reload: 80, mag: 10
 let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
 let activeWeaponId = 'pistol';
 let ownedWeaponIds = ['pistol'];
+let selectedArsenalWeapon = 'pistol';
 
 function getWeaponStat(weaponId, stat) {
   const base = WEAPONS[weaponId];
@@ -3787,6 +3809,162 @@ document.getElementById('st-survival').addEventListener('click', () => stSelectP
 document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
 document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
 
+// Arsenal UI
+function renderArsenal() {
+  const weaponList = document.getElementById('weapon-list');
+  if (!weaponList) return;
+  weaponList.innerHTML = '';
+
+  const level = getLevelFromXp(globalXp);
+  const gold = globalGold;
+
+  Object.entries(WEAPONS).forEach(([id, wpn]) => {
+    const owned = ownedWeaponIds.includes(id);
+    const locked = !owned && (id === 'pistol' ? false : level < wpn.unlockLevel);
+    const canBuy = !owned && level >= wpn.unlockLevel && gold >= wpn.cost && id !== 'pistol';
+    const isActive = id === activeWeaponId;
+
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-left:2px solid transparent;transition:all 0.1s;';
+    if (isActive) item.style.borderLeftColor = '#ee2200';
+    if (isActive) item.style.background = 'rgba(238,34,0,0.04)';
+    if (id === selectedArsenalWeapon) item.style.background = 'rgba(255,255,255,0.03)';
+    if (!owned && !canBuy) item.style.opacity = '0.35';
+
+    item.innerHTML = `
+      <div style="width:32px;height:32px;border:1px solid ${owned ? '#141a20' : '#111418'};background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;font-size:16px">${owned ? wpn.icon : '\u{1F512}'}</div>
+      <div style="flex:1">
+        <div style="font-family:'Oswald',sans-serif;font-size:12px;font-weight:500;letter-spacing:2px;color:${owned ? '#c0ccd8' : '#3a4450'}">${wpn.name}</div>
+        <div style="font-size:8px;color:#3a4450;letter-spacing:1px">${wpn.type}</div>
+        ${!owned ? '<div style="font-size:8px;letter-spacing:1px;color:#661100;margin-top:2px">LVL ' + wpn.unlockLevel + ' // ' + wpn.cost + 'G</div>' : ''}
+      </div>
+    `;
+
+    item.addEventListener('click', () => {
+      selectedArsenalWeapon = id;
+      renderArsenal();
+    });
+
+    weaponList.appendChild(item);
+  });
+
+  // Center display
+  const sel = WEAPONS[selectedArsenalWeapon] || WEAPONS.pistol;
+  const selOwned = ownedWeaponIds.includes(selectedArsenalWeapon);
+  document.getElementById('arsenal-wpn-name').textContent = sel.name;
+  document.getElementById('arsenal-wpn-type').textContent = sel.type + (sel.special ? ' // ' + sel.special.toUpperCase() : '');
+  document.getElementById('arsenal-wpn-icon').textContent = sel.icon;
+
+  const actionDiv = document.getElementById('arsenal-wpn-action');
+  if (selOwned) {
+    if (selectedArsenalWeapon === activeWeaponId) {
+      actionDiv.innerHTML = '<div style="font-size:10px;letter-spacing:2px;color:#33cc44">AUSGERUESTET</div>';
+    } else {
+      actionDiv.innerHTML = '<button id="equip-btn" style="font-family:Oswald,sans-serif;font-size:14px;letter-spacing:3px;color:#33cc44;background:transparent;border:1px solid #33cc44;padding:8px 30px;cursor:pointer">AUSRUESTEN</button>';
+      document.getElementById('equip-btn').addEventListener('click', () => {
+        activeWeaponId = selectedArsenalWeapon;
+        renderArsenal();
+      });
+    }
+  } else if (level >= sel.unlockLevel && gold >= sel.cost) {
+    actionDiv.innerHTML = '<button id="buy-btn" style="font-family:Oswald,sans-serif;font-size:14px;letter-spacing:3px;color:#ddaa00;background:transparent;border:1px solid #ddaa00;padding:8px 30px;cursor:pointer">KAUFEN \u2014 ' + sel.cost + 'G</button>';
+    document.getElementById('buy-btn').addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/weapons/buy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ weaponId: selectedArsenalWeapon })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          playerWeapons = data.weapons;
+          ownedWeaponIds = ['pistol', ...data.weapons.map(w => w.weapon_id)];
+          globalGold = data.gold;
+          renderArsenal();
+        }
+      } catch {}
+    });
+  } else {
+    let reason = level < sel.unlockLevel ? 'LVL ' + sel.unlockLevel + ' BENOETIGT' : 'NICHT GENUG GOLD';
+    actionDiv.innerHTML = '<div style="font-size:10px;letter-spacing:2px;color:#661100">' + reason + '</div>';
+  }
+
+  // Stats panel
+  const statsContainer = document.getElementById('stats-container');
+  if (!statsContainer) return;
+  statsContainer.innerHTML = '';
+
+  const statDefs = [
+    { key: 'dmg', name: 'SCHADEN', color: '#ee2200' },
+    { key: 'range', name: 'REICHWEITE', color: '#44aa88' },
+    { key: 'rate', name: 'FEUERRATE', color: '#ddaa00' },
+    { key: 'reload', name: 'NACHLADEN', color: '#8866cc' },
+    { key: 'mag', name: 'MAGAZIN', color: '#3388dd' },
+    { key: 'acc', name: 'GENAUIGKEIT', color: '#55bb33' },
+  ];
+
+  const wpnData = playerWeapons.find(w => w.weapon_id === selectedArsenalWeapon);
+
+  statDefs.forEach(sd => {
+    const currentLvl = wpnData ? (wpnData[sd.key + '_level'] || 0) : 0;
+    const maxLvl = 10;
+    const cost = getUpgradeCost(sd.key, currentLvl);
+    const canUpgrade = selOwned && currentLvl < maxLvl && gold >= cost;
+
+    const currentVal = getWeaponStat(selectedArsenalWeapon, sd.key);
+    let barPct;
+    if (sd.key === 'rate') barPct = Math.max(0, 100 - (currentVal / 30) * 100);
+    else if (sd.key === 'reload') barPct = Math.max(0, 100 - (currentVal / 3000) * 100);
+    else if (sd.key === 'acc') barPct = Math.max(0, 100 - (currentVal / 0.3) * 100);
+    else if (sd.key === 'dmg') barPct = (currentVal / 5) * 100;
+    else if (sd.key === 'range') barPct = (currentVal / 100) * 100;
+    else if (sd.key === 'mag') barPct = (currentVal / 120) * 100;
+    barPct = Math.min(100, Math.max(5, barPct));
+
+    const row = document.createElement('div');
+    row.style.marginBottom = '14px';
+    row.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:9px;letter-spacing:2px;color:#3a4450">${sd.name}</span>
+        <span style="font-size:8px;color:#556070;letter-spacing:1px">LVL ${currentLvl}/${maxLvl}</span>
+      </div>
+      <div style="height:4px;background:#111418;position:relative">
+        <div style="height:100%;width:${barPct}%;background:${sd.color}"></div>
+      </div>
+      ${selOwned ? `<div style="display:flex;justify-content:flex-end;margin-top:3px">
+        <button class="upgrade-stat-btn" data-stat="${sd.key}" style="font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:1px;color:${canUpgrade ? '#ddaa00' : '#333'};background:transparent;border:1px solid ${canUpgrade ? '#665500' : '#1a1a1a'};padding:2px 8px;cursor:${canUpgrade ? 'pointer' : 'default'}">${currentLvl >= maxLvl ? 'MAX' : cost + 'G \u25B2'}</button>
+      </div>` : ''}
+    `;
+    statsContainer.appendChild(row);
+  });
+
+  // Wire upgrade buttons
+  statsContainer.querySelectorAll('.upgrade-stat-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const stat = btn.dataset.stat;
+      const wpnD = playerWeapons.find(w => w.weapon_id === selectedArsenalWeapon);
+      const lvl = wpnD ? (wpnD[stat + '_level'] || 0) : 0;
+      if (lvl >= 10) return;
+      const cst = getUpgradeCost(stat, lvl);
+      if (globalGold < cst) return;
+
+      try {
+        const res = await fetch('/api/weapons/upgrade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ weaponId: selectedArsenalWeapon, stat })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          playerWeapons = data.weapons;
+          globalGold = data.gold;
+          renderArsenal();
+        }
+      } catch {}
+    });
+  });
+}
+
 // Tab switching
 function switchMenuTab(tabName) {
   document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
@@ -3806,6 +3984,8 @@ function switchMenuTab(tabName) {
   } else {
     stActive = false;
   }
+
+  if (tabName === 'arsenal') renderArsenal();
 }
 
 document.querySelectorAll('.menu-tab').forEach(tab => {
