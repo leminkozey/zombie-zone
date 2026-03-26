@@ -1305,10 +1305,11 @@ function drawRescueHUD() {
       ctx.textAlign = 'left';
       ctx.fillText('RESCUE CD ' + secsLeft + 's', lx, ly);
     } else {
-      ctx.font = "9px 'Share Tech Mono'";
+      // Show ready indicator bottom-right, next to ammo
+      ctx.font = "10px 'Share Tech Mono'";
       ctx.fillStyle = '#ffaa00';
-      ctx.textAlign = 'left';
-      ctx.fillText('[F] RESCUE BEREIT', lx, ly);
+      ctx.textAlign = 'right';
+      ctx.fillText('[F] RESCUE', W - 120, H - 22);
     }
   }
 
