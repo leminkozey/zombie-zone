@@ -490,6 +490,7 @@ const BASE_STATS = {
   rescueCooldown: 30,
   rescueExpiryTime: 60,
   rescueCircleRadiusPct: 0,
+  rescueDecayReduction: 0,
 };
 
 let activeSkills = []; // { skillId, level } loaded from server
@@ -599,6 +600,9 @@ const SKILLS = [
   { id: 'safe_zone', path: 'rescue', req: 'fast_extract', tier: 2, maxLvl: 3,
     icon: '🔵', name: 'SAFE ZONE', desc: 'Groesserer Rettungskreis.',
     x: 260, y: -280, r: 20, effect: (lvl) => ({ rescueCircleRadiusPct: 0.2 * lvl }) },
+  { id: 'steady_hands', path: 'rescue', req: 'fast_extract', tier: 2, maxLvl: 3,
+    icon: '🤝', name: 'STEADY HANDS', desc: 'Rescue-Fortschritt geht langsamer verloren.',
+    x: 180, y: -350, r: 20, effect: (lvl) => ({ rescueDecayReduction: 0.25 * lvl }) },
   // RESCUE — Tier 3
   { id: 'evac_chopper', path: 'rescue', req: 'rapid_redial', tier: 3, maxLvl: 1,
     icon: '🚁', name: 'EVAC CHOPPER', desc: 'Kreis folgt dir langsam.',
@@ -1110,10 +1114,16 @@ function updateRescue(now) {
 
       if (rescueState === 'circle_spawned' && inCircle) {
         rescueState = 'extracting';
-        rescueExtractProgress = 0;
       } else if (rescueState === 'extracting' && !inCircle) {
         rescueState = 'circle_spawned';
-        rescueExtractProgress = 0;
+      }
+
+      // Progress decays slowly when outside circle (reducible via Steady Hands)
+      if (rescueState === 'circle_spawned' && rescueExtractProgress > 0) {
+        const baseDecay = 1 / (getPlayerStat('rescueStandTime') * 60 * 3); // 3x slower than fill
+        const decayReduction = getPlayerStat('rescueDecayReduction') || 0;
+        const decayRate = baseDecay * Math.max(0, 1 - decayReduction);
+        rescueExtractProgress = Math.max(0, rescueExtractProgress - decayRate);
       }
 
       if (rescueState === 'extracting') {
@@ -2448,7 +2458,7 @@ function loop(now) {
   if (regenRate > 0 && player.hp < getPlayerStat('maxHp')) {
     const timeSinceDamage = (frameCount - player.lastDamageTime) / 60;
     if (timeSinceDamage > 3) {
-      player.hp = Math.min(player.hp + regenRate / 60, getPlayerStat('maxHp'));
+      player.hp = Math.min(Math.round((player.hp + regenRate / 60) * 10) / 10, getPlayerStat('maxHp'));
     }
   }
 
