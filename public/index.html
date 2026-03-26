@@ -851,7 +851,7 @@ function getSkillLevel(skillId) {
 
 // ── WEAPON DEFINITIONS ─────────────────────────────────
 const WEAPONS = {
-  pistol:         { id: 'pistol', name: 'PISTOL', type: 'Semi', unlockLevel: 0, cost: 0, damage: 1, range: 55, fireRate: 8, reloadMs: 1800, magSize: 12, spread: 0.06, special: null, icon: '🔫' },
+  pistol:         { id: 'pistol', name: 'PISTOL', type: 'Semi', unlockLevel: 0, cost: 0, damage: 1, range: 55, fireRate: 15, reloadMs: 1800, magSize: 12, spread: 0.06, special: null, icon: '🔫' },
   smg:            { id: 'smg', name: 'SMG', type: 'Auto', unlockLevel: 8, cost: 800, damage: 0.7, range: 45, fireRate: 3, reloadMs: 1500, magSize: 35, spread: 0.1, special: null, icon: '⚡' },
   shotgun:        { id: 'shotgun', name: 'SHOTGUN', type: 'Spread', unlockLevel: 20, cost: 4000, damage: 1.5, range: 30, fireRate: 20, reloadMs: 2200, magSize: 6, spread: 0.3, special: 'shotgun', icon: '💥' },
   assault_rifle:  { id: 'assault_rifle', name: 'ASSAULT RIFLE', type: 'Auto', unlockLevel: 35, cost: 12000, damage: 1.2, range: 65, fireRate: 5, reloadMs: 1600, magSize: 30, spread: 0.04, special: null, icon: '🎯' },
@@ -3323,7 +3323,14 @@ function loop(now) {
 
   updateDash();
   updateRescue(performance.now());
-  if (mouseDown) tryShoot();
+  // Semi/Single weapons: only fire on initial click, not hold
+  const wpnType = WEAPONS[activeWeaponId] ? WEAPONS[activeWeaponId].type : 'Auto';
+  if (wpnType === 'Semi' || wpnType === 'Single') {
+    if (mouseDown && !player._lastMouseDown) tryShoot();
+  } else {
+    if (mouseDown) tryShoot();
+  }
+  player._lastMouseDown = mouseDown;
   if (!mouseDown) minigunSpinup = 0;
   updateZombies();
   updateBullets();
