@@ -1280,37 +1280,42 @@ function drawRescueCircle() {
 
 function drawRescueHUD() {
   ctx.save();
-  ctx.font = "10px 'Share Tech Mono'";
-  ctx.textAlign = 'center';
+  const lx = 16, ly = 36; // top-left corner position
 
   if (rescueState === 'idle') {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
     if (rescueRunTime < activationFrames) {
       const secsLeft = Math.ceil((activationFrames - rescueRunTime) / 60);
       const prog = rescueRunTime / activationFrames;
-      // Progress bar
-      const barW = 140, barH = 4;
-      const barX = W/2 - barW/2, barY = H - 32;
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = '#ffaa00';
-      ctx.fillRect(barX, barY, barW * prog, barH);
       // Label
+      ctx.font = "9px 'Share Tech Mono'";
       ctx.fillStyle = '#555';
-      ctx.fillText('RESCUE ' + secsLeft + 's', W/2, H - 38);
+      ctx.textAlign = 'left';
+      ctx.fillText('RESCUE ' + secsLeft + 's', lx, ly);
+      // Progress bar
+      const barW = 100, barH = 3;
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(lx, ly + 4, barW, barH);
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillRect(lx, ly + 4, barW * prog, barH);
     } else if (performance.now() < rescueCooldownUntil) {
       const secsLeft = Math.ceil((rescueCooldownUntil - performance.now()) / 1000);
+      ctx.font = "9px 'Share Tech Mono'";
       ctx.fillStyle = '#555';
-      ctx.fillText('RESCUE COOLDOWN ' + secsLeft + 's', W/2, H - 20);
+      ctx.textAlign = 'left';
+      ctx.fillText('RESCUE CD ' + secsLeft + 's', lx, ly);
     } else {
+      ctx.font = "9px 'Share Tech Mono'";
       ctx.fillStyle = '#ffaa00';
-      ctx.font = "12px 'Share Tech Mono'";
-      ctx.fillText('[ F HALTEN ] RESCUE BEREIT', W/2, H - 20);
+      ctx.textAlign = 'left';
+      ctx.fillText('[F] RESCUE BEREIT', lx, ly);
     }
   }
 
   if (rescueState === 'holding_f') {
     const prog = Math.min((performance.now() - rescueHoldStart) / 3000, 1);
+    // Center screen hold bar
+    ctx.textAlign = 'center';
     const barW = 200, barH = 8;
     ctx.fillStyle = '#222';
     ctx.fillRect(W/2 - barW/2, H/2 + 40, barW, barH);
@@ -1319,17 +1324,34 @@ function drawRescueHUD() {
     ctx.font = "12px 'Share Tech Mono'";
     ctx.fillStyle = '#ffaa00';
     ctx.fillText('RESCUE ANFRAGE...', W/2, H/2 + 35);
+    // Also show in top-left
+    ctx.textAlign = 'left';
+    ctx.font = "9px 'Share Tech Mono'";
+    ctx.fillText('SENDE FUNK...', lx, ly);
   }
 
   if (rescueState === 'survival_phase') {
     const secs = Math.ceil(rescueSurvivalTimer / 60);
-    ctx.font = "16px 'Bebas Neue'";
+    // Top-left status
+    ctx.font = "10px 'Share Tech Mono'";
     ctx.fillStyle = '#ffaa00';
+    ctx.textAlign = 'left';
+    ctx.fillText('UEBERLEBE: ' + secs + 's', lx, ly);
+    // Also center banner
+    ctx.textAlign = 'center';
+    ctx.font = "16px 'Bebas Neue'";
     ctx.fillText('UEBERLEBE: ' + secs + 's', W/2, 60);
   }
 
   if (rescueState === 'circle_spawned' || rescueState === 'extracting') {
     const secs = Math.ceil(rescueExpiryTimer / 60);
+    // Top-left status
+    ctx.font = "10px 'Share Tech Mono'";
+    ctx.fillStyle = secs < 15 ? '#cc2200' : '#ffaa00';
+    ctx.textAlign = 'left';
+    ctx.fillText('ZONE: ' + secs + 's' + (rescueState === 'extracting' ? ' — EXTRAHIERE' : ' — GEH ZUM KREIS'), lx, ly);
+    // Center banner
+    ctx.textAlign = 'center';
     ctx.font = "16px 'Bebas Neue'";
     ctx.fillStyle = secs < 15 ? '#cc2200' : '#ffaa00';
     ctx.fillText('RETTUNGSZONE: ' + secs + 's', W/2, 60);
