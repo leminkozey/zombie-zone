@@ -4313,6 +4313,7 @@ function renderArsenal() {
         if (res.ok) {
           const data = await res.json();
           playerWeapons = data.weapons;
+          ownedWeaponIds = ['pistol', ...data.weapons.map(w => w.weapon_id)];
           globalGold = data.gold;
           renderArsenal();
         }
