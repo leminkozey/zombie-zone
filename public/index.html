@@ -799,7 +799,14 @@ function startNextWave() {
 }
 
 function spawnZombie() {
-  const edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
+  let edge, attempts = 0;
+  do {
+    edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
+    attempts++;
+  } while (wallCollide(edge.x, edge.y, ZOMBIE_R * 1.5) && attempts < 20);
+
+  if (attempts >= 20) return; // skip this zombie if no valid spawn found
+
   const type = pickZombieType(wave);
   const cfg = ZOMBIE_CONFIGS[type];
   const baseSpd = 0.7 + wave * 0.12 + Math.random() * 0.3;
@@ -1009,6 +1016,23 @@ function movePlayer() {
 function updateZombies() {
   for (const z of zombies) {
     if (!z.alive) continue;
+
+    // Push out of walls
+    if (wallCollide(z.x, z.y, z.radius)) {
+      const tx = Math.floor(z.x / TILE);
+      const ty = Math.floor(z.y / TILE);
+      const dirs = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+      for (const [dx, dy] of dirs) {
+        const nx = (tx + dx) * TILE + TILE / 2;
+        const ny = (ty + dy) * TILE + TILE / 2;
+        if (!wallCollide(nx, ny, z.radius)) {
+          z.x = nx;
+          z.y = ny;
+          break;
+        }
+      }
+    }
+
     z.frame++;
     z.wobble += 0.08;
 
