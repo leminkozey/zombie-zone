@@ -426,7 +426,7 @@
       <button class="menu-tab" data-tab="skilltree">SKILL TREE</button>
       <button class="menu-tab" data-tab="arsenal">ARSENAL</button>
       <button class="menu-tab" data-tab="shop">SHOP <span class="soon-badge">SOON</span></button>
-      <button class="menu-tab" data-tab="skins">SKINS <span class="soon-badge">SOON</span></button>
+      <button class="menu-tab" data-tab="skins">OPERATORS <span class="soon-badge">SOON</span></button>
     </div>
 
     <!-- LOBBY panel -->
@@ -477,7 +477,7 @@
     </div>
 
     <!-- ARSENAL panel -->
-    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:row;position:relative">
+    <div class="menu-panel" id="panel-arsenal" style="position:absolute;inset:0;top:44px;display:none;flex-direction:row">
       <!-- Gold display in arsenal -->
       <div id="arsenal-gold" style="position:absolute;top:12px;right:340px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#ddaa00;letter-spacing:1px;z-index:2"></div>
       <!-- Left: Weapon list -->
@@ -506,7 +506,7 @@
       <span style="font-family:'Oswald',sans-serif;font-size:18px;color:#404855;letter-spacing:6px">COMING SOON</span>
     </div>
 
-    <!-- SKINS panel -->
+    <!-- OPERATORS panel -->
     <div class="menu-panel" id="panel-skins" style="position:absolute;inset:0;top:44px;display:none;flex-direction:column;align-items:center;justify-content:center">
       <span style="font-family:'Oswald',sans-serif;font-size:18px;color:#404855;letter-spacing:6px">COMING SOON</span>
     </div>
@@ -626,7 +626,7 @@ async function showGameMenu() {
         const wpnData = await wpnRes.json();
         playerWeapons = wpnData.weapons;
         ownedWeaponIds = ['pistol', ...wpnData.weapons.map(w => w.weapon_id)];
-        if (!ownedWeaponIds.includes(activeWeaponId)) activeWeaponId = 'pistol';
+        if (!ownedWeaponIds.includes(activeWeaponId)) setActiveWeapon('pistol');
       }
     } catch {}
 
@@ -864,7 +864,8 @@ const WEAPONS = {
 const UPGRADE_BASE_COSTS = { dmg: 100, range: 80, rate: 120, reload: 80, mag: 100, acc: 60 };
 
 let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
-let activeWeaponId = 'pistol';
+let activeWeaponId = localStorage.getItem('dz_activeWeapon') || 'pistol';
+function setActiveWeapon(id) { activeWeaponId = id; localStorage.setItem('dz_activeWeapon', id); }
 let ownedWeaponIds = ['pistol'];
 let selectedArsenalWeapon = 'pistol';
 
@@ -1581,7 +1582,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyR' && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
   const weaponKeys = { 'Digit1': 'pistol', 'Digit2': 'smg', 'Digit3': 'shotgun', 'Digit4': 'assault_rifle', 'Digit5': 'sniper', 'Digit6': 'minigun' };
   if (weaponKeys[e.code] && ownedWeaponIds.includes(weaponKeys[e.code])) {
-    activeWeaponId = weaponKeys[e.code];
+    setActiveWeapon(weaponKeys[e.code]);
     player.ammo = getWeaponStat(activeWeaponId, 'mag');
     player.maxAmmo = getWeaponStat(activeWeaponId, 'mag');
     reloading = false;
@@ -3288,7 +3289,7 @@ async function gameOver() {
   // Reset weapons on death — back to pistol only
   playerWeapons = [];
   ownedWeaponIds = ['pistol'];
-  activeWeaponId = 'pistol';
+  setActiveWeapon('pistol');
   globalGold = 0;
 
   const totalEarned = score;
@@ -4217,7 +4218,7 @@ function renderArsenal() {
     } else {
       actionDiv.innerHTML = '<button id="equip-btn" style="font-family:Oswald,sans-serif;font-size:14px;letter-spacing:3px;color:#33cc44;background:transparent;border:1px solid #33cc44;padding:8px 30px;cursor:pointer">AUSRUESTEN</button>';
       document.getElementById('equip-btn').addEventListener('click', () => {
-        activeWeaponId = selectedArsenalWeapon;
+        setActiveWeapon(selectedArsenalWeapon);
         renderArsenal();
       });
     }
@@ -4340,7 +4341,7 @@ function switchMenuTab(tabName) {
     stActive = false;
   }
 
-  if (tabName === 'arsenal') renderArsenal();
+  if (tabName === 'arsenal') { selectedArsenalWeapon = activeWeaponId; renderArsenal(); }
 }
 
 document.querySelectorAll('.menu-tab').forEach(tab => {
@@ -4414,7 +4415,7 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
   // Reset weapons on quit — back to pistol only
   playerWeapons = [];
   ownedWeaponIds = ['pistol'];
-  activeWeaponId = 'pistol';
+  setActiveWeapon('pistol');
   globalGold = 0;
 
   lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
