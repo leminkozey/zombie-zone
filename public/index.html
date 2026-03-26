@@ -574,6 +574,7 @@ async function showGameMenu() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('pause-screen').style.display = 'none';
   document.getElementById('overlay').style.display = 'block';
+  document.getElementById('hud').style.display = 'none';
   stActive = false;
 
   // Reset to lobby tab
@@ -4208,6 +4209,7 @@ document.getElementById('st-back').addEventListener('click', () => {
 document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('hud-username').textContent = currentUser ? currentUser.toUpperCase() : '';
   document.getElementById('overlay').style.display = 'none';
+  document.getElementById('hud').style.display = 'block';
   lastRunText = '';
   paused = false;
   init();
