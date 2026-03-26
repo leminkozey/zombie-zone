@@ -2686,7 +2686,7 @@ function drawPlayer() {
   ctx.stroke();
 
   // Off-hand arm (left arm, stabilizing the weapon)
-  ctx.fillStyle = '#7a9966';
+  ctx.fillStyle = '#556644';
   ctx.save();
   ctx.translate(6 - recoil, -5);
   ctx.rotate(-0.2);
@@ -2694,7 +2694,7 @@ function drawPlayer() {
   ctx.restore();
 
   // Main arm (right arm, holding weapon)
-  ctx.fillStyle = '#7a9966';
+  ctx.fillStyle = '#556644';
   ctx.save();
   ctx.translate(4 - recoil, 3);
   ctx.rotate(0.15);
@@ -2721,17 +2721,14 @@ function drawPlayer() {
   ctx.fillRect(10 - recoil, 2, 3, 4);
 
   // Body — rounded rect torso with tactical vest
-  ctx.fillStyle = '#7a9966';
+  ctx.fillStyle = '#556644';
   ctx.beginPath();
   // Rounded body shape
   ctx.arc(0, 0, 11, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#99bb77';
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
 
   // Tactical vest detail — darker center stripe
-  ctx.fillStyle = '#5a7744';
+  ctx.fillStyle = '#445533';
   ctx.fillRect(-3, -10, 6, 20);
   // Vest side panels
   ctx.fillStyle = '#4a5a38';
@@ -2751,13 +2748,13 @@ function drawPlayer() {
   ctx.stroke();
 
   // Head — with helmet
-  ctx.fillStyle = '#ddb888';
+  ctx.fillStyle = '#c8a070';
   ctx.beginPath();
   ctx.arc(4, 0, 6, 0, Math.PI * 2);
   ctx.fill();
 
   // Helmet
-  ctx.fillStyle = '#5a7744';
+  ctx.fillStyle = '#445533';
   ctx.beginPath();
   ctx.arc(4, 0, 6.5, -Math.PI * 0.7, Math.PI * 0.7);
   ctx.closePath();
