@@ -3710,6 +3710,22 @@ function onZombieKill(z) {
     hurtFlash = 6;
   }
 
+  // Exploder explosion
+  if (z.type === 'exploder') {
+    const explodeRadius = 40;
+    const explodeDmg = 12;
+    const dx = player.x - z.x, dy = player.y - z.y;
+    if (Math.sqrt(dx*dx + dy*dy) < explodeRadius + PLAYER_R) {
+      damagePlayer(explodeDmg, 'exploder');
+    }
+    triggerScreenshake(3, 8);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      particles.push({ x: z.x, y: z.y, dx: Math.cos(a)*4, dy: Math.sin(a)*4, life: 18, maxLife: 18, color: '#ff6600', r: 4 });
+    }
+    toxicPools.push({ x: z.x, y: z.y, radius: 30, dps: 2, life: 120, maxLife: 120 });
+  }
+
   if (z.isBoss) runStats.bossKills++;
   else if (runStats[z.type + 'Kills'] !== undefined) runStats[z.type + 'Kills']++;
   tryDropHealthpack(z.x, z.y);
