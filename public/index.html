@@ -2680,7 +2680,7 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
   if (ownedPerks.includes('pistol_hollow') && weaponId === 'pistol' && z.type === 'normal') {
     effectiveDmg *= 1.5;
   }
-  const actualDmg = applyBossDamage(z, effectiveDmg);
+  const actualDmg = applyBossDamage(z, effectiveDmg, player.x, player.y);
   z.hp -= actualDmg;
   runStats.damageDealt += actualDmg;
 
@@ -2704,7 +2704,7 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
       if (oz === z || !oz.alive) continue;
       const odx = oz.x - z.x, ody = oz.y - z.y;
       if (odx*odx + ody*ody < aoeR*aoeR) {
-        oz.hp -= applyBossDamage(oz, effectiveDmg * 0.5);
+        oz.hp -= applyBossDamage(oz, effectiveDmg * 0.5, player.x, player.y);
         runStats.damageDealt += effectiveDmg * 0.5;
         spawnBlood(oz.x, oz.y, 4);
         if (oz.hp <= 0) { oz.alive = false; oz.deathTimer = oz.isBoss ? 60 : 30; onZombieKill(oz); }
@@ -3238,6 +3238,15 @@ function updateZombies() {
     // Cryo slow tick
     if (z.cryoTimer > 0) z.cryoTimer--;
 
+    // Shielder shield regen
+    if (z.type === 'shielder' && !z.shieldBroken && z.shieldHp < z.shieldMaxHp) {
+      if (z.shieldRegenTimer > 0) {
+        z.shieldRegenTimer--;
+      } else {
+        z.shieldHp = Math.min(z.shieldHp + 0.05, z.shieldMaxHp);
+      }
+    }
+
     // Movement collision radius — smaller than visual to prevent corner-catching
     const moveR = z.radius * 0.6;
 
@@ -3621,9 +3630,33 @@ function updateBossAbilities() {
   if (bossSlowTimer > 0) bossSlowTimer--;
 }
 
-function applyBossDamage(z, dmg) {
+function applyShieldDamage(z, dmg, sourceX, sourceY) {
+  if (z.type !== 'shielder' || z.shieldBroken || z.shieldHp <= 0) return dmg;
+  const angleToSource = Math.atan2(sourceY - z.y, sourceX - z.x);
+  let angleDiff = angleToSource - z.angle;
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  const fromFront = Math.abs(angleDiff) < Math.PI / 3;
+  if (fromFront) {
+    z.shieldHp -= dmg * 0.2;
+    z.shieldRegenTimer = 300;
+    if (z.shieldHp <= 0) {
+      z.shieldHp = 0;
+      z.shieldBroken = true;
+      floatingTexts.push({ x: z.x, y: z.y - 15, text: 'SHIELD BROKEN', life: 40, maxLife: 40, color: '#6688aa' });
+    }
+    return dmg * 0.2;
+  }
+  return dmg;
+}
+
+function applyBossDamage(z, dmg, sourceX, sourceY) {
+  if (z.burrowed) return 0;
   if (z.isBoss && z.bossType === 'necromancer' && z.shielded) {
-    return dmg * BOSS_CONFIGS.necromancer.shieldReduction;
+    dmg = dmg * BOSS_CONFIGS.necromancer.shieldReduction;
+  }
+  if (sourceX !== undefined && sourceY !== undefined) {
+    dmg = applyShieldDamage(z, dmg, sourceX, sourceY);
   }
   return dmg;
 }
@@ -3852,7 +3885,7 @@ function updateBullets() {
           if (!z.alive) continue;
           const adx = z.x - b.x, ady = z.y - b.y;
           if (adx*adx + ady*ady < aoeR*aoeR) {
-            const gDmg = applyBossDamage(z, b.grenadeDmg);
+            const gDmg = applyBossDamage(z, b.grenadeDmg, b.x, b.y);
             z.hp -= gDmg;
             runStats.damageDealt += gDmg;
             spawnBlood(z.x, z.y, 6);
