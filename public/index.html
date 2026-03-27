@@ -1679,6 +1679,7 @@ let hitTrails = []; // { x1, y1, x2, y2, life, maxLife } — hitscan visual trai
 let minigunSpinup = 0;
 let healZones = []; // { x, y, radius, duration, healPerSec, dps, placedAt }
 let builderBlocks = []; // { x, y, hp, maxHp, placedAt }
+let turrets = []; // { x, y, hp, maxHp, angle, shootCooldown, aggroTimer }
 let timeScale = 1; // global speed multiplier (1 = normal, 0.2 = slowmo, 1.5 = speedup)
 let frozenBullets = []; // bullets frozen during slowmo
 let timeTravelerPhase = 'none'; // 'none', 'slow', 'fast'
@@ -1754,6 +1755,7 @@ async function init() {
   healZones = [];
   for (const b of builderBlocks) { if (MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
   builderBlocks = [];
+  turrets = [];
   timeScale = 1; frozenBullets = []; timeTravelerPhase = 'none'; timeTravelerTimer = 0; timeTravelerKillCount = 0; miniSlowmoTimer = 0;
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
@@ -2325,7 +2327,22 @@ function activateOperatorAbility() {
     frozenBullets = [];
     playSound('perk_activate');
   }
-  // Electrician — Phase 2 (show banner only for now)
+  if (activeOperatorId === 'electrician') {
+    if (turrets.length >= 2) {
+      // Second activation on existing turrets: activate aggro mode
+      turrets.forEach(t => { t.aggroTimer = 300; }); // 5s aggro
+      showWaveBanner('TURRET AGGRO!');
+      return; // don't use cooldown for aggro toggle
+    }
+    // Place turret at player position
+    turrets.push({
+      x: player.x, y: player.y,
+      hp: 50, maxHp: 50,
+      angle: 0, shootCooldown: 0,
+      aggroTimer: 0,
+    });
+    playSound('ui_click');
+  }
 }
 
 function updateOperatorAbility() {
@@ -2336,6 +2353,83 @@ function updateOperatorAbility() {
       operatorAbilityActive = false;
       player.soldierRush = false;
       player.juggernautActive = false;
+    }
+  }
+}
+
+// ── TURRETS ─────────────────────────────────────────
+function updateTurrets() {
+  for (let i = turrets.length - 1; i >= 0; i--) {
+    const t = turrets[i];
+    // Self-repair (passive: 2 HP/s)
+    if (activeOperatorId === 'electrician' && t.hp < t.maxHp) {
+      t.hp = Math.min(t.hp + 2/60, t.maxHp);
+    }
+    // Find nearest zombie
+    let nearest = null, nearestDist = 150; // 150px range
+    for (const z of zombies) {
+      if (!z.alive) continue;
+      const dx = z.x - t.x, dy = z.y - t.y;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d < nearestDist) { nearest = z; nearestDist = d; }
+    }
+    // Shoot at nearest
+    if (nearest && t.shootCooldown <= 0) {
+      t.angle = Math.atan2(nearest.y - t.y, nearest.x - t.x);
+      nearest.hp -= 2/30; // 2 DPS, fires every 2 frames
+      t.shootCooldown = 2;
+      // Tracer visual
+      hitTrails.push({ x1: t.x, y1: t.y, x2: nearest.x, y2: nearest.y, life: 2, maxLife: 2, style: 'minigun' });
+      if (nearest.hp <= 0 && nearest.alive) {
+        nearest.alive = false; nearest.deathTimer = 30; onZombieKill(nearest);
+      }
+    }
+    if (t.shootCooldown > 0) t.shootCooldown--;
+    // Aggro timer tick
+    if (t.aggroTimer > 0) t.aggroTimer--;
+    // Zombie damage to turret
+    for (const z of zombies) {
+      if (!z.alive) continue;
+      const dx = z.x - t.x, dy = z.y - t.y;
+      if (dx*dx + dy*dy < (z.radius + 15)**2) {
+        if (z.frame % 40 === 0) t.hp -= 8;
+      }
+    }
+    // Destroyed
+    if (t.hp <= 0) {
+      turrets.splice(i, 1);
+      playSound('explosion');
+    }
+  }
+}
+
+function drawTurrets() {
+  for (const t of turrets) {
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    // Base
+    ctx.fillStyle = '#3a4440';
+    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#5a6a55';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Barrel
+    ctx.rotate(t.angle);
+    ctx.fillStyle = '#2a2e28';
+    ctx.fillRect(8, -2, 12, 4);
+    ctx.restore();
+    // HP bar
+    if (t.hp < t.maxHp) {
+      ctx.fillStyle = '#400';
+      ctx.fillRect(t.x - 12, t.y - 18, 24, 3);
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(t.x - 12, t.y - 18, 24 * (t.hp / t.maxHp), 3);
+    }
+    // Aggro indicator
+    if (t.aggroTimer > 0) {
+      ctx.strokeStyle = 'rgba(255,100,50,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 200, 0, Math.PI*2); ctx.stroke();
     }
   }
 }
@@ -3032,7 +3126,27 @@ function updateZombies() {
       // if dist > 200, fall through to normal movement below
     }
 
-    if (!(z.type === 'spitter' && dist <= 200) && dist > 1) {
+    // Turret aggro override
+    let turretAggroed = false;
+    if (turrets.length > 0) {
+      for (const t of turrets) {
+        if (t.aggroTimer > 0) {
+          const tdx = t.x - z.x, tdy = t.y - z.y;
+          const tdist = Math.sqrt(tdx*tdx + tdy*tdy);
+          if (tdist < 200 && tdist > 15) {
+            const spd = z.speed;
+            const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
+            z.x += (tdx/tdist) * spd * cryoMult;
+            z.y += (tdy/tdist) * spd * cryoMult;
+            z.angle = Math.atan2(tdy, tdx);
+            turretAggroed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!turretAggroed && !(z.type === 'spitter' && dist <= 200) && dist > 1) {
       const spd = z.speed;
       const aggroMult = player.hp < player.maxHp * 0.3 ? 1.2 : 1.0;
       let bulletTimeMult = 1.0;
@@ -4483,6 +4597,11 @@ function drawMinimap() {
     ctx.stroke();
     ctx.restore();
   }
+  // Turrets on minimap
+  ctx.fillStyle = '#5a6a55';
+  for (const t of turrets) {
+    ctx.fillRect(ox + (t.x/TILE)*S - 2, oy + (t.y/TILE)*S - 2, 4, 4);
+  }
   // Builder blocks on minimap
   ctx.fillStyle = '#4a5540';
   for (const b of builderBlocks) {
@@ -4667,6 +4786,7 @@ async function gameOver() {
   operatorAbilityTimer = 0;
   for (const b of builderBlocks) { if (MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
   builderBlocks = [];
+  turrets = [];
   mapCacheCanvas = null;
 
   const totalEarned = score;
@@ -4831,6 +4951,7 @@ function loop(now) {
   updateHitTrails();
   updateReload(now);
   updateBuilderBlocks();
+  updateTurrets();
 
   // Perk cooldown ticks
   for (const perkId in activePerkCooldowns) {
@@ -4894,6 +5015,7 @@ function loop(now) {
   ctx.clearRect(0, 0, W, H);
   drawMap();
   drawBuilderBlocks();
+  drawTurrets();
   drawBloodDecals();
   drawHealthpacks();
   drawAmmopacks();
