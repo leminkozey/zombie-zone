@@ -5077,12 +5077,14 @@ function loop(now) {
   // Perk HUD — show perks for current weapon
   {
     const wpnPerks = Object.entries(PERK_DEFS).filter(([id, p]) => p.weaponId === activeWeaponId && ownedPerks.includes(id));
-    let py = H - 100;
+    // Draw perks left-center, below operator HUD
+    const opOffset = activeOperatorId ? 40 : 0;
+    let py = H/2 + 50 + opOffset;
     ctx.save();
     for (const [perkId, perk] of wpnPerks) {
       const cd = activePerkCooldowns[perkId] || 0;
       const isActive = activePerkActive[perkId];
-      ctx.font = "10px 'JetBrains Mono'";
+      ctx.font = "11px 'JetBrains Mono', monospace";
       ctx.textAlign = 'left';
       if (perk.type === 'active') {
         if (cd > 0 && !isActive) {
@@ -5096,7 +5098,7 @@ function loop(now) {
         ctx.fillStyle = '#8866cc';
         ctx.fillText(perk.icon + ' ' + perk.name, 16, py);
       }
-      py -= 16;
+      py += 16;
     }
     ctx.restore();
   }
