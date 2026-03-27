@@ -2752,6 +2752,7 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
 }
 
 function tryShoot() {
+  if (playerStunTimer > 0) return;
   const wpn = WEAPONS[activeWeaponId];
   if (!wpn) return;
   let fireRate = Math.max(1, Math.round(getWeaponStat(activeWeaponId, 'rate')));
@@ -2864,7 +2865,7 @@ function tryShoot() {
     const isPierce = wpn.special === 'pierce' || fmjActive;
     const hitZombies = [];
     for (const z of zombies) {
-      if (!z.alive) continue;
+      if (!z.alive || z.burrowed) continue;
       const zx = z.x - player.x, zy = z.y - player.y;
       const proj = zx * rayDx + zy * rayDy;
       if (proj < 0 || proj > hitDist) continue;
@@ -3715,8 +3716,7 @@ function updateToxicPools() {
 function drawToxicPools() {
   for (const p of toxicPools) {
     const fadeIn = Math.min(p.life / 30, 1);
-    const fadeOut = Math.min((p.maxLife - p.life) / 15, 1);
-    const baseAlpha = Math.min(fadeIn, 1) * (0.22 + Math.sin(frameCount * 0.06 + p.x) * 0.06);
+    const baseAlpha = fadeIn * (0.22 + Math.sin(frameCount * 0.06 + p.x) * 0.06);
     ctx.save();
     // outer toxic ring
     ctx.globalAlpha = baseAlpha * 0.5;
@@ -3805,6 +3805,11 @@ function updateSpecialZombies() {
         if (z.burrowTimer <= 0 || dist < 80) {
           z.burrowed = false;
           z.burrowCooldown = 360;
+          // push out of wall if emerged inside one
+          if (wallCollide(z.x, z.y, z.radius)) {
+            const free = nearestFreeTileCenter(z.x, z.y);
+            z.x = free.x; z.y = free.y;
+          }
           const sdx = player.x - z.x, sdy = player.y - z.y;
           if (Math.sqrt(sdx*sdx + sdy*sdy) < 40) {
             playerStunTimer = 30;
@@ -4143,7 +4148,7 @@ function updateBullets() {
       let explode = false;
       let explodeX = b.x, explodeY = b.y;
       for (const z of zombies) {
-        if (!z.alive) continue;
+        if (!z.alive || z.burrowed) continue;
         const gdx = b.x - z.x, gdy = b.y - z.y;
         if (gdx*gdx + gdy*gdy < (10 + z.radius)**2) { explode = true; break; }
       }
@@ -4153,7 +4158,7 @@ function updateBullets() {
         // AoE damage in 60px radius
         const aoeR = 60;
         for (const z of zombies) {
-          if (!z.alive) continue;
+          if (!z.alive || z.burrowed) continue;
           const adx = z.x - b.x, ady = z.y - b.y;
           if (adx*adx + ady*ady < aoeR*aoeR) {
             const gDmg = applyBossDamage(z, b.grenadeDmg, b.x, b.y);
@@ -4175,7 +4180,7 @@ function updateBullets() {
 
     let hit = false;
     for (const z of zombies) {
-      if (!z.alive) continue;
+      if (!z.alive || z.burrowed) continue;
       const dx = b.x - z.x, dy = b.y - z.y;
       if (dx*dx + dy*dy < (BULLET_R + z.radius)**2) {
         const bWpnId = b.weaponId || 'pistol';
