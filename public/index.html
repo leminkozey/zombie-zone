@@ -4552,6 +4552,12 @@ const ZOMBIE_TYPES = {
   runner:  { body: '#dd6600', skin: '#ffaa33', arm: '#cc5500', outline: '#ff8800', scale: 0.85, eyeColor: '#ffee00', eyeGlow: '#ffcc00' },
   tank:    { body: '#882222', skin: '#aa3333', arm: '#771818', outline: '#aa2222', scale: 1.5, eyeColor: '#ff2200', eyeGlow: '#dd0000', plate: '#661515' },
   spitter: { body: '#6644bb', skin: '#9966dd', arm: '#5533aa', outline: '#8855cc', scale: 1.0, eyeColor: '#aaff55', eyeGlow: '#88ee33', glow: '#bbff66', glowDim: '#77cc33' },
+  exploder:    { body: '#cc4400', skin: '#ff6622', arm: '#aa3300', outline: '#883300', scale: 1.1, eyeColor: '#ffaa00', eyeGlow: '#ff8800' },
+  screamer:    { body: '#cccccc', skin: '#eeeeee', arm: '#aaaaaa', outline: '#999999', scale: 0.9, eyeColor: '#ff2200', eyeGlow: '#dd0000' },
+  healer:      { body: '#22aa44', skin: '#44dd66', arm: '#33bb55', outline: '#229944', scale: 1.0, eyeColor: '#aaffaa', eyeGlow: '#88ff88' },
+  shielder:    { body: '#334466', skin: '#445577', arm: '#2a3a55', outline: '#556688', scale: 1.2, eyeColor: '#88aadd', eyeGlow: '#6688bb' },
+  broodmother: { body: '#553344', skin: '#664455', arm: '#442233', outline: '#775566', scale: 1.4, eyeColor: '#ffaa66', eyeGlow: '#dd8844' },
+  burrower:    { body: '#665533', skin: '#887744', arm: '#554422', outline: '#776644', scale: 1.0, eyeColor: '#ddaa55', eyeGlow: '#cc9944' },
   boss_brute:    { body: '#661515', skin: '#772218', arm: '#551111', outline: '#441008', scale: 3.0, eyeColor: '#ff3300', eyeGlow: '#ff2200' },
   boss_necro:    { body: '#3a1866', skin: '#5a2e88', arm: '#4a2277', outline: '#2a1144', scale: 2.0, eyeColor: '#44ff88', eyeGlow: '#33dd66' },
   boss_abom:     { body: '#448822', skin: '#55aa28', arm: '#3a7718', outline: '#336615', scale: 3.5, eyeColor: '#ccff44', eyeGlow: '#aadd22' },
@@ -4635,6 +4641,42 @@ function drawZombie(z) {
       dx: (Math.random() - 0.5) * 0.5, dy: 0.3 + Math.random() * 0.5,
       life: 15, maxLife: 15, color: t.glow, r: 1.5 + Math.random(),
     });
+  }
+
+  // Exploder: pulsing glow — faster as HP decreases
+  if (z.type === 'exploder') {
+    const hpPct = z.hp / z.maxHp;
+    const pulseSpeed = 0.05 + (1 - hpPct) * 0.15;
+    const pulseAlpha = 0.1 + Math.sin(z.frame * pulseSpeed) * 0.08;
+    ctx.save();
+    ctx.globalAlpha = pulseAlpha;
+    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.5);
+    grd.addColorStop(0, '#ff6600');
+    grd.addColorStop(1, 'transparent');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Healer: heal aura
+  if (z.type === 'healer') {
+    ctx.save();
+    ctx.globalAlpha = 0.08 + Math.sin(z.frame * 0.04) * 0.04;
+    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 80 / s);
+    grd.addColorStop(0, '#44ff44');
+    grd.addColorStop(1, 'transparent');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(0, 0, 80 / s, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Burrower: underground particles when burrowed
+  if (z.type === 'burrower' && z.burrowed) {
+    if (z.frame % 4 === 0) {
+      particles.push({ x: z.x + (Math.random()-0.5)*12, y: z.y + (Math.random()-0.5)*12, dx: (Math.random()-0.5)*2, dy: -1 - Math.random(), life: 12, maxLife: 12, color: '#886644', r: 2 });
+    }
+    ctx.restore();
+    return; // don't draw the zombie body while burrowed
   }
 
   ctx.rotate(z.angle);
@@ -4822,6 +4864,21 @@ function drawZombie(z) {
     ctx.fillRect(-bw / 2, -r - 10, bw, bh);
     ctx.fillStyle = '#ee2200';
     ctx.fillRect(-bw / 2, -r - 10, bw * (z.hp / z.maxHp), bh);
+    ctx.restore();
+  }
+
+  // Shielder front shield
+  if (z.type === 'shielder' && !z.shieldBroken && z.alive) {
+    ctx.save();
+    const shieldAlpha = 0.3 + (z.shieldHp / z.shieldMaxHp) * 0.4;
+    ctx.globalAlpha = shieldAlpha;
+    ctx.strokeStyle = '#6688aa';
+    ctx.lineWidth = 3 * s;
+    ctx.beginPath();
+    ctx.arc(r * 0.7, 0, r * 0.9, -Math.PI * 0.45, Math.PI * 0.45);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(100,136,170,0.15)';
+    ctx.fill();
     ctx.restore();
   }
 
