@@ -2540,7 +2540,7 @@ function updateTurrets() {
       // Tracer visual
       hitTrails.push({ x1: t.x, y1: t.y, x2: nearest.x, y2: nearest.y, life: 2, maxLife: 2, style: 'minigun' });
       if (nearest.hp <= 0 && nearest.alive) {
-        nearest.alive = false; nearest.deathTimer = 30; onZombieKill(nearest);
+        nearest.alive = false; nearest.deathTimer = nearest.isBoss ? 60 : 30; onZombieKill(nearest);
       }
     }
     if (t.shootCooldown > 0) t.shootCooldown--;
@@ -2671,7 +2671,7 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
         oz.hp -= effectiveDmg * 0.5;
         runStats.damageDealt += effectiveDmg * 0.5;
         spawnBlood(oz.x, oz.y, 4);
-        if (oz.hp <= 0) { oz.alive = false; oz.deathTimer = 30; onZombieKill(oz); }
+        if (oz.hp <= 0) { oz.alive = false; oz.deathTimer = oz.isBoss ? 60 : 30; onZombieKill(oz); }
       }
     }
     // Explosion particles
@@ -2821,7 +2821,7 @@ function tryShoot() {
       spawnBlood(z.x, z.y, sniperExecute ? 12 : 6, rayAngle);
       if (z.hp <= 0 && z.alive) {
         z.alive = false;
-        z.deathTimer = 30;
+        z.deathTimer = z.isBoss ? 60 : 30;
         onZombieKill(z);
       } else if (z.alive) {
         playSoundThrottled('zombie_hit', 80);
@@ -3197,7 +3197,7 @@ function updateZombies() {
       if (z.frame % 6 === 0) {
         particles.push({ x: z.x + (Math.random()-0.5)*10, y: z.y + (Math.random()-0.5)*10, dx: (Math.random()-0.5)*2, dy: -1 - Math.random(), life: 12, maxLife: 12, color: '#ff6600', r: 3 });
       }
-      if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = 30; onZombieKill(z); continue; }
+      if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = z.isBoss ? 60 : 30; onZombieKill(z); continue; }
     }
     // Cryo slow tick
     if (z.cryoTimer > 0) z.cryoTimer--;
@@ -3394,7 +3394,7 @@ function updateZombies() {
       // Juggernaut active — contact damage to zombie
       if (player.juggernautActive) {
         z.hp -= 5 / 60; // 5 DPS, per frame
-        if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = 30; onZombieKill(z); }
+        if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = z.isBoss ? 60 : 30; onZombieKill(z); }
       }
     } else {
       z.hitting = false;
@@ -3665,6 +3665,11 @@ function onZombieKill(z) {
     floatingTexts.push({ x: z.x, y: z.y - 30, text: 'SPLIT!', life: 50, maxLife: 50, color: '#88ee44' });
   }
 
+  // Boss death flash
+  if (z.isBoss) {
+    hurtFlash = 6;
+  }
+
   runStats[z.type + 'Kills']++;
   tryDropHealthpack(z.x, z.y);
   tryDropAmmopack(z.x, z.y);
@@ -3794,7 +3799,7 @@ function updateBullets() {
             z.hp -= gDmg;
             runStats.damageDealt += gDmg;
             spawnBlood(z.x, z.y, 6);
-            if (z.hp <= 0) { z.alive = false; z.deathTimer = 30; onZombieKill(z); }
+            if (z.hp <= 0) { z.alive = false; z.deathTimer = z.isBoss ? 60 : 30; onZombieKill(z); }
           }
         }
         // Explosion particles
@@ -3822,7 +3827,7 @@ function updateBullets() {
         }
         if (z.hp <= 0 && z.alive) {
           z.alive = false;
-          z.deathTimer = 30;
+          z.deathTimer = z.isBoss ? 60 : 30;
           onZombieKill(z);
         } else if (z.alive) {
           playSoundThrottled('zombie_hit', 80);
@@ -3938,7 +3943,7 @@ function updateHealZones() {
         const zx = z.x - hz.x, zy = z.y - hz.y;
         if (zx*zx + zy*zy < hz.radius * hz.radius) {
           z.hp -= hz.dps / 60;
-          if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = 30; onZombieKill(z); }
+          if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = z.isBoss ? 60 : 30; onZombieKill(z); }
         }
       }
     }
@@ -4506,12 +4511,22 @@ const ZOMBIE_TYPES = {
   runner:  { body: '#dd6600', skin: '#ffaa33', arm: '#cc5500', outline: '#ff8800', scale: 0.85, eyeColor: '#ffee00', eyeGlow: '#ffcc00' },
   tank:    { body: '#882222', skin: '#aa3333', arm: '#771818', outline: '#aa2222', scale: 1.5, eyeColor: '#ff2200', eyeGlow: '#dd0000', plate: '#661515' },
   spitter: { body: '#6644bb', skin: '#9966dd', arm: '#5533aa', outline: '#8855cc', scale: 1.0, eyeColor: '#aaff55', eyeGlow: '#88ee33', glow: '#bbff66', glowDim: '#77cc33' },
+  boss_brute:    { body: '#661515', skin: '#772218', arm: '#551111', outline: '#441008', scale: 3.0, eyeColor: '#ff3300', eyeGlow: '#ff2200' },
+  boss_necro:    { body: '#3a1866', skin: '#5a2e88', arm: '#4a2277', outline: '#2a1144', scale: 2.0, eyeColor: '#44ff88', eyeGlow: '#33dd66' },
+  boss_abom:     { body: '#448822', skin: '#55aa28', arm: '#3a7718', outline: '#336615', scale: 3.5, eyeColor: '#ccff44', eyeGlow: '#aadd22' },
+  boss_abom_split: { body: '#448822', skin: '#55aa28', arm: '#3a7718', outline: '#336615', scale: 1.5, eyeColor: '#ccff44', eyeGlow: '#aadd22' },
 };
 
 function drawZombie(z) {
   if (!z.alive && !z.deathTimer) return;
 
-  const t = ZOMBIE_TYPES[z.type] || ZOMBIE_TYPES.normal;
+  let typeKey = z.type;
+  if (z.isBoss) {
+    if (z.bossType === 'brute') typeKey = 'boss_brute';
+    else if (z.bossType === 'necromancer') typeKey = 'boss_necro';
+    else if (z.bossType === 'abomination') typeKey = z.hasSplit ? 'boss_abom_split' : 'boss_abom';
+  }
+  const t = ZOMBIE_TYPES[typeKey] || ZOMBIE_TYPES.normal;
   const s = t.scale;
   const r = 11 * s;
 
@@ -4520,15 +4535,16 @@ function drawZombie(z) {
 
   // Death — fragments scatter
   if (!z.alive && z.deathTimer > 0) {
-    const prog = 1 - z.deathTimer / 30;
-    const fragmentCount = 6;
+    const maxTimer = z.isBoss ? 60 : 30;
+    const prog = 1 - z.deathTimer / maxTimer;
+    const fragmentCount = z.isBoss ? 12 : 6;
     for (let f = 0; f < fragmentCount; f++) {
       const a = (f / fragmentCount) * Math.PI * 2 + z.angle;
-      const d = prog * 22 * s;
+      const d = prog * (z.isBoss ? 35 : 22) * s;
       ctx.globalAlpha = (1 - prog) * 0.7;
       ctx.fillStyle = f % 2 === 0 ? t.body : t.skin;
       ctx.beginPath();
-      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 3 * s, 0, Math.PI * 2);
+      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, (z.isBoss ? 5 : 3) * s, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -4752,6 +4768,39 @@ function drawZombie(z) {
     ctx.fillRect(-bw / 2, -r - 10, bw, bh);
     ctx.fillStyle = '#ee2200';
     ctx.fillRect(-bw / 2, -r - 10, bw * (z.hp / z.maxHp), bh);
+    ctx.restore();
+  }
+
+  // Boss HP bar
+  if (z.isBoss && z.alive) {
+    ctx.save();
+    ctx.translate(z.x, z.y);
+    const barW = Math.max(40, z.radius * 2);
+    const barH = 4;
+    const barY = -z.radius - 14;
+    ctx.fillStyle = '#1a1a22';
+    ctx.fillRect(-barW/2, barY, barW, barH);
+    const hpPct = Math.max(0, z.hp / z.maxHp);
+    const bossColors = { brute: '#cc2211', necromancer: '#8833cc', abomination: '#55bb33' };
+    ctx.fillStyle = bossColors[z.bossType] || '#cc2211';
+    ctx.fillRect(-barW/2, barY, barW * hpPct, barH);
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(-barW/2, barY, barW, barH);
+    ctx.font = "bold 8px 'Oswald', sans-serif";
+    ctx.fillStyle = bossColors[z.bossType] || '#cc2211';
+    ctx.textAlign = 'center';
+    const bossNames = { brute: 'BRUTE', necromancer: 'NECROMANCER', abomination: 'ABOMINATION' };
+    ctx.fillText(bossNames[z.bossType] || 'BOSS', 0, barY - 3);
+    if (z.bossType === 'necromancer' && z.shielded) {
+      ctx.globalAlpha = 0.2 + Math.sin(frameCount * 0.05) * 0.1;
+      ctx.strokeStyle = '#8833cc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, z.radius + 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
   }
 }
