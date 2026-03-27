@@ -1958,7 +1958,7 @@ function startNextWave() {
   if (addCount > 0) { spawnZombie(); spawned++; }
 
   if (boss) {
-    showWaveBanner('BOSS WAVE ' + wave);
+    showWaveBanner('BOSS WAVE ' + wave, true);
   } else if (wave === 5) {
     showWaveBanner('WAVE 5 — GOLD BOOST AKTIV!');
   } else if (wave >= 5) {
@@ -2016,11 +2016,19 @@ function spawnZombie() {
   });
 }
 
-function showWaveBanner(txt) {
+function showWaveBanner(txt, isBoss = false) {
   const el = document.getElementById('wave-banner');
   el.textContent = txt;
   el.style.opacity = 1;
-  setTimeout(() => { el.style.opacity = 0; }, 1800);
+  if (isBoss) {
+    el.style.color = '#cc2200';
+    el.style.textShadow = '0 0 20px rgba(204,34,0,0.5)';
+    setTimeout(() => { el.style.opacity = 0; el.style.color = ''; el.style.textShadow = ''; }, 3000);
+  } else {
+    el.style.color = '';
+    el.style.textShadow = '';
+    setTimeout(() => { el.style.opacity = 0; }, 1800);
+  }
 }
 
 // ── RESCUE ──────────────────────────────────────────
@@ -4573,6 +4581,19 @@ function drawZombie(z) {
     ctx.restore();
   }
 
+  // Brute charge trail
+  if (z.isBoss && z.bossType === 'brute' && z.charging) {
+    ctx.save();
+    for (let tr = 1; tr <= 3; tr++) {
+      ctx.globalAlpha = 0.15 / tr;
+      ctx.fillStyle = '#cc2200';
+      const bx = -Math.cos(z.angle) * 12 * s * tr * 0.3;
+      const by = -Math.sin(z.angle) * 12 * s * tr * 0.3;
+      ctx.beginPath(); ctx.arc(bx, by, r * 0.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // Spitter: toxic drip
   if (z.type === 'spitter' && z.frame % 5 === 0) {
     particles.push({
@@ -5057,6 +5078,24 @@ function drawMinimap() {
     ctx.fillStyle = minimapColors[z.type] || '#aa2200';
     ctx.fillRect(ox + (z.x/TILE)*S - 1, oy + (z.y/TILE)*S - 1, 3, 3);
   }
+  // Boss markers (larger)
+  for (const z of zombies) {
+    if (!z.alive || !z.isBoss) continue;
+    const bossMapColors = { brute: '#ff2200', necromancer: '#9944dd', abomination: '#55cc33' };
+    ctx.fillStyle = bossMapColors[z.bossType] || '#ff0000';
+    const size = z.hasSplit ? 4 : { brute: 6, necromancer: 5, abomination: 7 }[z.bossType] || 5;
+    ctx.fillRect(ox + (z.x/TILE)*S - size/2, oy + (z.y/TILE)*S - size/2, size, size);
+  }
+  // Toxic pools on minimap
+  ctx.save();
+  ctx.fillStyle = '#44aa22';
+  ctx.globalAlpha = 0.4;
+  for (const tp of toxicPools) {
+    ctx.beginPath();
+    ctx.arc(ox + (tp.x/TILE)*S, oy + (tp.y/TILE)*S, (tp.radius/TILE)*S, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
   // Healthpacks
   ctx.fillStyle = '#33cc44';
   for (const h of healthpacks) {
