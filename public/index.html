@@ -2767,8 +2767,9 @@ function tryShoot() {
       player.shootCooldown = fireRate;
     } else {
       minigunSpinup++;
-      if (minigunSpinup < 30) {
-        player.shootCooldown = Math.max(fireRate, Math.round(fireRate * 3 / (1 + minigunSpinup * 0.1)));
+      if (minigunSpinup < 60) {
+        const t = minigunSpinup / 60;
+        player.shootCooldown = Math.max(fireRate, Math.round(fireRate * (6 - 5 * t * t)));
       } else {
         player.shootCooldown = fireRate;
       }
