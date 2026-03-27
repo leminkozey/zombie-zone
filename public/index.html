@@ -1852,23 +1852,114 @@ async function init() {
   startNextWave();
 }
 
+function isBossWave(w) {
+  return w > 0 && w % 5 === 0;
+}
+
+function getBossCount(w) {
+  if (w <= 10) return 1;
+  if (w <= 20) return 2;
+  return 3;
+}
+
+function getBossRewardTier(w) {
+  if (w <= 10) return BOSS_REWARDS.early;
+  if (w <= 20) return BOSS_REWARDS.mid;
+  return BOSS_REWARDS.late;
+}
+
+function pickBossTypes(count) {
+  const types = ['brute', 'necromancer', 'abomination'];
+  for (let i = types.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [types[i], types[j]] = [types[j], types[i]];
+  }
+  return types.slice(0, count);
+}
+
+function spawnBoss(bossType) {
+  let edge, attempts = 0;
+  do {
+    edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
+    attempts++;
+  } while (wallCollide(edge.x, edge.y, BOSS_CONFIGS[bossType].radius * 1.2) && attempts < 30);
+  if (attempts >= 30) {
+    edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
+  }
+
+  const cfg = BOSS_CONFIGS[bossType];
+  const hp = cfg.hp(wave);
+  const baseSpd = 0.7 + wave * 0.12;
+
+  zombies.push({
+    x: edge.x, y: edge.y,
+    prevX: edge.x, prevY: edge.y,
+    stuckFrames: 0,
+    type: 'tank',
+    isBoss: true,
+    bossType: bossType,
+    hp, maxHp: hp,
+    speed: Math.min(baseSpd * cfg.speed, 2.5),
+    radius: cfg.radius,
+    xp: cfg.xp,
+    angle: 0,
+    wobble: Math.random() * Math.PI * 2,
+    frame: 0,
+    alive: true,
+    deathTimer: 0,
+    avoidDir: 0,
+    shootCooldown: 0,
+    throwAnim: 0,
+    burnTimer: 0, burnDps: 0,
+    cryoTimer: 0,
+    chargeCooldown: cfg.chargeCooldown || 0,
+    chargeTimer: 0,
+    charging: false,
+    chargeDx: 0, chargeDy: 0,
+    stompCooldown: cfg.stompCooldown || 0,
+    summonCooldown: cfg.summonCooldown || 0,
+    blinkCooldown: cfg.blinkCooldown || 0,
+    toxicCooldown: cfg.toxicCooldown || 0,
+    minions: [],
+    hasSplit: false,
+  });
+}
+
 function startNextWave() {
   playSound('wave_start');
   wave++;
   runStats.maxWave = wave;
   waveKills = 0;
-  waveTotal = 4 + wave * 3;
   waveActive = true;
+  toxicPools = [];
+
+  const boss = isBossWave(wave);
+  let addCount;
+
+  if (boss) {
+    const bossCount = getBossCount(wave);
+    const types = pickBossTypes(bossCount);
+    for (const t of types) spawnBoss(t);
+
+    const addMult = wave <= 10 ? 0.5 : wave <= 20 ? 0.75 : 1.0;
+    addCount = Math.floor((4 + wave * 3) * addMult);
+    waveTotal = bossCount + addCount;
+  } else {
+    addCount = 4 + wave * 3;
+    waveTotal = addCount;
+  }
+
   let spawned = 0;
   const spawnInterval = setInterval(() => {
-    if (spawned >= waveTotal) { clearInterval(spawnInterval); return; }
+    if (spawned >= addCount) { clearInterval(spawnInterval); return; }
     spawnZombie();
     spawned++;
   }, Math.max(200, 800 - wave * 40));
-  // Spawn first zombie immediately so player sees something right away
-  spawnZombie(); spawned++;
+  if (addCount > 0) { spawnZombie(); spawned++; }
 
-  if (wave === 5) {
+  if (boss) {
+    showWaveBanner('BOSS WAVE ' + wave);
+  } else if (wave === 5) {
     showWaveBanner('WAVE 5 — GOLD BOOST AKTIV!');
   } else if (wave >= 5) {
     const mult = 1 + (wave - 5) * 0.5;
