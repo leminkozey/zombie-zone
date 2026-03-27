@@ -3680,23 +3680,36 @@ function updateToxicPools() {
 
 function drawToxicPools() {
   for (const p of toxicPools) {
-    const alpha = Math.min(p.life / 30, 1) * (0.2 + Math.sin(frameCount * 0.08) * 0.05);
+    const fadeIn = Math.min(p.life / 30, 1);
+    const fadeOut = Math.min((p.maxLife - p.life) / 15, 1);
+    const baseAlpha = Math.min(fadeIn, 1) * (0.22 + Math.sin(frameCount * 0.06 + p.x) * 0.06);
     ctx.save();
-    ctx.globalAlpha = alpha;
+    // outer toxic ring
+    ctx.globalAlpha = baseAlpha * 0.5;
+    ctx.strokeStyle = '#55aa22';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius * (0.95 + Math.sin(frameCount * 0.04) * 0.05), 0, Math.PI * 2);
+    ctx.stroke();
+    // inner pool — multi-layer gradient
+    ctx.globalAlpha = baseAlpha;
     const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.radius);
-    grd.addColorStop(0, '#66cc33');
-    grd.addColorStop(0.6, '#338811');
+    grd.addColorStop(0, '#88ee44');
+    grd.addColorStop(0.3, '#66cc33');
+    grd.addColorStop(0.7, '#338811');
     grd.addColorStop(1, 'transparent');
     ctx.fillStyle = grd;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
     ctx.fill();
-    if (frameCount % 10 === 0 && p.life > 30) {
+    // animated surface bubbles
+    if (frameCount % 8 === 0 && p.life > 20) {
+      const ba = Math.random() * Math.PI * 2;
+      const bd = Math.random() * p.radius * 0.7;
       particles.push({
-        x: p.x + (Math.random()-0.5) * p.radius,
-        y: p.y + (Math.random()-0.5) * p.radius,
-        dx: (Math.random()-0.5), dy: -0.5 - Math.random(),
-        life: 15, maxLife: 15, color: '#88ee44', r: 2,
+        x: p.x + Math.cos(ba) * bd, y: p.y + Math.sin(ba) * bd,
+        dx: (Math.random()-0.5) * 0.5, dy: -0.8 - Math.random() * 0.5,
+        life: 12, maxLife: 12, color: Math.random() > 0.5 ? '#88ee44' : '#aaff66', r: 1 + Math.random() * 1.5,
       });
     }
     ctx.restore();
@@ -3842,19 +3855,52 @@ function drawBroodEggs() {
     if (!e.alive) continue;
     ctx.save();
     ctx.translate(e.x, e.y);
-    const pulse = 1 + Math.sin(e.hatchTimer * 0.1) * 0.05;
+    const hatchPct = 1 - e.hatchTimer / 180;
+    const pulse = 1 + Math.sin(e.hatchTimer * 0.12) * (0.03 + hatchPct * 0.06);
     ctx.scale(pulse, pulse);
+    // ground shadow
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(0, 3, 6, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // egg body — organic shape
     ctx.fillStyle = '#aa8866';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 5, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#886644';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    if (e.hatchTimer < 60) {
-      ctx.strokeStyle = '#553322';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(-2, -3); ctx.lineTo(1, 0); ctx.lineTo(-1, 3); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, 5, 7.5, 0, 0, Math.PI * 2); ctx.fill();
+    // surface texture — veins
+    ctx.strokeStyle = '#997755';
+    ctx.lineWidth = 0.6;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath(); ctx.moveTo(-2, -5); ctx.quadraticCurveTo(0, -2, 2, -4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(1, 2); ctx.quadraticCurveTo(3, 4, 1, 6); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // highlight
+    ctx.fillStyle = 'rgba(255,240,220,0.2)';
+    ctx.beginPath(); ctx.ellipse(-1.5, -2, 2, 3, -0.3, 0, Math.PI * 2); ctx.fill();
+    // outline
+    ctx.strokeStyle = '#776644';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.ellipse(0, 0, 5, 7.5, 0, 0, Math.PI * 2); ctx.stroke();
+    // cracking when close to hatching
+    if (e.hatchTimer < 90) {
+      const crackIntensity = 1 - e.hatchTimer / 90;
+      ctx.strokeStyle = '#442211';
+      ctx.lineWidth = 0.8 + crackIntensity;
+      ctx.globalAlpha = 0.5 + crackIntensity * 0.5;
+      ctx.beginPath(); ctx.moveTo(-2, -4); ctx.lineTo(0, -1); ctx.lineTo(-1, 2); ctx.stroke();
+      if (e.hatchTimer < 45) {
+        ctx.beginPath(); ctx.moveTo(1, -3); ctx.lineTo(2, 0); ctx.lineTo(0, 3); ctx.stroke();
+      }
+      // glow from inside
+      ctx.globalAlpha = crackIntensity * 0.2;
+      const egrd = ctx.createRadialGradient(0, 0, 0, 0, 0, 8);
+      egrd.addColorStop(0, '#ffcc66');
+      egrd.addColorStop(1, 'transparent');
+      ctx.fillStyle = egrd;
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+    }
+    // shaking when about to hatch
+    if (e.hatchTimer < 30 && e.hatchTimer % 4 < 2) {
+      ctx.translate((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 1);
     }
     ctx.restore();
   }
@@ -4900,40 +4946,125 @@ function drawZombie(z) {
     });
   }
 
-  // Exploder: pulsing glow — faster as HP decreases
+  // Exploder: volatile core glow + danger ring
   if (z.type === 'exploder') {
     const hpPct = z.hp / z.maxHp;
-    const pulseSpeed = 0.05 + (1 - hpPct) * 0.15;
-    const pulseAlpha = 0.1 + Math.sin(z.frame * pulseSpeed) * 0.08;
+    const pulseSpeed = 0.06 + (1 - hpPct) * 0.2;
+    const pulse = Math.sin(z.frame * pulseSpeed);
+    // outer danger ring — expands as HP drops
     ctx.save();
-    ctx.globalAlpha = pulseAlpha;
-    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.5);
-    grd.addColorStop(0, '#ff6600');
+    ctx.globalAlpha = (0.08 + (1 - hpPct) * 0.12) * (0.7 + pulse * 0.3);
+    ctx.strokeStyle = '#ff4400';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 4]);
+    const ringR = r * (1.4 + (1 - hpPct) * 0.6);
+    ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    // inner core glow — double layer
+    ctx.save();
+    const coreAlpha = 0.12 + pulse * 0.1 + (1 - hpPct) * 0.15;
+    ctx.globalAlpha = coreAlpha;
+    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.2);
+    grd.addColorStop(0, '#ffcc00');
+    grd.addColorStop(0.4, '#ff6600');
     grd.addColorStop(1, 'transparent');
     ctx.fillStyle = grd;
-    ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
+    // sparks when low HP
+    if (hpPct < 0.4 && z.frame % 6 === 0) {
+      const sa = Math.random() * Math.PI * 2;
+      particles.push({ x: z.x + Math.cos(sa)*r*0.5, y: z.y + Math.sin(sa)*r*0.5, dx: Math.cos(sa)*2, dy: Math.sin(sa)*2 - 1, life: 8, maxLife: 8, color: '#ffaa00', r: 1.5 });
+    }
   }
 
-  // Healer: heal aura
+  // Healer: pulsing heal rings + cross symbol
   if (z.type === 'healer') {
     ctx.save();
-    ctx.globalAlpha = 0.08 + Math.sin(z.frame * 0.04) * 0.04;
-    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 80 / s);
-    grd.addColorStop(0, '#44ff44');
+    // outer heal radius ring
+    const healPulse = Math.sin(z.frame * 0.03);
+    ctx.globalAlpha = 0.06 + healPulse * 0.03;
+    ctx.strokeStyle = '#44ff44';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.arc(0, 0, 80 / s, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    // inner aura with ring wave
+    const waveR = (z.frame % 120) / 120 * 80 / s;
+    ctx.globalAlpha = 0.15 * (1 - waveR / (80 / s));
+    ctx.strokeStyle = '#66ff66';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, waveR, 0, Math.PI * 2); ctx.stroke();
+    // soft glow
+    ctx.globalAlpha = 0.06 + healPulse * 0.02;
+    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2);
+    grd.addColorStop(0, '#44ff88');
+    grd.addColorStop(0.5, '#22aa44');
     grd.addColorStop(1, 'transparent');
     ctx.fillStyle = grd;
-    ctx.beginPath(); ctx.arc(0, 0, 80 / s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r * 2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
-  // Burrower: underground particles when burrowed
-  if (z.type === 'burrower' && z.burrowed) {
-    if (z.frame % 4 === 0) {
-      particles.push({ x: z.x + (Math.random()-0.5)*12, y: z.y + (Math.random()-0.5)*12, dx: (Math.random()-0.5)*2, dy: -1 - Math.random(), life: 12, maxLife: 12, color: '#886644', r: 2 });
+  // Screamer: sound wave rings emanating outward
+  if (z.type === 'screamer' && z.screamCooldown > 240) {
+    ctx.save();
+    const progress = 1 - (z.screamCooldown - 240) / 60;
+    const ringR = progress * 120 / s;
+    ctx.globalAlpha = (1 - progress) * 0.25;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = (1 - progress) * 0.12;
+    ctx.beginPath(); ctx.arc(0, 0, ringR * 0.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Broodmother: egg sacs on body
+  if (z.type === 'broodmother') {
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    const eggPositions = [[-3, -5], [2, -6], [-1, 5], [4, 4]];
+    for (const [ex, ey] of eggPositions) {
+      ctx.fillStyle = '#aa8866';
+      ctx.beginPath(); ctx.ellipse(ex * s * 0.3, ey * s * 0.3, 2 * s * 0.3, 2.5 * s * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#886644';
+      ctx.beginPath(); ctx.arc(ex * s * 0.3, (ey - 1) * s * 0.3, 1 * s * 0.3, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
-    return; // don't draw the zombie body while burrowed
+  }
+
+  // Burrower: underground effect when burrowed
+  if (z.type === 'burrower' && z.burrowed) {
+    // dirt mound shadow
+    ctx.save();
+    ctx.globalAlpha = 0.25 + Math.sin(z.frame * 0.15) * 0.1;
+    ctx.fillStyle = '#554433';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.8, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // dirt spray particles
+    if (z.frame % 3 === 0) {
+      const pa = Math.random() * Math.PI * 2;
+      particles.push({ x: z.x + Math.cos(pa)*6, y: z.y + Math.sin(pa)*6, dx: Math.cos(pa)*1.5, dy: -1.5 - Math.random(), life: 10, maxLife: 10, color: z.frame % 6 < 3 ? '#886644' : '#665533', r: 1.5 + Math.random() });
+    }
+    // small cracks radiating
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.strokeStyle = '#443322';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 4; i++) {
+      const ca = (i / 4) * Math.PI * 2 + z.frame * 0.02;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ca) * r * 0.3, Math.sin(ca) * r * 0.3);
+      ctx.lineTo(Math.cos(ca) * r * 0.8, Math.sin(ca) * r * 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.restore();
+    return;
   }
 
   ctx.rotate(z.angle);
@@ -5125,17 +5256,58 @@ function drawZombie(z) {
   }
 
   // Shielder front shield
-  if (z.type === 'shielder' && !z.shieldBroken && z.alive) {
+  if (z.type === 'shielder' && z.alive) {
     ctx.save();
-    const shieldAlpha = 0.3 + (z.shieldHp / z.shieldMaxHp) * 0.4;
-    ctx.globalAlpha = shieldAlpha;
-    ctx.strokeStyle = '#6688aa';
-    ctx.lineWidth = 3 * s;
-    ctx.beginPath();
-    ctx.arc(r * 0.7, 0, r * 0.9, -Math.PI * 0.45, Math.PI * 0.45);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(100,136,170,0.15)';
-    ctx.fill();
+    const shieldPct = z.shieldBroken ? 0 : z.shieldHp / z.shieldMaxHp;
+    if (!z.shieldBroken) {
+      // shield body — layered arc with energy effect
+      const shieldAlpha = 0.25 + shieldPct * 0.45;
+      ctx.globalAlpha = shieldAlpha;
+      // outer edge glow
+      ctx.strokeStyle = '#88bbee';
+      ctx.lineWidth = 4 * s;
+      ctx.shadowColor = '#4488cc';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(r * 0.6, 0, r * 1.0, -Math.PI * 0.5, Math.PI * 0.5);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // inner fill
+      ctx.fillStyle = 'rgba(80,140,200,0.12)';
+      ctx.fill();
+      // energy lines on shield
+      ctx.globalAlpha = shieldAlpha * 0.6;
+      ctx.strokeStyle = '#aaddff';
+      ctx.lineWidth = 0.8 * s;
+      for (let i = 0; i < 3; i++) {
+        const lineAngle = -Math.PI * 0.35 + (i / 2) * Math.PI * 0.35;
+        const lx = r * 0.6 + Math.cos(lineAngle) * r * 0.7;
+        const ly = Math.sin(lineAngle) * r * 0.7;
+        ctx.beginPath();
+        ctx.moveTo(lx, ly);
+        ctx.lineTo(lx + Math.cos(lineAngle) * r * 0.25, ly + Math.sin(lineAngle) * r * 0.25);
+        ctx.stroke();
+      }
+      // damage flash when recently hit
+      if (z.shieldRegenTimer > 280) {
+        ctx.globalAlpha = (z.shieldRegenTimer - 280) / 20 * 0.3;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2 * s;
+        ctx.beginPath();
+        ctx.arc(r * 0.6, 0, r * 1.0, -Math.PI * 0.5, Math.PI * 0.5);
+        ctx.stroke();
+      }
+    } else {
+      // broken shield — faint cracked remnant
+      ctx.globalAlpha = 0.08 + Math.sin(z.frame * 0.05) * 0.03;
+      ctx.strokeStyle = '#445566';
+      ctx.lineWidth = 1.5 * s;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.arc(r * 0.6, 0, r * 1.0, -Math.PI * 0.4, Math.PI * 0.4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.restore();
   }
 
@@ -5950,12 +6122,30 @@ function loop(now) {
   // Stun visual
   if (playerStunTimer > 0) {
     ctx.save();
-    ctx.fillStyle = 'rgba(200, 180, 100, 0.1)';
+    // radial blur-like vignette
+    const stunPct = playerStunTimer / 30;
+    const stunGrd = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.15, W/2, H/2, Math.min(W,H)*0.6);
+    stunGrd.addColorStop(0, 'rgba(180, 150, 60, 0)');
+    stunGrd.addColorStop(0.5, `rgba(160, 130, 40, ${stunPct * 0.08})`);
+    stunGrd.addColorStop(1, `rgba(140, 110, 30, ${stunPct * 0.2})`);
+    ctx.fillStyle = stunGrd;
     ctx.fillRect(0, 0, W, H);
-    ctx.font = "bold 20px 'Oswald', sans-serif";
+    // concentric rings pulsing outward from player
+    ctx.globalAlpha = stunPct * 0.15;
+    ctx.strokeStyle = '#ddaa44';
+    ctx.lineWidth = 2;
+    for (let ring = 0; ring < 3; ring++) {
+      const ringR = 30 + ring * 25 + (30 - playerStunTimer) * 3;
+      ctx.beginPath(); ctx.arc(player.x, player.y, ringR, 0, Math.PI * 2); ctx.stroke();
+    }
+    // text with shake
+    const shakeX = (Math.random() - 0.5) * 4 * stunPct;
+    const shakeY = (Math.random() - 0.5) * 3 * stunPct;
+    ctx.globalAlpha = 0.6 + stunPct * 0.4;
+    ctx.font = "bold 18px 'Oswald', sans-serif";
     ctx.fillStyle = '#ddaa44';
     ctx.textAlign = 'center';
-    ctx.fillText('STUNNED', W/2, H/2 - 30);
+    ctx.fillText('STUNNED', W/2 + shakeX, H/2 - 30 + shakeY);
     ctx.restore();
   }
 
