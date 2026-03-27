@@ -1677,6 +1677,7 @@ const GOLD_SYNC_INTERVAL = 10000;
 let floatingTexts = [];
 let hitTrails = []; // { x1, y1, x2, y2, life, maxLife } — hitscan visual trails
 let minigunSpinup = 0;
+let healZones = []; // { x, y, radius, duration, healPerSec, dps, placedAt }
 
 async function init() {
   // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
@@ -1743,6 +1744,7 @@ async function init() {
   runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
+  healZones = [];
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
@@ -2272,7 +2274,17 @@ function activateOperatorAbility() {
   if (activeOperatorId === 'juggernaut') {
     player.juggernautActive = true;
   }
-  // Builder, Electrician, TimeTraveler, Medic — Phase 2 (show banner only for now)
+  if (activeOperatorId === 'medic') {
+    healZones.push({
+      x: player.x, y: player.y,
+      radius: 80, duration: 480, // 8s
+      healPerSec: 5,
+      dps: 0, // 0 by default, upgradeable later
+      placedAt: frameCount,
+    });
+    playSound('pickup_health');
+  }
+  // Builder, Electrician, TimeTraveler — Phase 2 (show banner only for now)
 }
 
 function updateOperatorAbility() {
@@ -3229,6 +3241,57 @@ function drawSpitterProjectiles() {
     ctx.beginPath();
     ctx.arc(p.x, p.y, 2.5, 0, Math.PI*2);
     ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ── HEAL ZONES ──────────────────────────────────────
+function updateHealZones() {
+  for (let i = healZones.length - 1; i >= 0; i--) {
+    const hz = healZones[i];
+    hz.duration--;
+    if (hz.duration <= 0) { healZones.splice(i, 1); continue; }
+    // Heal player if inside
+    const dx = player.x - hz.x, dy = player.y - hz.y;
+    if (Math.sqrt(dx*dx + dy*dy) < hz.radius) {
+      player.hp = Math.min(player.hp + hz.healPerSec / 60, getPlayerStat('maxHp'));
+      runStats.healed += hz.healPerSec / 60;
+    }
+    // Damage zombies if upgraded (dps > 0)
+    if (hz.dps > 0) {
+      for (const z of zombies) {
+        if (!z.alive) continue;
+        const zx = z.x - hz.x, zy = z.y - hz.y;
+        if (zx*zx + zy*zy < hz.radius * hz.radius) {
+          z.hp -= hz.dps / 60;
+          if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = 30; onZombieKill(z); }
+        }
+      }
+    }
+  }
+}
+
+function drawHealZones() {
+  for (const hz of healZones) {
+    ctx.save();
+    const pulse = 0.3 + Math.sin(frameCount * 0.06) * 0.15;
+    // Outer ring
+    ctx.strokeStyle = 'rgba(50, 200, 100, ' + pulse + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(hz.x, hz.y, hz.radius, 0, Math.PI*2); ctx.stroke();
+    // Inner fill
+    ctx.fillStyle = 'rgba(50, 200, 100, ' + (pulse * 0.08) + ')';
+    ctx.fill();
+    // Cross icon in center
+    ctx.fillStyle = 'rgba(50, 200, 100, ' + pulse + ')';
+    ctx.fillRect(hz.x - 4, hz.y - 1, 8, 2);
+    ctx.fillRect(hz.x - 1, hz.y - 4, 2, 8);
+    // Timer
+    const secs = Math.ceil(hz.duration / 60);
+    ctx.font = "9px 'JetBrains Mono'";
+    ctx.fillStyle = '#33cc44';
+    ctx.textAlign = 'center';
+    ctx.fillText(secs + 's', hz.x, hz.y + hz.radius + 12);
     ctx.restore();
   }
 }
@@ -4232,6 +4295,12 @@ function drawMinimap() {
   for (const a of ammopacks) {
     ctx.fillRect(ox + (a.x/TILE)*S - 1, oy + (a.y/TILE)*S - 1, 3, 3);
   }
+  // Heal zones on minimap
+  ctx.strokeStyle = '#33cc44';
+  ctx.lineWidth = 1;
+  for (const hz of healZones) {
+    ctx.beginPath(); ctx.arc(ox + (hz.x/TILE)*S, oy + (hz.y/TILE)*S, (hz.radius/TILE)*S, 0, Math.PI*2); ctx.stroke();
+  }
   // Rescue circle
   if (rescueCircle) {
     ctx.save();
@@ -4575,6 +4644,7 @@ function loop(now) {
   updateZombies();
   updateBullets();
   updateSpitterProjectiles();
+  updateHealZones();
   updateParticles();
   updateFloatingTexts();
   updateHitTrails();
@@ -4650,6 +4720,7 @@ function loop(now) {
   drawHitTrails();
   drawBullets();
   drawSpitterProjectiles();
+  drawHealZones();
   zombies.forEach(drawZombie);
   drawDashAfterimage();
   drawPlayer();
