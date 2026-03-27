@@ -3780,11 +3780,84 @@ function updateSpecialZombies() {
       }
     }
 
+    // Broodmother egg laying
+    if (z.type === 'broodmother') {
+      z.eggCooldown--;
+      if (z.eggCooldown <= 0 && z.eggs < 3) {
+        z.eggCooldown = 480;
+        z.eggs++;
+        broodEggs.push({
+          x: z.x, y: z.y,
+          hatchTimer: 180,
+          hp: 3, maxHp: 3,
+          alive: true,
+          owner: z,
+        });
+        floatingTexts.push({ x: z.x, y: z.y - 10, text: 'EGG!', life: 30, maxLife: 30, color: '#aa8866' });
+      }
+    }
+
     // Decrement scream buff on all zombies
     if (z.screamBuff > 0) z.screamBuff--;
   }
 
   if (playerStunTimer > 0) playerStunTimer--;
+}
+
+function updateBroodEggs() {
+  for (let i = broodEggs.length - 1; i >= 0; i--) {
+    const e = broodEggs[i];
+    if (!e.alive) { broodEggs.splice(i, 1); continue; }
+    e.hatchTimer--;
+    if (e.hatchTimer <= 0) {
+      const mhp = 1;
+      zombies.push({
+        x: e.x, y: e.y, prevX: e.x, prevY: e.y, stuckFrames: 0,
+        type: 'normal', isMinion: true,
+        hp: mhp, maxHp: mhp,
+        speed: Math.min(1.8 + wave * 0.05, 3.0),
+        radius: ZOMBIE_R * 0.6, xp: 3,
+        angle: 0, wobble: Math.random() * Math.PI * 2,
+        frame: 0, alive: true, deathTimer: 0,
+        avoidDir: 0, shootCooldown: 0, throwAnim: 0,
+        burnTimer: 0, burnDps: 0, cryoTimer: 0,
+        screamBuff: 0, shieldHp: 0, shieldMaxHp: 0, shieldRegenTimer: 0, shieldBroken: false,
+        burrowCooldown: 0, burrowed: false, burrowTimer: 0,
+        eggCooldown: 0, eggs: 0, screamCooldown: 0,
+      });
+      waveTotal++;
+      for (let p = 0; p < 6; p++) {
+        particles.push({ x: e.x, y: e.y, dx: (Math.random()-0.5)*3, dy: (Math.random()-0.5)*3 - 1, life: 15, maxLife: 15, color: '#aa8866', r: 2 });
+      }
+      if (e.owner && e.owner.alive) e.owner.eggs--;
+      e.alive = false;
+      broodEggs.splice(i, 1);
+      continue;
+    }
+  }
+}
+
+function drawBroodEggs() {
+  for (const e of broodEggs) {
+    if (!e.alive) continue;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    const pulse = 1 + Math.sin(e.hatchTimer * 0.1) * 0.05;
+    ctx.scale(pulse, pulse);
+    ctx.fillStyle = '#aa8866';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 5, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#886644';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    if (e.hatchTimer < 60) {
+      ctx.strokeStyle = '#553322';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-2, -3); ctx.lineTo(1, 0); ctx.lineTo(-1, 3); ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
 // ── BULLET UPDATE ────────────────────────────────────
@@ -3846,6 +3919,35 @@ function onZombieKill(z) {
       particles.push({ x: z.x, y: z.y, dx: Math.cos(a)*4, dy: Math.sin(a)*4, life: 18, maxLife: 18, color: '#ff6600', r: 4 });
     }
     toxicPools.push({ x: z.x, y: z.y, radius: 30, dps: 2, life: 120, maxLife: 120 });
+  }
+
+  // Broodmother death spawn
+  if (z.type === 'broodmother') {
+    const spawnCount = 4 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < spawnCount; i++) {
+      const angle = (i / spawnCount) * Math.PI * 2;
+      const sx = z.x + Math.cos(angle) * 20;
+      const sy = z.y + Math.sin(angle) * 20;
+      zombies.push({
+        x: sx, y: sy, prevX: sx, prevY: sy, stuckFrames: 0,
+        type: 'normal', isMinion: true,
+        hp: 1, maxHp: 1,
+        speed: Math.min(1.8 + wave * 0.05, 3.0),
+        radius: ZOMBIE_R * 0.6, xp: 3,
+        angle: angle, wobble: Math.random() * Math.PI * 2,
+        frame: 0, alive: true, deathTimer: 0,
+        avoidDir: 0, shootCooldown: 0, throwAnim: 0,
+        burnTimer: 0, burnDps: 0, cryoTimer: 0,
+        screamBuff: 0, shieldHp: 0, shieldMaxHp: 0, shieldRegenTimer: 0, shieldBroken: false,
+        burrowCooldown: 0, burrowed: false, burrowTimer: 0,
+        eggCooldown: 0, eggs: 0, screamCooldown: 0,
+      });
+      particles.push({ x: sx, y: sy, dx: Math.cos(angle)*2, dy: Math.sin(angle)*2, life: 12, maxLife: 12, color: '#775566', r: 3 });
+    }
+    waveTotal += spawnCount;
+    for (const e of broodEggs) {
+      if (e.owner === z) { e.alive = false; }
+    }
   }
 
   if (z.isBoss) runStats.bossKills++;
@@ -4015,6 +4117,23 @@ function updateBullets() {
       }
     }
     if (hit) continue;
+
+    // bullet hits eggs
+    for (const e of broodEggs) {
+      if (!e.alive) continue;
+      const edx = b.x - e.x, edy = b.y - e.y;
+      if (Math.sqrt(edx*edx + edy*edy) < 8) {
+        e.hp--;
+        if (e.hp <= 0) {
+          e.alive = false;
+          if (e.owner && e.owner.alive) e.owner.eggs--;
+          for (let p = 0; p < 4; p++) {
+            particles.push({ x: e.x, y: e.y, dx: (Math.random()-0.5)*3, dy: (Math.random()-0.5)*3, life: 10, maxLife: 10, color: '#aa8866', r: 2 });
+          }
+        }
+        break;
+      }
+    }
   }
 }
 
@@ -5698,6 +5817,7 @@ function loop(now) {
   updateBossAbilities();
   updateToxicPools();
   updateSpecialZombies();
+  updateBroodEggs();
   updateBullets();
   updateSpitterProjectiles();
   updateHealZones();
@@ -5794,6 +5914,7 @@ function loop(now) {
   drawSpitterProjectiles();
   drawHealZones();
   drawToxicPools();
+  drawBroodEggs();
   drawFrozenBullets();
   zombies.forEach(drawZombie);
   drawDashAfterimage();
