@@ -1344,8 +1344,8 @@ const OPERATORS = {
   time_traveler: {
     id: 'time_traveler', name: 'TIME TRAVELER', icon: '\u231B', unlockLevel: 70, goldCost: 100000, diamondCost: 150,
     desc: 'Manipuliert die Zeit. Schnell, aber fragil.',
-    active: { name: 'ZEITRISS', desc: '5s Slowmo + Speedup (Phase 2)', cooldown: 2700, duration: 300 },
-    passive: 'Jeder 10. Kill: 1s Mini-Slowmo',
+    active: { name: 'ZEITRISS', desc: '5s Slowmo + Speedup, +80% Speed', cooldown: 2700, duration: 300 },
+    passive: 'Jeder 10. Kill: 2s Mini-Slowmo',
     buffs: { moveSpeedPct: 0.30 },
     debuffs: { maxHpPct: -0.25 },
   },
@@ -2893,6 +2893,10 @@ function movePlayer() {
   if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0 && !activePerkActive['minigun_overdrive']) {
     speed *= 0.7;
   }
+  // Time Traveler aktiv — massiver Speed-Boost
+  if (activeOperatorId === 'time_traveler' && timeTravelerPhase !== 'none') {
+    speed *= 1.8;
+  }
   const nx = player.x + dx * speed;
   const ny = player.y + dy * speed;
 
@@ -3319,7 +3323,7 @@ function onZombieKill(z) {
   if (activeOperatorId === 'time_traveler') {
     timeTravelerKillCount++;
     if (timeTravelerKillCount % 10 === 0 && timeTravelerPhase === 'none') {
-      miniSlowmoTimer = 60; // 1s
+      miniSlowmoTimer = 120; // 2s
       timeScale = 0.5;
     }
   }
