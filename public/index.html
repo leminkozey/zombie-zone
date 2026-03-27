@@ -3686,30 +3686,47 @@ function onZombieKill(z) {
   runStats.xpEarned += z.xp;
   pendingXp += z.xp;
 
-  // Gold drop with wave multiplier
-  const goldDef = { normal: [5,10,2], runner: [10,15,3], tank: [25,40,5], spitter: [15,25,4] };
-  const gd = goldDef[z.type] || goldDef.normal;
-  let goldAmount = gd[0] + Math.floor(Math.random() * (gd[1] - gd[0] + 1)) + gd[2] * wave;
-  const goldMultiplier = wave >= 5 ? 1 + (wave - 5) * 0.5 : 1;
-  goldAmount = Math.round(goldAmount * goldMultiplier);
-  const isGoldHaufen = Math.random() < 0.05;
-  if (isGoldHaufen) goldAmount *= 3;
-  pendingGold += goldAmount;
+  // Gold/Diamond/XP rewards
+  let goldAmount, goldText, goldColor;
 
-  // Diamond drop (wave 10+)
-  if (wave >= 10) {
-    const diaChance = z.type === 'tank' ? 0.02 : z.type === 'spitter' ? 0.01 : 0;
-    if (Math.random() < diaChance) {
-      pendingDiamonds += 1;
-      showWaveBanner('+1 DIAMANT!');
+  if (z.isBoss && !z.hasSplit) {
+    const tier = getBossRewardTier(wave);
+    goldAmount = tier.gold;
+    pendingGold += goldAmount;
+    pendingDiamonds += tier.diamonds;
+    pendingXp += tier.xp;
+    score += tier.xp;
+    goldText = '+' + goldAmount + 'G +' + tier.diamonds + 'D';
+    goldColor = '#ffdd44';
+    floatingTexts.push({ x: z.x, y: z.y - 30, text: '+' + tier.xp + ' BOSS XP', life: 60, maxLife: 60, color: '#33ff88' });
+  } else if (z.isBoss && z.hasSplit) {
+    goldAmount = Math.floor(getBossRewardTier(wave).gold * 0.1);
+    pendingGold += goldAmount;
+    goldText = '+' + goldAmount + 'G';
+    goldColor = '#ddaa00';
+  } else {
+    const goldDef = { normal: [5,10,2], runner: [10,15,3], tank: [25,40,5], spitter: [15,25,4] };
+    const gd = goldDef[z.type] || goldDef.normal;
+    goldAmount = gd[0] + Math.floor(Math.random() * (gd[1] - gd[0] + 1)) + gd[2] * wave;
+    const goldMultiplier = wave >= 5 ? 1 + (wave - 5) * 0.5 : 1;
+    goldAmount = Math.round(goldAmount * goldMultiplier);
+    const isGoldHaufen = Math.random() < 0.05;
+    if (isGoldHaufen) goldAmount *= 3;
+    pendingGold += goldAmount;
+
+    if (wave >= 10) {
+      const diaChance = z.type === 'tank' ? 0.02 : z.type === 'spitter' ? 0.01 : 0;
+      if (Math.random() < diaChance) {
+        pendingDiamonds += 1;
+        showWaveBanner('+1 DIAMANT!');
+      }
     }
-  }
 
-  // Floating gold text
-  let goldText = '+' + goldAmount + 'G';
-  let goldColor = '#ddaa00';
-  if (isGoldHaufen) { goldText += ' x3!'; goldColor = '#ffdd44'; }
-  else if (goldMultiplier > 1) { goldText += ' x' + goldMultiplier.toFixed(1); goldColor = '#eecc22'; }
+    goldText = '+' + goldAmount + 'G';
+    goldColor = '#ddaa00';
+    if (isGoldHaufen) { goldText += ' x3!'; goldColor = '#ffdd44'; }
+    else if (goldMultiplier > 1) { goldText += ' x' + goldMultiplier.toFixed(1); goldColor = '#eecc22'; }
+  }
   floatingTexts.push({ x: z.x, y: z.y - 10, text: goldText, life: 45, maxLife: 45, color: goldColor });
   playSoundThrottled('pickup_gold', 100);
 
@@ -3727,6 +3744,19 @@ function onZombieKill(z) {
   spawnBlood(z.x, z.y, 16);
   updateHUD();
   if (waveKills >= waveTotal && zombies.filter(zz => zz.alive).length === 0) {
+    if (isBossWave(wave)) {
+      const tier = getBossRewardTier(wave);
+      const bossCount = getBossCount(wave);
+      const bonusGold = Math.floor(tier.gold * bossCount * 0.5);
+      const bonusDia = Math.floor(tier.diamonds * bossCount * 0.5);
+      const bonusXp = Math.floor(tier.xp * bossCount * 0.5);
+      pendingGold += bonusGold;
+      pendingDiamonds += bonusDia;
+      pendingXp += bonusXp;
+      score += bonusXp;
+      floatingTexts.push({ x: player.x, y: player.y - 40, text: 'BOSS WAVE CLEAR! +50% BONUS', life: 90, maxLife: 90, color: '#ffdd00' });
+      floatingTexts.push({ x: player.x, y: player.y - 60, text: '+' + bonusGold + 'G +' + bonusDia + 'D +' + bonusXp + 'XP', life: 90, maxLife: 90, color: '#ffaa00' });
+    }
     setTimeout(() => startNextWave(), 2000);
   }
 }
