@@ -1714,7 +1714,6 @@ async function init() {
     ironSkinCooldownTime: 0,
     killRushTimer: 0,
     killRushBoost: 0,
-    dashCharges: [],
     dashInvulnerable: false,
     soldierRush: false,
     juggernautActive: false,
@@ -2321,6 +2320,7 @@ function activateOperatorAbility() {
     }
   }
   if (activeOperatorId === 'time_traveler') {
+    operatorAbilityTimer = 480; // 5s slow + 3s fast = 8s total
     timeTravelerPhase = 'slow';
     timeTravelerTimer = 300; // 5s at 60fps
     timeScale = 0.2;
@@ -2332,7 +2332,10 @@ function activateOperatorAbility() {
       // Second activation on existing turrets: activate aggro mode
       turrets.forEach(t => { t.aggroTimer = 300; }); // 5s aggro
       showWaveBanner('TURRET AGGRO!');
-      return; // don't use cooldown for aggro toggle
+      operatorAbilityCooldown = 0; // no cooldown for aggro toggle
+      operatorAbilityActive = false;
+      operatorAbilityTimer = 0;
+      return;
     }
     // Place turret at player position
     turrets.push({
@@ -2611,7 +2614,6 @@ function tryShoot() {
     const rayDy = Math.sin(rayAngle);
     const maxDist = range * BULLET_SPD;
 
-    let hitZombie = null;
     let hitDist = maxDist;
     let hitX = player.x + rayDx * maxDist;
     let hitY = player.y + rayDy * maxDist;
@@ -3136,8 +3138,11 @@ function updateZombies() {
           if (tdist < 200 && tdist > 15) {
             const spd = z.speed;
             const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
-            z.x += (tdx/tdist) * spd * cryoMult;
-            z.y += (tdy/tdist) * spd * cryoMult;
+            const mx = (tdx/tdist) * spd * cryoMult;
+            const my = (tdy/tdist) * spd * cryoMult;
+            const mr = z.radius - 2;
+            if (!wallCollide(z.x + mx, z.y + my, mr)) { z.x += mx; z.y += my; }
+            else { if (!wallCollide(z.x + mx, z.y, mr)) z.x += mx; if (!wallCollide(z.x, z.y + my, mr)) z.y += my; }
             z.angle = Math.atan2(tdy, tdx);
             turretAggroed = true;
             break;
@@ -3541,8 +3546,10 @@ function updateTimeManipulation() {
   // Mini-slowmo passive
   if (miniSlowmoTimer > 0) {
     miniSlowmoTimer--;
-    timeScale = 0.5;
-    if (miniSlowmoTimer <= 0 && timeTravelerPhase === 'none') timeScale = 1;
+    if (timeTravelerPhase === 'none') { // only if active ability isn't running
+      timeScale = 0.5;
+      if (miniSlowmoTimer <= 0) timeScale = 1;
+    }
   }
 
   if (timeTravelerPhase === 'slow') {
@@ -3564,6 +3571,7 @@ function updateTimeManipulation() {
       timeTravelerPhase = 'none';
       timeScale = 1;
       operatorAbilityActive = false;
+      operatorAbilityTimer = 0; // force done
     }
   }
 }
