@@ -3087,7 +3087,7 @@ function movePlayer() {
     player.killRushTimer--;
   }
   if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0 && !activePerkActive['minigun_overdrive']) {
-    speed *= 0.7;
+    speed *= 0.35;
   }
   // Time Traveler aktiv — massiver Speed-Boost
   if (activeOperatorId === 'time_traveler' && timeTravelerPhase !== 'none') {
