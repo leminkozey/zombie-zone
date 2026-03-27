@@ -1477,7 +1477,7 @@ generateMap();
 function isWall(x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return true;
-  return MAP[ty][tx] === 1;
+  return MAP[ty][tx] >= 1;
 }
 
 function wallCollide(x, y, r) {
@@ -1534,10 +1534,10 @@ function computeFlowfield() {
       const tx = cur.x + nx;
       const ty = cur.y + ny;
       if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
-      if (MAP[ty][tx] === 1) continue;
+      if (MAP[ty][tx] >= 1) continue;
       // Diagonal: both adjacent cardinal tiles must be free (no corner cutting)
       if (nx !== 0 && ny !== 0) {
-        if (MAP[cur.y][cur.x + nx] === 1 || MAP[cur.y + ny][cur.x] === 1) continue;
+        if (MAP[cur.y][cur.x + nx] >= 1 || MAP[cur.y + ny][cur.x] >= 1) continue;
       }
       const cost = (nx !== 0 && ny !== 0) ? 1.41 : 1;
       const newDist = curDist + cost;
@@ -1568,7 +1568,7 @@ function getSmoothedFlowDir(px, py) {
   // Sample distances at 4 corners of the cell
   function getDist(c, r) {
     if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return Infinity;
-    if (MAP[r][c] === 1) return Infinity;
+    if (MAP[r][c] >= 1) return Infinity;
     return flowfield[r][c].dist;
   }
 
@@ -1613,7 +1613,7 @@ function nearestFreeTileCenter(px, py) {
   for (let r = ty - searchR; r <= ty + searchR; r++) {
     for (let c = tx - searchR; c <= tx + searchR; c++) {
       if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
-      if (MAP[r][c] === 1) continue;
+      if (MAP[r][c] >= 1) continue;
       const cx = c * TILE + TILE / 2, cy = r * TILE + TILE / 2;
       const ddx = px - cx, ddy = py - cy;
       const d = ddx * ddx + ddy * ddy;
@@ -1678,6 +1678,13 @@ let floatingTexts = [];
 let hitTrails = []; // { x1, y1, x2, y2, life, maxLife } — hitscan visual trails
 let minigunSpinup = 0;
 let healZones = []; // { x, y, radius, duration, healPerSec, dps, placedAt }
+let builderBlocks = []; // { x, y, hp, maxHp, placedAt }
+let timeScale = 1; // global speed multiplier (1 = normal, 0.2 = slowmo, 1.5 = speedup)
+let frozenBullets = []; // bullets frozen during slowmo
+let timeTravelerPhase = 'none'; // 'none', 'slow', 'fast'
+let timeTravelerTimer = 0;
+let timeTravelerKillCount = 0; // for passive
+let miniSlowmoTimer = 0;
 
 async function init() {
   // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
@@ -1745,6 +1752,9 @@ async function init() {
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
   healZones = [];
+  for (const b of builderBlocks) { if (MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
+  builderBlocks = [];
+  timeScale = 1; frozenBullets = []; timeTravelerPhase = 'none'; timeTravelerTimer = 0; timeTravelerKillCount = 0; miniSlowmoTimer = 0;
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
@@ -1877,7 +1887,7 @@ function spawnRescueCircle() {
     for (let r = -checkRadius; r <= checkRadius && !tooClose; r++) {
       for (let c = -checkRadius; c <= checkRadius && !tooClose; c++) {
         const cr = ty + r, cc = tx + c;
-        if (cr >= 0 && cr < ROWS && cc >= 0 && cc < COLS && MAP[cr][cc] === 1) {
+        if (cr >= 0 && cr < ROWS && cc >= 0 && cc < COLS && MAP[cr][cc] >= 1) {
           const wx = cc * TILE + TILE/2, wy = cr * TILE + TILE/2;
           const ddx = x - wx, ddy = y - wy;
           if (Math.sqrt(ddx*ddx + ddy*ddy) < minWallDist) tooClose = true;
@@ -2284,7 +2294,38 @@ function activateOperatorAbility() {
     });
     playSound('pickup_health');
   }
-  // Builder, Electrician, TimeTraveler — Phase 2 (show banner only for now)
+  if (activeOperatorId === 'builder') {
+    if (builderBlocks.length >= 10) {
+      // Remove oldest block and reset its MAP tile
+      const old = builderBlocks.shift();
+      if (MAP[old.y] && MAP[old.y][old.x] === 2) MAP[old.y][old.x] = 0;
+      mapCacheCanvas = null;
+      _floorNoise = null;
+    }
+    // Place block at tile under cursor
+    const tx = Math.floor(mouseX / TILE);
+    const ty = Math.floor(mouseY / TILE);
+    // Don't place on existing walls or player position
+    if (tx > 0 && tx < COLS-1 && ty > 0 && ty < ROWS-1 && MAP[ty][tx] === 0) {
+      const ptx = Math.floor(player.x / TILE);
+      const pty = Math.floor(player.y / TILE);
+      if (tx !== ptx || ty !== pty) {
+        builderBlocks.push({ x: tx, y: ty, hp: 5, maxHp: 5, placedAt: frameCount });
+        MAP[ty][tx] = 2; // 2 = builder block (treated as wall)
+        mapCacheCanvas = null;
+        _floorNoise = null;
+        playSound('ui_click');
+      }
+    }
+  }
+  if (activeOperatorId === 'time_traveler') {
+    timeTravelerPhase = 'slow';
+    timeTravelerTimer = 300; // 5s at 60fps
+    timeScale = 0.2;
+    frozenBullets = [];
+    playSound('perk_activate');
+  }
+  // Electrician — Phase 2 (show banner only for now)
 }
 
 function updateOperatorAbility() {
@@ -2295,6 +2336,51 @@ function updateOperatorAbility() {
       operatorAbilityActive = false;
       player.soldierRush = false;
       player.juggernautActive = false;
+    }
+  }
+}
+
+// ── BUILDER BLOCKS ──────────────────────────────────
+function updateBuilderBlocks() {
+  for (let i = builderBlocks.length - 1; i >= 0; i--) {
+    const b = builderBlocks[i];
+    // Self-heal after 10s if damaged
+    if (b.hp < b.maxHp && frameCount - b.placedAt > 600) {
+      b.hp = Math.min(b.hp + 0.01, b.maxHp);
+    }
+    // Remove if destroyed
+    if (b.hp <= 0) {
+      MAP[b.y][b.x] = 0;
+      mapCacheCanvas = null;
+      _floorNoise = null;
+      builderBlocks.splice(i, 1);
+    }
+  }
+}
+
+function drawBuilderBlocks() {
+  for (const b of builderBlocks) {
+    const x = b.x * TILE, y = b.y * TILE;
+    // Block body
+    ctx.fillStyle = '#4a5540';
+    ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+    ctx.strokeStyle = '#6a7a55';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
+    // Cross-hatch pattern
+    ctx.strokeStyle = '#3a4530';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + TILE - 4, y + TILE - 4);
+    ctx.moveTo(x + TILE - 4, y + 4); ctx.lineTo(x + 4, y + TILE - 4);
+    ctx.stroke();
+    // HP bar if damaged
+    if (b.hp < b.maxHp) {
+      const bw = TILE - 8;
+      ctx.fillStyle = '#400';
+      ctx.fillRect(x + 4, y - 4, bw, 3);
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(x + 4, y - 4, bw * (b.hp / b.maxHp), 3);
     }
   }
 }
@@ -2423,7 +2509,7 @@ function tryShoot() {
 
   const useHitscan = wpn.type === 'Auto' || activeWeaponId === 'sniper';
 
-  if (useHitscan) {
+  if (useHitscan && timeTravelerPhase !== 'slow') {
     // Hitscan — instant ray, no bullet object
     const bulletSpread = (Math.random() - 0.5) * spread;
     const rayAngle = angle + bulletSpread;
@@ -2504,11 +2590,22 @@ function tryShoot() {
       hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 4, maxLife: 4, style: 'auto' });
     }
 
+  } else if (useHitscan && timeTravelerPhase === 'slow') {
+    // Slowmo: convert hitscan to frozen projectile
+    const bulletSpread = (Math.random() - 0.5) * spread;
+    frozenBullets.push({
+      x: player.x, y: player.y,
+      dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
+      dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
+      life: range, damage: dmg, pierce: wpn.special === 'pierce',
+      weaponId: activeWeaponId,
+    });
   } else if (wpn.special === 'shotgun' && !slugActive) {
     // Shotgun keeps projectiles (5 pellets, short range)
+    const targetArr = timeTravelerPhase === 'slow' ? frozenBullets : bullets;
     for (let p = 0; p < 5; p++) {
       const pelletSpread = (p - 2) * 0.12 + (Math.random() - 0.5) * spread;
-      bullets.push({
+      targetArr.push({
         x: player.x, y: player.y,
         dx: Math.cos(angle + pelletSpread) * BULLET_SPD,
         dy: Math.sin(angle + pelletSpread) * BULLET_SPD,
@@ -2518,33 +2615,39 @@ function tryShoot() {
     }
   } else if (slugActive) {
     // Slug Round — single heavy bullet, no spread, 5x damage
-    bullets.push({
+    const slugBullet = {
       x: player.x, y: player.y,
       dx: Math.cos(angle) * BULLET_SPD * 1.2,
       dy: Math.sin(angle) * BULLET_SPD * 1.2,
       life: range * 1.5, damage: dmg * 5, pierce: false,
       weaponId: activeWeaponId,
-    });
+    };
+    if (timeTravelerPhase === 'slow') frozenBullets.push(slugBullet);
+    else bullets.push(slugBullet);
   } else {
     // Pistol — keep projectiles (low fire rate, few objects)
     const bulletSpread = (Math.random() - 0.5) * spread;
-    bullets.push({
+    const pistolBullet = {
       x: player.x, y: player.y,
       dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
       dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
       life: range, damage: dmg, pierce: wpn.special === 'pierce',
       weaponId: activeWeaponId,
-    });
+    };
+    if (timeTravelerPhase === 'slow') frozenBullets.push(pistolBullet);
+    else bullets.push(pistolBullet);
     // Akimbo — fire second bullet
     if (akimboActive) {
       const bulletSpread2 = (Math.random() - 0.5) * spread;
-      bullets.push({
+      const akimboBullet = {
         x: player.x, y: player.y,
         dx: Math.cos(angle + bulletSpread2) * BULLET_SPD,
         dy: Math.sin(angle + bulletSpread2) * BULLET_SPD,
         life: range, damage: dmg, pierce: false,
         weaponId: activeWeaponId,
-      });
+      };
+      if (timeTravelerPhase === 'slow') frozenBullets.push(akimboBullet);
+      else bullets.push(akimboBullet);
     }
   }
 
@@ -2938,7 +3041,7 @@ function updateZombies() {
         if (btdx*btdx + btdy*btdy < 200*200) bulletTimeMult = 0.5;
       }
       const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
-      const finalSpeed = spd * aggroMult * bulletTimeMult * cryoMult;
+      const finalSpeed = spd * aggroMult * bulletTimeMult * cryoMult * timeScale;
 
       const dirX = dx / dist;
       const dirY = dy / dist;
@@ -3079,6 +3182,15 @@ function onZombieKill(z) {
   floatingTexts.push({ x: z.x, y: z.y - 10, text: goldText, life: 45, maxLife: 45, color: goldColor });
   playSoundThrottled('pickup_gold', 100);
 
+  // Time Traveler passive — mini-slowmo every 10 kills
+  if (activeOperatorId === 'time_traveler') {
+    timeTravelerKillCount++;
+    if (timeTravelerKillCount % 10 === 0 && timeTravelerPhase === 'none') {
+      miniSlowmoTimer = 60; // 1s
+      timeScale = 0.5;
+    }
+  }
+
   updateXpBar();
   waveKills++;
   spawnBlood(z.x, z.y, 16);
@@ -3091,7 +3203,7 @@ function onZombieKill(z) {
 function updateBullets() {
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
-    b.x += b.dx; b.y += b.dy;
+    b.x += b.dx * timeScale; b.y += b.dy * timeScale;
     b.life--;
 
     if (b.life <= 0 || wallCollide(b.x, b.y, 2)) {
@@ -3196,7 +3308,7 @@ function drawFloatingTexts() {
 function updateSpitterProjectiles() {
   for (let i = spitterProjectiles.length - 1; i >= 0; i--) {
     const p = spitterProjectiles[i];
-    p.x += p.dx; p.y += p.dy;
+    p.x += p.dx * timeScale; p.y += p.dy * timeScale;
     p.life--;
 
     if (p.life <= 0 || wallCollide(p.x, p.y, 3)) {
@@ -3292,6 +3404,52 @@ function drawHealZones() {
     ctx.fillStyle = '#33cc44';
     ctx.textAlign = 'center';
     ctx.fillText(secs + 's', hz.x, hz.y + hz.radius + 12);
+    ctx.restore();
+  }
+}
+
+// ── TIME MANIPULATION ────────────────────────────────
+function updateTimeManipulation() {
+  // Mini-slowmo passive
+  if (miniSlowmoTimer > 0) {
+    miniSlowmoTimer--;
+    timeScale = 0.5;
+    if (miniSlowmoTimer <= 0 && timeTravelerPhase === 'none') timeScale = 1;
+  }
+
+  if (timeTravelerPhase === 'slow') {
+    timeTravelerTimer--;
+    if (timeTravelerTimer <= 0) {
+      // Release frozen bullets
+      for (const fb of frozenBullets) {
+        bullets.push(fb);
+      }
+      frozenBullets = [];
+      // Speed up phase
+      timeTravelerPhase = 'fast';
+      timeTravelerTimer = 180; // 3s
+      timeScale = 1.5;
+    }
+  } else if (timeTravelerPhase === 'fast') {
+    timeTravelerTimer--;
+    if (timeTravelerTimer <= 0) {
+      timeTravelerPhase = 'none';
+      timeScale = 1;
+      operatorAbilityActive = false;
+    }
+  }
+}
+
+function drawFrozenBullets() {
+  for (const b of frozenBullets) {
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#aaddff';
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = '#44aaff';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3, 0, Math.PI*2);
+    ctx.fill();
     ctx.restore();
   }
 }
@@ -3400,22 +3558,22 @@ function drawMap() {
         }
 
         // Shadow along wall bases — check adjacent walls
-        if (row > 0 && MAP[row-1][col] === 1) {
+        if (row > 0 && MAP[row-1][col] >= 1) {
           // Wall above — cast shadow down
           mctx.fillStyle = 'rgba(0,0,0,0.25)';
           mctx.fillRect(x, y, TILE, 4);
         }
-        if (col > 0 && MAP[row][col-1] === 1) {
+        if (col > 0 && MAP[row][col-1] >= 1) {
           // Wall to the left — cast shadow right
           mctx.fillStyle = 'rgba(0,0,0,0.2)';
           mctx.fillRect(x, y, 3, TILE);
         }
-        if (row < ROWS-1 && MAP[row+1][col] === 1) {
+        if (row < ROWS-1 && MAP[row+1][col] >= 1) {
           // Wall below — subtle top shadow
           mctx.fillStyle = 'rgba(0,0,0,0.12)';
           mctx.fillRect(x, y + TILE - 2, TILE, 2);
         }
-        if (col < COLS-1 && MAP[row][col+1] === 1) {
+        if (col < COLS-1 && MAP[row][col+1] >= 1) {
           // Wall to the right — subtle left shadow
           mctx.fillStyle = 'rgba(0,0,0,0.12)';
           mctx.fillRect(x + TILE - 2, y, 2, TILE);
@@ -4274,7 +4432,7 @@ function drawMinimap() {
   ctx.fillRect(ox-2, oy-2, COLS*S+4, ROWS*S+4);
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      ctx.fillStyle = MAP[r][c] === 1 ? '#2a2a30' : '#0e0e12';
+      ctx.fillStyle = MAP[r][c] >= 1 ? '#2a2a30' : '#0e0e12';
       ctx.fillRect(ox + c*S, oy + r*S, S-1, S-1);
     }
   }
@@ -4645,6 +4803,7 @@ function loop(now) {
   updateBullets();
   updateSpitterProjectiles();
   updateHealZones();
+  updateTimeManipulation();
   updateParticles();
   updateFloatingTexts();
   updateHitTrails();
@@ -4721,6 +4880,7 @@ function loop(now) {
   drawBullets();
   drawSpitterProjectiles();
   drawHealZones();
+  drawFrozenBullets();
   zombies.forEach(drawZombie);
   drawDashAfterimage();
   drawPlayer();
@@ -4736,6 +4896,20 @@ function loop(now) {
     ctx.fillStyle = vignetteGrad;
     ctx.fillRect(0, 0, W, H);
     hurtFlash--;
+  }
+
+  // Time manipulation visual overlay
+  if (timeScale < 1) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(50, 100, 200, 0.06)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  if (timeScale > 1) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(200, 100, 50, 0.04)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 
   // Score display
