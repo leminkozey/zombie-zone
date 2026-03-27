@@ -390,7 +390,14 @@
       <button class="auth-tab" onclick="switchAuthTab('register')">REGISTRIEREN</button>
     </div>
     <input class="auth-input" id="auth-name" placeholder="Name" autocomplete="off">
-    <input class="auth-input" id="auth-pass" type="password" placeholder="Passwort">
+    <div style="position:relative;width:260px">
+      <input class="auth-input" id="auth-pass" type="password" placeholder="Passwort" style="width:100%;padding-right:36px">
+      <span id="pw-toggle-1" onclick="togglePwVisibility('auth-pass','pw-toggle-1')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:14px;color:#555;user-select:none">👁</span>
+    </div>
+    <div style="position:relative;width:260px;display:none" id="auth-pass-confirm-wrap">
+      <input class="auth-input" id="auth-pass-confirm" type="password" placeholder="Passwort bestaetigen" style="width:100%;padding-right:36px">
+      <span id="pw-toggle-2" onclick="togglePwVisibility('auth-pass-confirm','pw-toggle-2')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:14px;color:#555;user-select:none">👁</span>
+    </div>
     <div id="auth-error"></div>
     <button class="start-btn" id="auth-btn" onclick="doAuth()">LOGIN</button>
     <div id="logout-hint" style="color:#353540;font-family:'JetBrains Mono',monospace;font-size:10px;margin-top:20px;letter-spacing:1px;display:none">
@@ -592,6 +599,13 @@ let authToken = localStorage.getItem('dz_token');
 let currentUser = localStorage.getItem('dz_user');
 let authMode = 'login';
 
+function togglePwVisibility(inputId, toggleId) {
+  const input = document.getElementById(inputId);
+  const toggle = document.getElementById(toggleId);
+  if (input.type === 'password') { input.type = 'text'; toggle.textContent = '🔒'; }
+  else { input.type = 'password'; toggle.textContent = '👁'; }
+}
+
 function switchAuthTab(mode) {
   playSound('ui_click');
   authMode = mode;
@@ -599,6 +613,7 @@ function switchAuthTab(mode) {
   document.querySelector(`.auth-tab:${mode === 'login' ? 'first' : 'last'}-child`).classList.add('active');
   document.getElementById('auth-btn').textContent = mode === 'login' ? 'LOGIN' : 'REGISTRIEREN';
   document.getElementById('auth-error').textContent = '';
+  document.getElementById('auth-pass-confirm-wrap').style.display = mode === 'register' ? 'block' : 'none';
 }
 
 async function doAuth() {
@@ -607,6 +622,12 @@ async function doAuth() {
   const password = document.getElementById('auth-pass').value;
   const errEl = document.getElementById('auth-error');
   if (!name || !password) { errEl.textContent = 'Name und Passwort eingeben'; return; }
+
+  if (authMode === 'register') {
+    const confirm = document.getElementById('auth-pass-confirm').value;
+    if (password !== confirm) { errEl.textContent = 'Passwoerter stimmen nicht ueberein'; return; }
+    if (password.length < 3) { errEl.textContent = 'Mindestens 3 Zeichen'; return; }
+  }
 
   const endpoint = authMode === 'login' ? '/api/login' : '/api/register';
   try {
