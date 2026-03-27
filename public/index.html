@@ -3053,6 +3053,10 @@ function movePlayer() {
   if (activeOperatorId === 'time_traveler' && timeTravelerPhase !== 'none') {
     speed *= 1.8;
   }
+  // Boss stomp slow
+  if (bossSlowTimer > 0) {
+    speed *= 0.5;
+  }
   const nx = player.x + dx * speed;
   const ny = player.y + dy * speed;
 
@@ -3421,6 +3425,70 @@ function updateZombies() {
       }
     }
   }
+}
+
+function updateBossAbilities() {
+  for (const z of zombies) {
+    if (!z.alive || !z.isBoss) continue;
+
+    if (z.bossType === 'brute') {
+      const cfg = BOSS_CONFIGS.brute;
+      const dx = player.x - z.x;
+      const dy = player.y - z.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // charge
+      if (z.charging) {
+        z.chargeTimer--;
+        z.x += z.chargeDx * cfg.chargeSpeed * 2;
+        z.y += z.chargeDy * cfg.chargeSpeed * 2;
+        if (z.frame % 3 === 0) {
+          particles.push({ x: z.x, y: z.y, dx: (Math.random()-0.5)*3, dy: (Math.random()-0.5)*3, life: 15, maxLife: 15, color: '#cc2200', r: 4 });
+        }
+        const cdx = player.x - z.x, cdy = player.y - z.y;
+        const cdist = Math.sqrt(cdx*cdx + cdy*cdy);
+        if (cdist < cfg.chargeAoe) {
+          damagePlayer(cfg.chargeDmg, 'boss_charge');
+          triggerScreenshake(8, 18);
+          z.charging = false;
+          z.chargeCooldown = cfg.chargeCooldown;
+        }
+        if (z.chargeTimer <= 0 || wallCollide(z.x, z.y, z.radius * 0.6)) {
+          z.charging = false;
+          z.chargeCooldown = cfg.chargeCooldown;
+          triggerScreenshake(5, 12);
+        }
+      } else {
+        z.chargeCooldown--;
+        if (z.chargeCooldown <= 0 && dist > 80 && dist < 400) {
+          z.charging = true;
+          z.chargeTimer = cfg.chargeDuration;
+          const len = dist || 1;
+          z.chargeDx = dx / len;
+          z.chargeDy = dy / len;
+        }
+      }
+
+      // stomp
+      z.stompCooldown--;
+      if (z.stompCooldown <= 0 && dist < cfg.stompRadius) {
+        z.stompCooldown = cfg.stompCooldown;
+        bossSlowTimer = cfg.stompSlowDuration;
+        triggerScreenshake(5, 12);
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          particles.push({
+            x: z.x, y: z.y,
+            dx: Math.cos(a) * 3, dy: Math.sin(a) * 3,
+            life: 20, maxLife: 20, color: '#553322', r: 3,
+          });
+        }
+        floatingTexts.push({ x: z.x, y: z.y - 20, text: 'STOMP!', life: 40, maxLife: 40, color: '#cc4422' });
+      }
+    }
+  }
+
+  if (bossSlowTimer > 0) bossSlowTimer--;
 }
 
 // ── BULLET UPDATE ────────────────────────────────────
@@ -5110,6 +5178,7 @@ function loop(now) {
   player._lastMouseDown = mouseDown;
   if (!mouseDown) minigunSpinup = 0;
   updateZombies();
+  updateBossAbilities();
   updateBullets();
   updateSpitterProjectiles();
   updateHealZones();
