@@ -3455,7 +3455,7 @@ function updateZombies() {
 
     // Zombie-zombie separation (full radius)
     for (const z2 of zombies) {
-      if (z2 === z || !z2.alive) continue;
+      if (z2 === z || !z2.alive || z.burrowed || z2.burrowed) continue;
       const ex = z.x - z2.x, ey = z.y - z2.y;
       const ed = Math.sqrt(ex*ex+ey*ey);
       if (ed < z.radius + z2.radius && ed > 0) {
@@ -5944,6 +5944,18 @@ function loop(now) {
     ctx.save();
     ctx.fillStyle = 'rgba(200, 100, 50, 0.04)';
     ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // Stun visual
+  if (playerStunTimer > 0) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(200, 180, 100, 0.1)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.font = "bold 20px 'Oswald', sans-serif";
+    ctx.fillStyle = '#ddaa44';
+    ctx.textAlign = 'center';
+    ctx.fillText('STUNNED', W/2, H/2 - 30);
     ctx.restore();
   }
 
