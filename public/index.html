@@ -3127,6 +3127,20 @@ function updateZombies() {
         z2.x -= (ex/ed)*push; z2.y -= (ey/ed)*push;
       }
     }
+
+    // Zombies attack adjacent builder blocks
+    if (builderBlocks.length > 0) {
+      const ztx = Math.floor(z.x / TILE);
+      const zty = Math.floor(z.y / TILE);
+      for (const b of builderBlocks) {
+        if (Math.abs(b.x - ztx) <= 1 && Math.abs(b.y - zty) <= 1 && MAP[b.y][b.x] === 2) {
+          if (z.frame % 40 === 0) {
+            b.hp -= 1;
+            b.placedAt = frameCount; // reset heal timer on damage
+          }
+        }
+      }
+    }
   }
 }
 
@@ -4469,6 +4483,11 @@ function drawMinimap() {
     ctx.stroke();
     ctx.restore();
   }
+  // Builder blocks on minimap
+  ctx.fillStyle = '#4a5540';
+  for (const b of builderBlocks) {
+    ctx.fillRect(ox + b.x*S, oy + b.y*S, S-1, S-1);
+  }
   // Player
   ctx.fillStyle = '#00ff88';
   ctx.fillRect(ox + (player.x/TILE)*S - 2, oy + (player.y/TILE)*S - 2, 4, 4);
@@ -4646,6 +4665,9 @@ async function gameOver() {
   operatorAbilityCooldown = 0;
   operatorAbilityActive = false;
   operatorAbilityTimer = 0;
+  for (const b of builderBlocks) { if (MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
+  builderBlocks = [];
+  mapCacheCanvas = null;
 
   const totalEarned = score;
   lastRunText = 'GESTORBEN: Wave ' + wave + '  |  +' + totalEarned + ' XP  |  75% VERLOREN';
@@ -4808,6 +4830,7 @@ function loop(now) {
   updateFloatingTexts();
   updateHitTrails();
   updateReload(now);
+  updateBuilderBlocks();
 
   // Perk cooldown ticks
   for (const perkId in activePerkCooldowns) {
@@ -4870,6 +4893,7 @@ function loop(now) {
   // Draw
   ctx.clearRect(0, 0, W, H);
   drawMap();
+  drawBuilderBlocks();
   drawBloodDecals();
   drawHealthpacks();
   drawAmmopacks();
