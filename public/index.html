@@ -2488,23 +2488,31 @@ function activateOperatorAbility() {
     playSound('pickup_health');
   }
   if (activeOperatorId === 'builder') {
-    if (builderBlocks.length >= 10) {
-      // Remove oldest block and reset its MAP tile
-      const old = builderBlocks.shift();
-      if (MAP[old.y] && MAP[old.y][old.x] === 2) MAP[old.y][old.x] = 0;
-      mapCacheCanvas = null;
-      _floorNoise = null;
-    }
-    // Place block at tile under cursor
     const tx = Math.floor(mouseX / TILE);
     const ty = Math.floor(mouseY / TILE);
-    // Don't place on existing walls or player position
-    if (tx > 0 && tx < COLS-1 && ty > 0 && ty < ROWS-1 && MAP[ty][tx] === 0) {
-      const ptx = Math.floor(player.x / TILE);
-      const pty = Math.floor(player.y / TILE);
-      if (tx !== ptx || ty !== pty) {
-        builderBlocks.push({ x: tx, y: ty, hp: 5, maxHp: 5, placedAt: frameCount });
-        MAP[ty][tx] = 2; // 2 = builder block (treated as wall)
+    const ptx = Math.floor(player.x / TILE);
+    const pty = Math.floor(player.y / TILE);
+    if (tx > 0 && tx < COLS-1 && ty > 0 && ty < ROWS-1 && (tx !== ptx || ty !== pty)) {
+      // reinforcement: place on existing builder block → make it indestructible
+      const existing = builderBlocks.find(b => b.x === tx && b.y === ty);
+      if (existing && !existing.reinforced) {
+        existing.reinforced = true;
+        existing.hp = existing.maxHp;
+        floatingTexts.push({ x: tx * TILE + TILE/2, y: ty * TILE, text: 'REINFORCED', life: 30, maxLife: 30, color: '#88aa66' });
+        playSound('ui_click');
+      } else if (MAP[ty][tx] === 0) {
+        // new block
+        if (builderBlocks.length >= 15) {
+          // remove oldest non-reinforced, or oldest reinforced if all reinforced
+          const oldIdx = builderBlocks.findIndex(b => !b.reinforced);
+          const removeIdx = oldIdx >= 0 ? oldIdx : 0;
+          const old = builderBlocks.splice(removeIdx, 1)[0];
+          if (MAP[old.y] && MAP[old.y][old.x] === 2) MAP[old.y][old.x] = 0;
+          mapCacheCanvas = null;
+          _floorNoise = null;
+        }
+        builderBlocks.push({ x: tx, y: ty, hp: 10, maxHp: 10, placedAt: frameCount, reinforced: false });
+        MAP[ty][tx] = 2;
         mapCacheCanvas = null;
         _floorNoise = null;
         playSound('ui_click');
@@ -2650,26 +2658,51 @@ function updateBuilderBlocks() {
 function drawBuilderBlocks() {
   for (const b of builderBlocks) {
     const x = b.x * TILE, y = b.y * TILE;
-    // Block body
-    ctx.fillStyle = '#4a5540';
-    ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
-    ctx.strokeStyle = '#6a7a55';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
-    // Cross-hatch pattern
-    ctx.strokeStyle = '#3a4530';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + TILE - 4, y + TILE - 4);
-    ctx.moveTo(x + TILE - 4, y + 4); ctx.lineTo(x + 4, y + TILE - 4);
-    ctx.stroke();
-    // HP bar if damaged
-    if (b.hp < b.maxHp) {
-      const bw = TILE - 8;
-      ctx.fillStyle = '#400';
-      ctx.fillRect(x + 4, y - 4, bw, 3);
-      ctx.fillStyle = '#0f0';
-      ctx.fillRect(x + 4, y - 4, bw * (b.hp / b.maxHp), 3);
+    if (b.reinforced) {
+      // reinforced block — steel look
+      ctx.fillStyle = '#5a6655';
+      ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+      ctx.strokeStyle = '#8a9a77';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
+      // double cross-hatch
+      ctx.strokeStyle = '#4a5540';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y + 3); ctx.lineTo(x + TILE - 3, y + TILE - 3);
+      ctx.moveTo(x + TILE - 3, y + 3); ctx.lineTo(x + 3, y + TILE - 3);
+      ctx.moveTo(x + TILE/2, y + 2); ctx.lineTo(x + TILE/2, y + TILE - 2);
+      ctx.moveTo(x + 2, y + TILE/2); ctx.lineTo(x + TILE - 2, y + TILE/2);
+      ctx.stroke();
+      // corner rivets
+      ctx.fillStyle = '#8a9a77';
+      const rv = 2;
+      ctx.fillRect(x + 3, y + 3, rv, rv);
+      ctx.fillRect(x + TILE - 5, y + 3, rv, rv);
+      ctx.fillRect(x + 3, y + TILE - 5, rv, rv);
+      ctx.fillRect(x + TILE - 5, y + TILE - 5, rv, rv);
+    } else {
+      // normal block
+      ctx.fillStyle = '#4a5540';
+      ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+      ctx.strokeStyle = '#6a7a55';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
+      // cross-hatch
+      ctx.strokeStyle = '#3a4530';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + TILE - 4, y + TILE - 4);
+      ctx.moveTo(x + TILE - 4, y + 4); ctx.lineTo(x + 4, y + TILE - 4);
+      ctx.stroke();
+      // HP bar if damaged
+      if (b.hp < b.maxHp) {
+        const bw = TILE - 8;
+        ctx.fillStyle = '#400';
+        ctx.fillRect(x + 4, y - 4, bw, 3);
+        ctx.fillStyle = '#0f0';
+        ctx.fillRect(x + 4, y - 4, bw * (b.hp / b.maxHp), 3);
+      }
     }
   }
 }
@@ -3471,7 +3504,7 @@ function updateZombies() {
       const ztx = Math.floor(z.x / TILE);
       const zty = Math.floor(z.y / TILE);
       for (const b of builderBlocks) {
-        if (Math.abs(b.x - ztx) <= 1 && Math.abs(b.y - zty) <= 1 && MAP[b.y][b.x] === 2) {
+        if (Math.abs(b.x - ztx) <= 1 && Math.abs(b.y - zty) <= 1 && MAP[b.y][b.x] === 2 && !b.reinforced) {
           if (z.frame % 40 === 0) {
             b.hp -= 1;
             b.placedAt = frameCount; // reset heal timer on damage
