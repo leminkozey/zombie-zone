@@ -18,16 +18,15 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // rate limiting
+const gameplayPaths = ['/api/skills', '/api/weapons', '/api/perks', '/api/operators', '/api/gold', '/api/xp', '/api/profile', '/api/stats', '/api/death', '/api/rescue'];
 const apiLimiter = rateLimit({
-  windowMs: 60000,
-  max: 60,
-  skip: (req) => {
-    const skip = ['/api/skills/', '/api/weapons/', '/api/perks/', '/api/operators/', '/api/gold', '/api/xp', '/api/profile', '/api/stats', '/api/death', '/api/rescue'];
-    return skip.some(p => req.originalUrl.startsWith(p));
-  }
+  windowMs: 60000, max: 60,
+  skip: (req) => gameplayPaths.some(p => req.originalUrl.startsWith(p))
 });
+const gameplayLimiter = rateLimit({ windowMs: 60000, max: 300 });
 const authLimiter = rateLimit({ windowMs: 300000, max: 10 }); // 10 auth attempts per 5 min
 app.use('/api/', apiLimiter);
+for (const p of gameplayPaths) app.use(p, gameplayLimiter);
 app.use('/api/login', authLimiter);
 app.use('/api/register', authLimiter);
 

@@ -2676,7 +2676,7 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
       if (oz === z || !oz.alive) continue;
       const odx = oz.x - z.x, ody = oz.y - z.y;
       if (odx*odx + ody*ody < aoeR*aoeR) {
-        oz.hp -= effectiveDmg * 0.5;
+        oz.hp -= applyBossDamage(oz, effectiveDmg * 0.5);
         runStats.damageDealt += effectiveDmg * 0.5;
         spawnBlood(oz.x, oz.y, 4);
         if (oz.hp <= 0) { oz.alive = false; oz.deathTimer = oz.isBoss ? 60 : 30; onZombieKill(oz); }
@@ -3404,7 +3404,7 @@ function updateZombies() {
       z.hitting = true;
       // Juggernaut active — contact damage to zombie
       if (player.juggernautActive) {
-        z.hp -= 5 / 60; // 5 DPS, per frame
+        z.hp -= applyBossDamage(z, 5 / 60); // 5 DPS, per frame
         if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = z.isBoss ? 60 : 30; onZombieKill(z); }
       }
     } else {
@@ -3441,7 +3441,7 @@ function updateZombies() {
 
 function updateBossAbilities() {
   for (const z of zombies) {
-    if (!z.alive || !z.isBoss) continue;
+    if (!z.alive || !z.isBoss || z.hasSplit) continue;
 
     if (z.bossType === 'necromancer') {
       const cfg = BOSS_CONFIGS.necromancer;
@@ -3454,6 +3454,7 @@ function updateBossAbilities() {
       if (z.summonCooldown <= 0 && z.minions.length < cfg.maxMinions) {
         z.summonCooldown = cfg.summonCooldown;
         const count = cfg.summonCount[0] + Math.floor(Math.random() * (cfg.summonCount[1] - cfg.summonCount[0] + 1));
+        let actualSpawned = 0;
         for (let i = 0; i < count && z.minions.length < cfg.maxMinions; i++) {
           const angle = (i / count) * Math.PI * 2;
           const sx = z.x + Math.cos(angle) * 40;
@@ -3474,12 +3475,13 @@ function updateBossAbilities() {
           };
           zombies.push(minion);
           z.minions.push(minion);
+          actualSpawned++;
           for (let p = 0; p < 5; p++) {
             particles.push({ x: sx, y: sy, dx: (Math.random()-0.5)*4, dy: (Math.random()-0.5)*4, life: 15, maxLife: 15, color: '#8833cc', r: 3 });
           }
         }
         floatingTexts.push({ x: z.x, y: z.y - 20, text: 'SUMMON!', life: 40, maxLife: 40, color: '#9944dd' });
-        waveTotal += count;
+        waveTotal += actualSpawned;
       }
 
       // blink
@@ -3553,8 +3555,7 @@ function updateBossAbilities() {
           triggerScreenshake(8, 18);
           z.charging = false;
           z.chargeCooldown = cfg.chargeCooldown;
-        }
-        if (z.chargeTimer <= 0 || wallCollide(z.x, z.y, z.radius * 0.6)) {
+        } else if (z.chargeTimer <= 0 || wallCollide(z.x, z.y, z.radius * 0.6)) {
           z.charging = false;
           z.chargeCooldown = cfg.chargeCooldown;
           triggerScreenshake(5, 12);
@@ -3953,7 +3954,7 @@ function updateHealZones() {
         if (!z.alive) continue;
         const zx = z.x - hz.x, zy = z.y - hz.y;
         if (zx*zx + zy*zy < hz.radius * hz.radius) {
-          z.hp -= hz.dps / 60;
+          z.hp -= applyBossDamage(z, hz.dps / 60);
           if (z.hp <= 0 && z.alive) { z.alive = false; z.deathTimer = z.isBoss ? 60 : 30; onZombieKill(z); }
         }
       }
@@ -5542,12 +5543,14 @@ function loop(now) {
   }
 
   // screenshake
+  let shakeActive = false;
   if (shakeTimer > 0) {
     shakeTimer--;
     const sx = (Math.random() - 0.5) * 2 * shakeMagnitude;
     const sy = (Math.random() - 0.5) * 2 * shakeMagnitude;
     ctx.save();
     ctx.translate(sx, sy);
+    shakeActive = true;
   }
 
   // Draw
@@ -5638,7 +5641,7 @@ function loop(now) {
   drawRescueHUD();
   drawOperatorHUD();
 
-  if (shakeTimer >= 0) ctx.restore();
+  if (shakeActive) ctx.restore();
 
   requestAnimationFrame(loop);
 }
