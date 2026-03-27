@@ -3279,6 +3279,9 @@ function updateZombies() {
       continue; // skip normal movement this frame
     }
 
+    // skip normal movement for charging brute
+    if (z.isBoss && z.bossType === 'brute' && z.charging) continue;
+
     if (dashAfterimage && z.type !== 'spitter') {
       const adx = dashAfterimage.x - z.x, ady = dashAfterimage.y - z.y;
       const adist = Math.sqrt(adx*adx + ady*ady);
