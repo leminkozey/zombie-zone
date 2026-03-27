@@ -1687,6 +1687,70 @@ let timeTravelerTimer = 0;
 let timeTravelerKillCount = 0; // for passive
 let miniSlowmoTimer = 0;
 
+// screenshake
+let shakeTimer = 0;
+let shakeMagnitude = 0;
+
+// boss config
+const BOSS_CONFIGS = {
+  brute: {
+    hp: (w) => 80 + w * 8,
+    speed: 0.6,
+    radius: ZOMBIE_R * 3,
+    xp: 200,
+    chargeCooldown: 480,
+    chargeDuration: 90,
+    chargeSpeed: 3.0,
+    chargeDmg: 15,
+    chargeAoe: 60,
+    stompCooldown: 300,
+    stompRadius: 100,
+    stompSlowDuration: 120,
+  },
+  necromancer: {
+    hp: (w) => 50 + w * 5,
+    speed: 0.8,
+    radius: ZOMBIE_R * 2,
+    xp: 200,
+    summonCooldown: 360,
+    summonCount: [3, 4],
+    maxMinions: 8,
+    blinkCooldown: 480,
+    blinkMinDist: 100,
+    blinkMaxDist: 300,
+    shieldReduction: 0.5,
+  },
+  abomination: {
+    hp: (w) => 100 + w * 10,
+    speed: 0.4,
+    radius: ZOMBIE_R * 3.5,
+    xp: 200,
+    toxicCooldown: 360,
+    toxicRadius: 50,
+    toxicDuration: 300,
+    toxicDps: 3,
+    maxPools: 3,
+    splitCount: 3,
+    splitHpPct: 0.2,
+    splitSpeed: 1.5,
+    splitRadius: ZOMBIE_R * 1.5,
+  },
+};
+
+const BOSS_REWARDS = {
+  early:  { gold: 2000, diamonds: 5, xp: 200 },
+  mid:    { gold: 5000, diamonds: 15, xp: 500 },
+  late:   { gold: 10000, diamonds: 30, xp: 1000 },
+};
+
+let toxicPools = [];
+let bossSlowTimer = 0;
+
+function triggerScreenshake(magnitude, durationFrames) {
+  shakeMagnitude = magnitude;
+  shakeTimer = durationFrames;
+}
+
 async function init() {
   // map neu generieren bei jedem Spielstart (Bildschirmgröße könnte sich geändert haben)
   generateMap();
@@ -1756,6 +1820,7 @@ async function init() {
   builderBlocks = [];
   turrets = [];
   timeScale = 1; frozenBullets = []; timeTravelerPhase = 'none'; timeTravelerTimer = 0; timeTravelerKillCount = 0; miniSlowmoTimer = 0;
+  toxicPools = []; bossSlowTimer = 0;
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
@@ -5023,6 +5088,15 @@ function loop(now) {
     }
   }
 
+  // screenshake
+  if (shakeTimer > 0) {
+    shakeTimer--;
+    const sx = (Math.random() - 0.5) * 2 * shakeMagnitude;
+    const sy = (Math.random() - 0.5) * 2 * shakeMagnitude;
+    ctx.save();
+    ctx.translate(sx, sy);
+  }
+
   // Draw
   ctx.clearRect(0, 0, W, H);
   drawMap();
@@ -5109,6 +5183,8 @@ function loop(now) {
 
   drawRescueHUD();
   drawOperatorHUD();
+
+  if (shakeTimer >= 0) ctx.restore();
 
   requestAnimationFrame(loop);
 }
