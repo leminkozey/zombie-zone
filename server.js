@@ -441,10 +441,10 @@ app.get('/api/stats', auth, (req, res) => {
 
 // POST /api/stats — sync run stats
 app.post('/api/stats', auth, (req, res) => {
-  const { kills, normalKills, runnerKills, tankKills, spitterKills, damageDealt, damageTaken, healed, xpEarned, maxWave } = req.body;
+  const { kills, normalKills, runnerKills, tankKills, spitterKills, bossKills, damageDealt, damageTaken, healed, xpEarned, maxWave } = req.body;
   const safeNum = (v) => Math.max(0, Math.floor(Number(v) || 0));
   addStats.run(
-    safeNum(kills), safeNum(normalKills), safeNum(runnerKills), safeNum(tankKills), safeNum(spitterKills),
+    safeNum(kills), safeNum(normalKills), safeNum(runnerKills), safeNum(tankKills), safeNum(spitterKills), safeNum(bossKills),
     safeNum(damageDealt), safeNum(damageTaken), safeNum(healed), safeNum(xpEarned),
     safeNum(maxWave), safeNum(maxWave),
     req.user.id

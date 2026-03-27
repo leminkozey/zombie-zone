@@ -31,6 +31,7 @@ try { db.exec('ALTER TABLE users ADD COLUMN total_normal_kills INTEGER DEFAULT 0
 try { db.exec('ALTER TABLE users ADD COLUMN total_runner_kills INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN total_tank_kills INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN total_spitter_kills INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE users ADD COLUMN total_boss_kills INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN total_damage_dealt INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN total_damage_taken INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE users ADD COLUMN total_healed INTEGER DEFAULT 0'); } catch {}
@@ -145,6 +146,7 @@ const addStats = db.prepare(`UPDATE users SET
   total_runner_kills = total_runner_kills + ?,
   total_tank_kills = total_tank_kills + ?,
   total_spitter_kills = total_spitter_kills + ?,
+  total_boss_kills = total_boss_kills + ?,
   total_damage_dealt = total_damage_dealt + ?,
   total_damage_taken = total_damage_taken + ?,
   total_healed = total_healed + ?,
@@ -152,7 +154,7 @@ const addStats = db.prepare(`UPDATE users SET
   total_waves = CASE WHEN ? > total_waves THEN ? ELSE total_waves END
   WHERE id = ?`);
 
-const getStats = db.prepare('SELECT total_kills, total_normal_kills, total_runner_kills, total_tank_kills, total_spitter_kills, total_damage_dealt, total_damage_taken, total_healed, total_xp_earned, total_deaths, total_rescues, total_waves FROM users WHERE id = ?');
+const getStats = db.prepare('SELECT total_kills, total_normal_kills, total_runner_kills, total_tank_kills, total_spitter_kills, total_boss_kills, total_damage_dealt, total_damage_taken, total_healed, total_xp_earned, total_deaths, total_rescues, total_waves FROM users WHERE id = ?');
 
 const incrementDeaths = db.prepare('UPDATE users SET total_deaths = total_deaths + 1 WHERE id = ?');
 const incrementRescues = db.prepare('UPDATE users SET total_rescues = total_rescues + 1 WHERE id = ?');

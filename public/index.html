@@ -1624,7 +1624,7 @@ function nearestFreeTileCenter(px, py) {
 }
 
 // ── STATE ───────────────────────────────────────────
-let runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
+let runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, bossKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
 
 const DEFAULT_KEYBINDS = {
   moveUp: 'KeyW', moveDown: 'KeyS', moveLeft: 'KeyA', moveRight: 'KeyD',
@@ -1812,7 +1812,7 @@ async function init() {
   activePerkCooldowns = {};
   activePerkActive = {};
 
-  runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
+  runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, bossKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
   healZones = [];
@@ -3682,7 +3682,8 @@ function onZombieKill(z) {
     hurtFlash = 6;
   }
 
-  runStats[z.type + 'Kills']++;
+  if (z.isBoss) runStats.bossKills++;
+  else runStats[z.type + 'Kills']++;
   tryDropHealthpack(z.x, z.y);
   tryDropAmmopack(z.x, z.y);
 
@@ -7016,6 +7017,7 @@ async function loadStats() {
           <div class="stat-card"><div class="stat-card-label">RUNNER KILLS</div><div class="stat-card-val">${s.total_runner_kills}</div></div>
           <div class="stat-card"><div class="stat-card-label">TANK KILLS</div><div class="stat-card-val">${s.total_tank_kills}</div></div>
           <div class="stat-card"><div class="stat-card-label">SPITTER KILLS</div><div class="stat-card-val">${s.total_spitter_kills}</div></div>
+          <div class="stat-card"><div class="stat-card-label">BOSS KILLS</div><div class="stat-card-val">${s.total_boss_kills}</div></div>
           <div class="stat-card"><div class="stat-card-label">SCHADEN VERURSACHT</div><div class="stat-card-val">${Math.round(s.total_damage_dealt)}</div></div>
           <div class="stat-card"><div class="stat-card-label">SCHADEN ERHALTEN</div><div class="stat-card-val">${Math.round(s.total_damage_taken)}</div></div>
           <div class="stat-card"><div class="stat-card-label">GEHEILT</div><div class="stat-card-val">${Math.round(s.total_healed)}</div></div>
