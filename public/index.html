@@ -3070,6 +3070,9 @@ function movePlayer() {
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
 
   let speed = getPlayerStat('moveSpeed');
+  if (playerStunTimer > 0) {
+    speed = 0;
+  }
   if (hasSkill('fortress') && player.shield >= player.maxShield && player.maxShield > 0) {
     speed *= 1.10;
   }
@@ -3318,6 +3321,7 @@ function updateZombies() {
 
     // skip normal movement for charging brute
     if (z.isBoss && z.bossType === 'brute' && z.charging) continue;
+    if (z.burrowed) continue;
 
     if (dashAfterimage && z.type !== 'spitter') {
       const adx = dashAfterimage.x - z.x, ady = dashAfterimage.y - z.y;
@@ -3373,7 +3377,8 @@ function updateZombies() {
         if (btdx*btdx + btdy*btdy < 200*200) bulletTimeMult = 0.5;
       }
       const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
-      const finalSpeed = spd * aggroMult * bulletTimeMult * cryoMult * timeScale;
+      const screamMult = z.screamBuff > 0 ? 1.3 : 1.0;
+      const finalSpeed = spd * aggroMult * bulletTimeMult * cryoMult * timeScale * screamMult;
 
       const dirX = dx / dist;
       const dirY = dy / dist;
@@ -3436,7 +3441,7 @@ function updateZombies() {
     if (dist < PLAYER_R + z.radius - 2) {
       if (!z.hitting || frameCount - z.lastHit > 40) {
         z.lastHit = frameCount;
-        damagePlayer(8, 'melee');
+        damagePlayer(z.screamBuff > 0 ? 10 : 8, 'melee');
       }
       z.hitting = true;
       // Juggernaut active — contact damage to zombie
@@ -3696,6 +3701,90 @@ function drawToxicPools() {
     }
     ctx.restore();
   }
+}
+
+function updateSpecialZombies() {
+  for (const z of zombies) {
+    if (!z.alive) continue;
+
+    // Screamer buff
+    if (z.type === 'screamer') {
+      z.screamCooldown--;
+      if (z.screamCooldown <= 0) {
+        z.screamCooldown = 300;
+        for (const oz of zombies) {
+          if (!oz.alive || oz === z) continue;
+          const dx = oz.x - z.x, dy = oz.y - z.y;
+          if (Math.sqrt(dx*dx + dy*dy) < 120) {
+            oz.screamBuff = 180;
+          }
+        }
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * Math.PI * 2;
+          particles.push({ x: z.x + Math.cos(a)*20, y: z.y + Math.sin(a)*20, dx: Math.cos(a)*2, dy: Math.sin(a)*2, life: 20, maxLife: 20, color: '#ffffff', r: 2 });
+        }
+        floatingTexts.push({ x: z.x, y: z.y - 15, text: 'SCREAM!', life: 30, maxLife: 30, color: '#ffffff' });
+      }
+    }
+
+    // Healer aura
+    if (z.type === 'healer') {
+      for (const oz of zombies) {
+        if (!oz.alive || oz === z) continue;
+        const dx = oz.x - z.x, dy = oz.y - z.y;
+        if (Math.sqrt(dx*dx + dy*dy) < 80) {
+          oz.hp = Math.min(oz.hp + 2 / 60, oz.maxHp);
+        }
+      }
+      if (z.frame % 120 === 0) {
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          particles.push({ x: z.x + Math.cos(a)*15, y: z.y + Math.sin(a)*15, dx: Math.cos(a)*1.5, dy: Math.sin(a)*1.5, life: 15, maxLife: 15, color: '#44ff44', r: 2 });
+        }
+      }
+    }
+
+    // Burrower
+    if (z.type === 'burrower') {
+      if (z.burrowed) {
+        z.burrowTimer--;
+        const dx = player.x - z.x, dy = player.y - z.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 1) {
+          const spd = z.speed * 1.5;
+          z.x += (dx / dist) * spd;
+          z.y += (dy / dist) * spd;
+        }
+        if (z.burrowTimer <= 0 || dist < 80) {
+          z.burrowed = false;
+          z.burrowCooldown = 360;
+          const sdx = player.x - z.x, sdy = player.y - z.y;
+          if (Math.sqrt(sdx*sdx + sdy*sdy) < 40) {
+            playerStunTimer = 30;
+          }
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            particles.push({ x: z.x, y: z.y, dx: Math.cos(a)*3, dy: Math.sin(a)*3 - 1, life: 18, maxLife: 18, color: '#886644', r: 3 });
+          }
+          floatingTexts.push({ x: z.x, y: z.y - 15, text: 'BURROW!', life: 30, maxLife: 30, color: '#887744' });
+        }
+      } else {
+        z.burrowCooldown--;
+        if (z.burrowCooldown <= 0) {
+          z.burrowed = true;
+          z.burrowTimer = 90;
+          for (let i = 0; i < 6; i++) {
+            particles.push({ x: z.x + (Math.random()-0.5)*10, y: z.y, dx: (Math.random()-0.5)*2, dy: 1 + Math.random(), life: 15, maxLife: 15, color: '#665533', r: 2 });
+          }
+        }
+      }
+    }
+
+    // Decrement scream buff on all zombies
+    if (z.screamBuff > 0) z.screamBuff--;
+  }
+
+  if (playerStunTimer > 0) playerStunTimer--;
 }
 
 // ── BULLET UPDATE ────────────────────────────────────
@@ -5608,6 +5697,7 @@ function loop(now) {
   updateZombies();
   updateBossAbilities();
   updateToxicPools();
+  updateSpecialZombies();
   updateBullets();
   updateSpitterProjectiles();
   updateHealZones();
