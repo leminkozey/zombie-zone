@@ -3481,7 +3481,48 @@ function applyMove(entity, mx, my, collR) {
     entity.y += halfMy;
     return true;
   }
-  // Completely blocked — try perpendicular nudge to escape corner
+  // Corner rounding — find nearest wall corner and slide tangentially
+  const tileX = Math.floor(entity.x / TILE);
+  const tileY = Math.floor(entity.y / TILE);
+  let bestCD = Infinity, bestNX = 0, bestNY = 0;
+  for (let dr = 0; dr <= 1; dr++) {
+    for (let dc = 0; dc <= 1; dc++) {
+      const cx = (tileX + dc) * TILE;
+      const cy = (tileY + dr) * TILE;
+      let walls = 0;
+      if (isTileWall(tileX + dc - 1, tileY + dr - 1)) walls++;
+      if (isTileWall(tileX + dc, tileY + dr - 1)) walls++;
+      if (isTileWall(tileX + dc - 1, tileY + dr)) walls++;
+      if (isTileWall(tileX + dc, tileY + dr)) walls++;
+      if (walls === 0 || walls === 4) continue; // no corner
+      const cdx = entity.x - cx, cdy = entity.y - cy;
+      const cd = cdx * cdx + cdy * cdy;
+      if (cd < bestCD) {
+        bestCD = cd;
+        const cdist = Math.sqrt(cd);
+        if (cdist > 0.1) { bestNX = cdx / cdist; bestNY = cdy / cdist; }
+      }
+    }
+  }
+  const maxCD = (collR + TILE) * (collR + TILE);
+  if (bestCD < maxCD && (bestNX !== 0 || bestNY !== 0)) {
+    const speed = Math.sqrt(mx * mx + my * my);
+    // Tangent perpendicular to corner-normal, choose direction aligned with movement
+    const dot = (-bestNY) * mx + bestNX * my;
+    const tx = dot > 0 ? -bestNY : bestNY;
+    const ty = dot > 0 ? bestNX : -bestNX;
+    if (!wallCollide(entity.x + tx * speed, entity.y + ty * speed, collR)) {
+      entity.x += tx * speed;
+      entity.y += ty * speed;
+      return true;
+    }
+    if (!wallCollide(entity.x + tx * speed * 0.5, entity.y + ty * speed * 0.5, collR)) {
+      entity.x += tx * speed * 0.5;
+      entity.y += ty * speed * 0.5;
+      return true;
+    }
+  }
+  // Last resort — perpendicular nudge
   const len = Math.sqrt(mx * mx + my * my);
   if (len > 0.01) {
     const perpX = -my / len * 2, perpY = mx / len * 2;
@@ -3682,17 +3723,8 @@ function updateZombies() {
         moveY = dirY * finalSpeed;
       }
 
-      // Apply movement with wall collision
-      const mr = z.radius - 2;
-      if (!wallCollide(z.x + moveX, z.y + moveY, mr)) {
-        z.x += moveX;
-        z.y += moveY;
-      } else {
-        // Wall sliding — try each axis
-        if (!wallCollide(z.x + moveX, z.y, mr)) z.x += moveX;
-        if (!wallCollide(z.x, z.y + moveY, mr)) z.y += moveY;
-        else if (!wallCollide(z.x, z.y + moveY * 0.5, mr)) z.y += moveY * 0.5;
-      }
+      // Apply movement with wall collision + corner rounding
+      applyMove(z, moveX, moveY, moveR);
     }
 
     // spitter shooting
