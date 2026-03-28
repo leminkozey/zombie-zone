@@ -1665,6 +1665,13 @@ function isWall(x, y) {
   return MAP[ty][tx] >= 1;
 }
 
+// Tile-coordinate wall check (used by flowfield BFS)
+function isTileWall(col, row) {
+  if (camActive) return getCityTile(col, row) >= 1;
+  if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
+  return MAP[row][col] >= 1;
+}
+
 function wallCollide(x, y, r) {
   const offsets = [[-r,-r],[r,-r],[-r,r],[r,r],[0,-r],[0,r],[-r,0],[r,0]];
   return offsets.some(([dx,dy]) => isWall(x+dx, y+dy));
@@ -1687,28 +1694,56 @@ function rebuildSpawnEdges() {
 rebuildSpawnEdges();
 
 // ── FLOWFIELD PATHFINDING ──────────────────────────────
-let flowfield = null; // 2D array of {dx, dy} directions
+let flowfield = null; // 2D array of {dx, dy} directions — local or full
 let mapCacheCanvas = null; // pre-rendered map for perf
+let ffOffsetCol = 0, ffOffsetRow = 0; // world tile coords of flowfield[0][0]
+let ffWidth = 0, ffHeight = 0;        // flowfield grid dimensions
+let ffCenterCol = -999, ffCenterRow = -999; // player tile when last computed
 
 function computeFlowfield() {
-  if (camActive) { flowfield = null; return; } // City: no flowfield, zombies move directly
   const pTileX = Math.floor(player.x / TILE);
   const pTileY = Math.floor(player.y / TILE);
 
+  let startCol, startRow, w, h;
+
+  if (camActive) {
+    // Local flowfield around player for infinite city
+    const radius = 25;
+    startCol = pTileX - radius;
+    startRow = pTileY - radius;
+    w = radius * 2 + 1;
+    h = radius * 2 + 1;
+  } else {
+    startCol = 0;
+    startRow = 0;
+    w = COLS;
+    h = ROWS;
+  }
+
+  ffOffsetCol = startCol;
+  ffOffsetRow = startRow;
+  ffWidth = w;
+  ffHeight = h;
+  ffCenterCol = pTileX;
+  ffCenterRow = pTileY;
+
+  // Init grid
   flowfield = [];
-  for (let r = 0; r < ROWS; r++) {
+  for (let r = 0; r < h; r++) {
     flowfield[r] = [];
-    for (let c = 0; c < COLS; c++) {
+    for (let c = 0; c < w; c++) {
       flowfield[r][c] = { dx: 0, dy: 0, dist: Infinity };
     }
   }
 
-  if (pTileY >= 0 && pTileY < ROWS && pTileX >= 0 && pTileX < COLS) {
-    flowfield[pTileY][pTileX].dist = 0;
+  const localPX = pTileX - startCol;
+  const localPY = pTileY - startRow;
+  if (localPX >= 0 && localPX < w && localPY >= 0 && localPY < h) {
+    flowfield[localPY][localPX].dist = 0;
   }
 
   // BFS with cardinal + diagonal neighbors
-  const queue = [{ x: pTileX, y: pTileY }];
+  const queue = [{ x: localPX, y: localPY }];
   const neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 
   let qHead = 0;
@@ -1717,21 +1752,28 @@ function computeFlowfield() {
     const curDist = flowfield[cur.y][cur.x].dist;
 
     for (const [nx, ny] of neighbors) {
-      const tx = cur.x + nx;
-      const ty = cur.y + ny;
-      if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
-      if (MAP[ty][tx] >= 1) continue;
+      const lx = cur.x + nx;
+      const ly = cur.y + ny;
+      if (lx < 0 || lx >= w || ly < 0 || ly >= h) continue;
+
+      // World coords for wall check
+      const wx = lx + startCol;
+      const wy = ly + startRow;
+      if (isTileWall(wx, wy)) continue;
+
       // Diagonal: both adjacent cardinal tiles must be free (no corner cutting)
       if (nx !== 0 && ny !== 0) {
-        if (MAP[cur.y][cur.x + nx] >= 1 || MAP[cur.y + ny][cur.x] >= 1) continue;
+        if (isTileWall(cur.x + nx + startCol, cur.y + startRow) ||
+            isTileWall(cur.x + startCol, cur.y + ny + startRow)) continue;
       }
+
       const cost = (nx !== 0 && ny !== 0) ? 1.41 : 1;
       const newDist = curDist + cost;
-      if (newDist < flowfield[ty][tx].dist) {
-        flowfield[ty][tx].dist = newDist;
-        flowfield[ty][tx].dx = -nx;
-        flowfield[ty][tx].dy = -ny;
-        queue.push({ x: tx, y: ty });
+      if (newDist < flowfield[ly][lx].dist) {
+        flowfield[ly][lx].dist = newDist;
+        flowfield[ly][lx].dx = -nx;
+        flowfield[ly][lx].dy = -ny;
+        queue.push({ x: lx, y: ly });
       }
     }
   }
@@ -1746,15 +1788,20 @@ function getSmoothedFlowDir(px, py) {
   // Fractional tile position
   const fx = px / TILE - 0.5;
   const fy = py / TILE - 0.5;
-  const ix = Math.floor(fx);
-  const iy = Math.floor(fy);
-  const wx = fx - ix; // weight x (0..1)
-  const wy = fy - iy; // weight y (0..1)
+  const worldIX = Math.floor(fx);
+  const worldIY = Math.floor(fy);
+  const wx = fx - worldIX; // weight x (0..1)
+  const wy = fy - worldIY; // weight y (0..1)
+
+  // Convert to local flowfield coords
+  const ix = worldIX - ffOffsetCol;
+  const iy = worldIY - ffOffsetRow;
 
   // Sample distances at 4 corners of the cell
   function getDist(c, r) {
-    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return Infinity;
-    if (MAP[r][c] >= 1) return Infinity;
+    if (c < 0 || c >= ffWidth || r < 0 || r >= ffHeight) return Infinity;
+    const wc = c + ffOffsetCol, wr = r + ffOffsetRow;
+    if (isTileWall(wc, wr)) return Infinity;
     return flowfield[r][c].dist;
   }
 
@@ -1765,8 +1812,9 @@ function getSmoothedFlowDir(px, py) {
 
   // If all corners are unreachable, fall back to raw flowfield
   if (d00 === Infinity && d10 === Infinity && d01 === Infinity && d11 === Infinity) {
-    const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
-    if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS && flowfield[ty][tx].dist < Infinity) {
+    const tx = Math.floor(px / TILE) - ffOffsetCol;
+    const ty = Math.floor(py / TILE) - ffOffsetRow;
+    if (tx >= 0 && tx < ffWidth && ty >= 0 && ty < ffHeight && flowfield[ty][tx].dist < Infinity) {
       const ff = flowfield[ty][tx];
       return { dx: ff.dx, dy: ff.dy };
     }
@@ -1782,7 +1830,6 @@ function getSmoothedFlowDir(px, py) {
 
   // Bilinear interpolation of distance
   // Gradient points from high distance to low distance (toward player)
-  // dDist/dx via finite difference
   const ddx = -((s10 - s00) * (1 - wy) + (s11 - s01) * wy);
   const ddy = -((s01 - s00) * (1 - wx) + (s11 - s10) * wx);
 
@@ -1798,8 +1845,8 @@ function nearestFreeTileCenter(px, py) {
   const searchR = 4;
   for (let r = ty - searchR; r <= ty + searchR; r++) {
     for (let c = tx - searchR; c <= tx + searchR; c++) {
-      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
-      if (MAP[r][c] >= 1) continue;
+      if (!camActive && (r < 0 || r >= ROWS || c < 0 || c >= COLS)) continue;
+      if (isTileWall(c, r)) continue;
       const cx = c * TILE + TILE / 2, cy = r * TILE + TILE / 2;
       const ddx = px - cx, ddy = py - cy;
       const d = ddx * ddx + ddy * ddy;
@@ -6449,10 +6496,20 @@ function loop(now) {
 
   movePlayer();
 
-  // Update flowfield every 15 frames
+  // Update flowfield every few frames
   if (frameCount - lastFlowfieldUpdate > 3) {
-    computeFlowfield();
-    lastFlowfieldUpdate = frameCount;
+    // City: skip recompute if player hasn't moved far from flowfield center
+    if (camActive && flowfield) {
+      const ptx = Math.floor(player.x / TILE);
+      const pty = Math.floor(player.y / TILE);
+      if (Math.abs(ptx - ffCenterCol) > 3 || Math.abs(pty - ffCenterRow) > 3) {
+        computeFlowfield();
+        lastFlowfieldUpdate = frameCount;
+      }
+    } else {
+      computeFlowfield();
+      lastFlowfieldUpdate = frameCount;
+    }
   }
 
   updateDash();
