@@ -2585,7 +2585,7 @@ document.addEventListener('keydown', e => {
       }
       if (perkId === 'ar_grenade') {
         // Fire a grenade projectile
-        const gAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+        const gAngle = Math.atan2((mouseY + camY) - player.y, (mouseX + camX) - player.x);
         bullets.push({
           x: player.x, y: player.y,
           dx: Math.cos(gAngle) * 6,
@@ -3021,7 +3021,7 @@ function tryShoot() {
   playSoundThrottled('shoot_' + activeWeaponId, 50);
   updateHUD();
 
-  const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+  const angle = Math.atan2((mouseY + camY) - player.y, (mouseX + camX) - player.x);
 
   // Slug Round — shotgun fires single heavy bullet
   const slugActive = activePerkActive['shotgun_slug'] && activeWeaponId === 'shotgun';
