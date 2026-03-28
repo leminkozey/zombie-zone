@@ -1574,64 +1574,36 @@ function generateBunker() {
   carveRoom(midC + 3, Math.floor(ROWS * 0.7), alcH, alcW); // bottom corridor alcove
 }
 
+// City: truly infinite procedural map — no MAP array needed
+// Tile type computed on-the-fly from world coordinates
+const CITY_BLOCK_W = 5, CITY_BLOCK_H = 4;
+const CITY_STREET_W = 3, CITY_STREET_H = 3;
+const CITY_PERIOD_X = CITY_BLOCK_W + CITY_STREET_W; // 8
+const CITY_PERIOD_Y = CITY_BLOCK_H + CITY_STREET_H; // 7
+
+function getCityTile(wc, wr) {
+  // Repeating city grid: buildings with streets between
+  const lx = ((wc % CITY_PERIOD_X) + CITY_PERIOD_X) % CITY_PERIOD_X;
+  const ly = ((wr % CITY_PERIOD_Y) + CITY_PERIOD_Y) % CITY_PERIOD_Y;
+  // Street zone
+  if (lx >= CITY_BLOCK_W || ly >= CITY_BLOCK_H) return 0;
+  // Some blocks are plazas (open) based on block seed
+  const bx = Math.floor(wc / CITY_PERIOD_X);
+  const by = Math.floor(wr / CITY_PERIOD_Y);
+  const blockSeed = (((bx * 137 + by * 311) % 1000) + 1000) % 1000;
+  if (blockSeed < 120) return 0; // ~12% chance of open plaza
+  // Clear spawn area around origin
+  if (Math.abs(wc) <= 3 && Math.abs(wr) <= 3) return 0;
+  return 1; // building (solid, no doors)
+}
+
 function generateCity() {
-  // Large open-world city — no border walls
-  COLS = 120; ROWS = 80;
-  MAP = [];
-  for (let r = 0; r < ROWS; r++) {
-    const row = [];
-    for (let c = 0; c < COLS; c++) row.push(0); // all floor, no border
-    MAP.push(row);
-  }
   camActive = true;
-
-  // City grid: buildings of varying sizes with streets
-  const streetW = 3;
-  const buildings = [];
-  // Generate building grid with some variation
-  for (let by = 2; by < ROWS - 5; by += 9) {
-    for (let bx = 2; bx < COLS - 5; bx += 11) {
-      // Vary building size
-      const seed = (bx * 7 + by * 13) % 10;
-      if (seed < 2) continue; // gap — open plaza
-      const bw = 4 + (seed % 3); // 4-6 wide
-      const bh = 3 + (seed % 2); // 3-4 tall
-      // Offset within grid cell for variety
-      const ox = (seed % 2);
-      const oy = ((seed + 3) % 2);
-      buildings.push({ x: bx + ox, y: by + oy, w: bw, h: bh, seed });
-    }
-  }
-
-  // Place buildings
-  for (const b of buildings) {
-    for (let r = b.y; r < b.y + b.h && r < ROWS; r++)
-      for (let c = b.x; c < b.x + b.w && c < COLS; c++)
-        MAP[r][c] = 1;
-    // Doorway — cut one or two entrances
-    const dx = b.x + 1 + (b.seed % (b.w - 2));
-    const dy = b.y + 1 + (b.seed % (b.h - 1));
-    if (b.seed % 3 === 0 && b.y > 0) MAP[b.y][dx] = 0; // top door
-    else if (b.seed % 3 === 1 && b.y + b.h < ROWS) MAP[b.y + b.h - 1][dx] = 0; // bottom door
-    else if (b.x > 0) MAP[dy][b.x] = 0; // left door
-    // Second door on opposite side for larger buildings
-    if (b.w >= 5 && b.x + b.w < COLS) MAP[dy][b.x + b.w - 1] = 0;
-  }
-
-  // Scattered barricades in streets
-  for (let i = 0; i < 20; i++) {
-    const bc = 5 + Math.floor((i * 37) % (COLS - 10));
-    const br = 5 + Math.floor((i * 23) % (ROWS - 10));
-    if (MAP[br][bc] === 0 && MAP[br][bc + 1] === 0) {
-      MAP[br][bc] = 1;
-    }
-  }
-
-  // Clear spawn area in center
-  const cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
-  for (let r = cy - 3; r <= cy + 3; r++)
-    for (let c = cx - 3; c <= cx + 3; c++)
-      if (r >= 0 && r < ROWS && c >= 0 && c < COLS) MAP[r][c] = 0;
+  // Set large COLS/ROWS for minimap and compatibility, but map is infinite
+  COLS = 200; ROWS = 200;
+  // Create a dummy MAP that won't be used for city (isWall uses getCityTile)
+  MAP = [];
+  for (let r = 0; r < 1; r++) { MAP[r] = [0]; }
 }
 
 function placeWall(c, r) {
@@ -1642,7 +1614,8 @@ generateMap();
 
 function isWall(x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-  if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return !camActive; // City: no borders
+  if (camActive) return getCityTile(tx, ty) >= 1; // infinite city
+  if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return true;
   return MAP[ty][tx] >= 1;
 }
 
@@ -1929,16 +1902,14 @@ async function init() {
   mapCacheCanvas = null;
   lastFlowfieldUpdate = 0;
 
-  const mapW = COLS * TILE;
-  const mapH = ROWS * TILE;
-  // City: canvas stays at viewport size (camera follows player)
-  // Others: canvas = map size
+  const mapW = camActive ? W : COLS * TILE;
+  const mapH = camActive ? H : ROWS * TILE;
   if (!camActive) {
     canvas.width = mapW; canvas.height = mapH;
     W = mapW; H = mapH;
   }
   player = {
-    x: mapW/2, y: mapH/2,
+    x: camActive ? 0 : mapW/2, y: camActive ? 0 : mapH/2,
     hp: getPlayerStat('maxHp'),
     maxHp: getPlayerStat('maxHp'),
     ammo: getWeaponStat(activeWeaponId, 'mag'),
@@ -2149,13 +2120,13 @@ function startNextWave() {
 function spawnZombie() {
   let edge, attempts = 0;
   if (camActive) {
-    // City: spawn around player just outside visible area
+    // City (infinite): spawn around player just outside visible area
     do {
       const angle = Math.random() * Math.PI * 2;
       const dist = W * 0.6 + Math.random() * 200;
       edge = { x: player.x + Math.cos(angle) * dist, y: player.y + Math.sin(angle) * dist };
       attempts++;
-    } while ((edge.x < 0 || edge.y < 0 || edge.x > COLS*TILE || edge.y > ROWS*TILE || wallCollide(edge.x, edge.y, ZOMBIE_R * 1.5)) && attempts < 30);
+    } while (wallCollide(edge.x, edge.y, ZOMBIE_R * 1.5) && attempts < 30);
   } else {
     do {
       edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
@@ -4612,6 +4583,90 @@ function getFloorNoise(col, row) {
   return _floorNoise[row][col];
 }
 
+function drawCityTile(tctx, col, row) {
+  const tile = getCityTile(col, row);
+  const x = col * TILE, y = row * TILE;
+  const s = (((col * 137 + row * 311) % 1000) + 1000) % 1000 / 1000;
+  const s2 = (((col * 71 + row * 43) % 1000) + 1000) % 1000 / 1000;
+
+  if (tile === 1) {
+    // BUILDING ROOFTOP — solid, no entry
+    const bx = Math.floor(col / CITY_PERIOD_X);
+    const by = Math.floor(row / CITY_PERIOD_Y);
+    const bseed = (((bx * 53 + by * 97) % 3) + 3) % 3;
+    const roofBase = ['#2a2018', '#201414', '#1e2020'][bseed];
+    tctx.fillStyle = roofBase;
+    tctx.fillRect(x, y, TILE, TILE);
+    // Edge detection
+    const top = getCityTile(col, row - 1) !== 1;
+    const bot = getCityTile(col, row + 1) !== 1;
+    const lft = getCityTile(col - 1, row) !== 1;
+    const rgt = getCityTile(col + 1, row) !== 1;
+    // Wall edges visible from top
+    if (top) { tctx.fillStyle = '#3a3430'; tctx.fillRect(x, y, TILE, 3); }
+    if (bot) { tctx.fillStyle = '#14100e'; tctx.fillRect(x, y + TILE - 3, TILE, 3); }
+    if (lft) { tctx.fillStyle = '#302a26'; tctx.fillRect(x, y, 3, TILE); }
+    if (rgt) { tctx.fillStyle = '#100e0c'; tctx.fillRect(x + TILE - 3, y, 3, TILE); }
+    // Windows on building edges
+    if (top) { for (let wx = 6; wx < TILE - 4; wx += 10) { tctx.fillStyle = 'rgba(0,0,0,0.4)'; tctx.fillRect(x + wx, y, 4, 3); tctx.fillStyle = 'rgba(40,60,80,0.15)'; tctx.fillRect(x + wx + 0.5, y + 0.5, 3, 2); } }
+    if (lft) { for (let wy = 6; wy < TILE - 4; wy += 10) { tctx.fillStyle = 'rgba(0,0,0,0.4)'; tctx.fillRect(x, y + wy, 3, 4); tctx.fillStyle = 'rgba(40,60,80,0.15)'; tctx.fillRect(x + 0.5, y + wy + 0.5, 2, 3); } }
+    // Roof details (interior tiles)
+    if (!top && !bot && !lft && !rgt) {
+      if (s > 0.65) { tctx.fillStyle = '#1e1a18'; tctx.fillRect(x + 10, y + 8, 18, 14); tctx.strokeStyle = '#2a2624'; tctx.lineWidth = 0.5; tctx.strokeRect(x + 10, y + 8, 18, 14); tctx.beginPath(); tctx.arc(x + 19, y + 15, 4, 0, Math.PI * 2); tctx.stroke(); }
+      if (s > 0.35 && s < 0.45) { tctx.fillStyle = '#242018'; tctx.fillRect(x + 12, y + 10, 14, 10); tctx.strokeStyle = '#302a22'; tctx.lineWidth = 0.8; tctx.strokeRect(x + 12, y + 10, 14, 10); }
+    }
+    // Damage holes
+    if (s2 > 0.85) { tctx.fillStyle = '#0a0808'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.4, y + TILE * 0.5, 5 + s * 4, 4 + s2 * 3, s * 2, 0, Math.PI * 2); tctx.fill(); }
+  } else {
+    // STREET / SIDEWALK
+    const adjBuilding = getCityTile(col - 1, row) === 1 || getCityTile(col + 1, row) === 1 || getCityTile(col, row - 1) === 1 || getCityTile(col, row + 1) === 1;
+    if (adjBuilding) {
+      // Sidewalk
+      tctx.fillStyle = '#201e1c';
+      tctx.fillRect(x, y, TILE, TILE);
+      tctx.strokeStyle = 'rgba(40,38,34,0.4)'; tctx.lineWidth = 0.5;
+      tctx.strokeRect(x, y, TILE / 2, TILE / 2); tctx.strokeRect(x + TILE / 2, y, TILE / 2, TILE / 2);
+      tctx.strokeRect(x, y + TILE / 2, TILE / 2, TILE / 2); tctx.strokeRect(x + TILE / 2, y + TILE / 2, TILE / 2, TILE / 2);
+      // Curb
+      if (getCityTile(col, row - 1) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x, y, TILE, 2); }
+      if (getCityTile(col, row + 1) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x, y + TILE - 2, TILE, 2); }
+      if (getCityTile(col - 1, row) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x, y, 2, TILE); }
+      if (getCityTile(col + 1, row) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x + TILE - 2, y, 2, TILE); }
+      // Shadow from buildings
+      if (getCityTile(col, row - 1) === 1) { tctx.fillStyle = 'rgba(0,0,0,0.3)'; tctx.fillRect(x, y, TILE, 6); }
+      if (getCityTile(col - 1, row) === 1) { tctx.fillStyle = 'rgba(0,0,0,0.25)'; tctx.fillRect(x, y, 5, TILE); }
+    } else {
+      // Road asphalt
+      tctx.fillStyle = s < 0.33 ? '#1a1818' : s < 0.66 ? '#1c1a18' : '#181616';
+      tctx.fillRect(x, y, TILE, TILE);
+      // Grain noise
+      for (let i = 0; i < 4; i++) {
+        const ns = (((col * 53 + row * 97 + i * 31) % 1000) + 1000) % 1000 / 1000;
+        const ns2 = (((col * 71 + row * 43 + i * 67) % 1000) + 1000) % 1000 / 1000;
+        tctx.fillStyle = ns > 0.5 ? 'rgba(30,28,24,0.3)' : 'rgba(10,8,6,0.3)';
+        tctx.fillRect(x + ns * TILE, y + ns2 * TILE, 2, 2);
+      }
+      // Potholes
+      if (s > 0.88) { tctx.fillStyle = '#0c0a0a'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + s * 4, 4 + s2 * 3, 0, 0, Math.PI * 2); tctx.fill(); tctx.strokeStyle = '#222020'; tctx.lineWidth = 0.5; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + s * 4, 4 + s2 * 3, 0, 0, Math.PI * 2); tctx.stroke(); }
+      // Cracks
+      if (s2 > 0.6 && s2 < 0.75) { tctx.strokeStyle = 'rgba(8,6,6,0.7)'; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(x, y + s * TILE); tctx.lineTo(x + TILE * 0.3, y + s * TILE + 4); tctx.lineTo(x + TILE * 0.7, y + s * TILE - 2); tctx.lineTo(x + TILE, y + s * TILE + 6); tctx.stroke(); }
+      // Center lane markings on streets that are in the middle of the street gap
+      const ly = ((row % CITY_PERIOD_Y) + CITY_PERIOD_Y) % CITY_PERIOD_Y;
+      const lx = ((col % CITY_PERIOD_X) + CITY_PERIOD_X) % CITY_PERIOD_X;
+      const streetMidY = CITY_BLOCK_H + Math.floor(CITY_STREET_H / 2);
+      const streetMidX = CITY_BLOCK_W + Math.floor(CITY_STREET_W / 2);
+      if (ly === streetMidY && lx >= CITY_BLOCK_W) {
+        tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.2)'; tctx.lineWidth = 1.5;
+        tctx.beginPath(); tctx.moveTo(x, y + TILE / 2); tctx.lineTo(x + TILE, y + TILE / 2); tctx.stroke(); tctx.setLineDash([]);
+      }
+      if (lx === streetMidX && ly >= CITY_BLOCK_H) {
+        tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.2)'; tctx.lineWidth = 1.5;
+        tctx.beginPath(); tctx.moveTo(x + TILE / 2, y); tctx.lineTo(x + TILE / 2, y + TILE); tctx.stroke(); tctx.setLineDash([]);
+      }
+    }
+  }
+}
+
 function drawTileAt(tctx, col, row) {
   if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
   const cell = MAP[row][col];
@@ -4643,17 +4698,20 @@ function drawTileAt(tctx, col, row) {
 
 function drawMap() {
   if (!MAP || MAP.length === 0) return;
-  // Camera mode: render only visible tiles each frame
+  // Camera mode: infinite city — render visible tiles on-the-fly
   if (camActive) {
-    const startC = Math.max(0, Math.floor(camX / TILE) - 1);
-    const endC = Math.min(COLS, Math.ceil((camX + W) / TILE) + 1);
-    const startR = Math.max(0, Math.floor(camY / TILE) - 1);
-    const endR = Math.min(ROWS, Math.ceil((camY + H) / TILE) + 1);
-    // Fill outside-map area
-    ctx.fillStyle = '#0c0c10';
+    const startC = Math.floor(camX / TILE) - 1;
+    const endC = Math.ceil((camX + W) / TILE) + 1;
+    const startR = Math.floor(camY / TILE) - 1;
+    const endR = Math.ceil((camY + H) / TILE) + 1;
+    // background
+    ctx.fillStyle = '#0c0a08';
     ctx.fillRect(camX, camY, W, H);
-    for (let row = startR; row < endR; row++)
-      for (let col = startC; col < endC; col++) drawTileAt(ctx, col, row);
+    for (let row = startR; row < endR; row++) {
+      for (let col = startC; col < endC; col++) {
+        drawCityTile(ctx, col, row);
+      }
+    }
     return;
   }
   if (mapCacheCanvas) {
@@ -5999,91 +6057,89 @@ function drawPlayer() {
 }
 
 function drawMinimap() {
-  const S = 6, ox = W - COLS*S - 10, oy = 10;
+  // City: small minimap showing area around player
+  // Others: full map minimap
+  const mmCols = camActive ? 30 : COLS;
+  const mmRows = camActive ? 20 : ROWS;
+  const S = camActive ? 5 : 6;
+  const ox = W - mmCols * S - 10, oy = 10;
+  // For city, calculate tile offset centered on player
+  const pTileX = Math.floor(player.x / TILE);
+  const pTileY = Math.floor(player.y / TILE);
+  const mmStartC = camActive ? pTileX - Math.floor(mmCols / 2) : 0;
+  const mmStartR = camActive ? pTileY - Math.floor(mmRows / 2) : 0;
+
   ctx.save();
   ctx.globalAlpha = 0.6;
   ctx.fillStyle = '#000';
-  ctx.fillRect(ox-2, oy-2, COLS*S+4, ROWS*S+4);
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      ctx.fillStyle = MAP[r][c] >= 1 ? '#2a2a30' : '#0e0e12';
-      ctx.fillRect(ox + c*S, oy + r*S, S-1, S-1);
+  ctx.fillRect(ox - 2, oy - 2, mmCols * S + 4, mmRows * S + 4);
+  for (let r = 0; r < mmRows; r++) {
+    for (let c = 0; c < mmCols; c++) {
+      const wc = mmStartC + c, wr = mmStartR + r;
+      const isWallTile = camActive ? getCityTile(wc, wr) >= 1 : (wr >= 0 && wr < ROWS && wc >= 0 && wc < COLS && MAP[wr][wc] >= 1);
+      ctx.fillStyle = isWallTile ? (camActive ? '#2a2420' : '#2a2a30') : (camActive ? '#141210' : '#0e0e12');
+      ctx.fillRect(ox + c * S, oy + r * S, S - 1, S - 1);
     }
   }
   // Zombies
   const minimapColors = { normal: '#aa2200', runner: '#cc6600', tank: '#661111', spitter: '#663399', exploder: '#cc4400', screamer: '#cccccc', healer: '#44dd44', shielder: '#4466aa', broodmother: '#664455', burrower: '#887744' };
   for (const z of zombies) {
     if (!z.alive) continue;
+    const zc = z.x / TILE - mmStartC, zr = z.y / TILE - mmStartR;
+    if (zc < 0 || zc >= mmCols || zr < 0 || zr >= mmRows) continue;
     ctx.fillStyle = minimapColors[z.type] || '#aa2200';
-    ctx.fillRect(ox + (z.x/TILE)*S - 1, oy + (z.y/TILE)*S - 1, 3, 3);
+    ctx.fillRect(ox + zc * S - 1, oy + zr * S - 1, 3, 3);
   }
+  // Helper: convert world coords to minimap coords
+  function mmX(wx) { return ox + (wx / TILE - mmStartC) * S; }
+  function mmY(wy) { return oy + (wy / TILE - mmStartR) * S; }
+  function mmVisible(wx, wy) { const mc = wx/TILE-mmStartC, mr = wy/TILE-mmStartR; return mc >= -1 && mc <= mmCols+1 && mr >= -1 && mr <= mmRows+1; }
+
   // Boss markers (larger)
   for (const z of zombies) {
-    if (!z.alive || !z.isBoss) continue;
+    if (!z.alive || !z.isBoss || !mmVisible(z.x, z.y)) continue;
     const bossMapColors = { brute: '#ff2200', necromancer: '#9944dd', abomination: '#55cc33' };
     ctx.fillStyle = bossMapColors[z.bossType] || '#ff0000';
     const size = z.hasSplit ? 4 : { brute: 6, necromancer: 5, abomination: 7 }[z.bossType] || 5;
-    ctx.fillRect(ox + (z.x/TILE)*S - size/2, oy + (z.y/TILE)*S - size/2, size, size);
+    ctx.fillRect(mmX(z.x) - size/2, mmY(z.y) - size/2, size, size);
   }
-  // Toxic pools on minimap
-  ctx.save();
-  ctx.fillStyle = '#44aa22';
-  ctx.globalAlpha = 0.4;
-  for (const tp of toxicPools) {
-    ctx.beginPath();
-    ctx.arc(ox + (tp.x/TILE)*S, oy + (tp.y/TILE)*S, (tp.radius/TILE)*S, 0, Math.PI*2);
-    ctx.fill();
-  }
+  // Toxic pools
+  ctx.save(); ctx.fillStyle = '#44aa22'; ctx.globalAlpha = 0.4;
+  for (const tp of toxicPools) { if (!mmVisible(tp.x, tp.y)) continue; ctx.beginPath(); ctx.arc(mmX(tp.x), mmY(tp.y), (tp.radius/TILE)*S, 0, Math.PI*2); ctx.fill(); }
   ctx.restore();
   // Healthpacks
   ctx.fillStyle = '#33cc44';
-  for (const h of healthpacks) {
-    ctx.fillRect(ox + (h.x/TILE)*S - 1, oy + (h.y/TILE)*S - 1, 3, 3);
-  }
+  for (const h of healthpacks) { if (!mmVisible(h.x, h.y)) continue; ctx.fillRect(mmX(h.x)-1, mmY(h.y)-1, 3, 3); }
   // Ammopacks
   ctx.fillStyle = '#ccaa00';
-  for (const a of ammopacks) {
-    ctx.fillRect(ox + (a.x/TILE)*S - 1, oy + (a.y/TILE)*S - 1, 3, 3);
-  }
-  // Heal zones on minimap
-  ctx.strokeStyle = '#33cc44';
-  ctx.lineWidth = 1;
-  for (const hz of healZones) {
-    ctx.beginPath(); ctx.arc(ox + (hz.x/TILE)*S, oy + (hz.y/TILE)*S, (hz.radius/TILE)*S, 0, Math.PI*2); ctx.stroke();
-  }
+  for (const a of ammopacks) { if (!mmVisible(a.x, a.y)) continue; ctx.fillRect(mmX(a.x)-1, mmY(a.y)-1, 3, 3); }
+  // Heal zones
+  ctx.strokeStyle = '#33cc44'; ctx.lineWidth = 1;
+  for (const hz of healZones) { if (!mmVisible(hz.x, hz.y)) continue; ctx.beginPath(); ctx.arc(mmX(hz.x), mmY(hz.y), (hz.radius/TILE)*S, 0, Math.PI*2); ctx.stroke(); }
   // Rescue circle
-  if (rescueCircle) {
-    ctx.save();
-    ctx.strokeStyle = frameCount % 30 < 15 ? '#66ff99' : 'transparent';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(ox + (rescueCircle.x/TILE)*S, oy + (rescueCircle.y/TILE)*S, (rescueCircle.radius/TILE)*S, 0, Math.PI*2);
-    ctx.stroke();
-    ctx.restore();
+  if (rescueCircle && mmVisible(rescueCircle.x, rescueCircle.y)) {
+    ctx.save(); ctx.strokeStyle = frameCount % 30 < 15 ? '#66ff99' : 'transparent'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(mmX(rescueCircle.x), mmY(rescueCircle.y), (rescueCircle.radius/TILE)*S, 0, Math.PI*2); ctx.stroke(); ctx.restore();
   }
-  // Turrets on minimap
+  // Turrets
   ctx.fillStyle = '#5a6a55';
-  for (const t of turrets) {
-    ctx.fillRect(ox + (t.x/TILE)*S - 2, oy + (t.y/TILE)*S - 2, 4, 4);
-  }
-  // Builder blocks on minimap
+  for (const t of turrets) { if (!mmVisible(t.x, t.y)) continue; ctx.fillRect(mmX(t.x)-2, mmY(t.y)-2, 4, 4); }
+  // Builder blocks
   ctx.fillStyle = '#4a5540';
-  for (const b of builderBlocks) {
-    ctx.fillRect(ox + b.x*S, oy + b.y*S, S-1, S-1);
-  }
-  // Player
+  for (const b of builderBlocks) { const bwx = b.x*TILE, bwy = b.y*TILE; if (!mmVisible(bwx, bwy)) continue; ctx.fillRect(mmX(bwx), mmY(bwy), S-1, S-1); }
+  // Player — always center for city, absolute for others
   ctx.fillStyle = '#00ff88';
-  ctx.fillRect(ox + (player.x/TILE)*S - 2, oy + (player.y/TILE)*S - 2, 4, 4);
+  ctx.fillRect(mmX(player.x) - 2, mmY(player.y) - 2, 4, 4);
   ctx.restore();
 
   // Wave info under minimap
   ctx.font = "14px 'Oswald', 'Bebas Neue', sans-serif";
   ctx.fillStyle = '#666';
   ctx.textAlign = 'center';
-  ctx.fillText('WAVE ' + wave, ox + COLS*S/2, oy + ROWS*S + 18);
+  ctx.fillText('WAVE ' + wave, ox + mmCols*S/2, oy + mmRows*S + 18);
   ctx.font = "10px 'JetBrains Mono', monospace";
   ctx.fillStyle = '#444';
-  ctx.fillText(waveKills + ' / ' + waveTotal, ox + COLS*S/2, oy + ROWS*S + 32);
+  ctx.fillText(waveKills + ' / ' + waveTotal, ox + mmCols*S/2, oy + mmRows*S + 32);
 
   // Gold display left of minimap
   ctx.font = "13px 'JetBrains Mono', monospace";
