@@ -3633,23 +3633,37 @@ function updateZombies() {
     const dist = Math.sqrt(dx*dx + dy*dy);
     z.angle = Math.atan2(dy, dx);
 
-    // ── Stuck recovery ──
-    if (z.stuckFrames >= 30) {
-      // Find nearest free tile center on the flowfield path and move toward it
-      const free = nearestFreeTileCenter(z.x, z.y);
-      const toDx = free.x - z.x, toDy = free.y - z.y;
-      const toLen = Math.sqrt(toDx * toDx + toDy * toDy);
-      if (toLen > 2) {
-        // Move aggressively toward free space, ignoring wall collision briefly
-        z.x += (toDx / toLen) * z.speed * 1.5;
-        z.y += (toDy / toLen) * z.speed * 1.5;
+    // ── Tiered stuck recovery ──
+    if (z.stuckFrames >= 20) {
+      if (z.stuckFrames < 60) {
+        // Mild stuck: jiggle — add random perpendicular offset to movement
+        const jdx = player.x - z.x, jdy = player.y - z.y;
+        const jlen = Math.sqrt(jdx * jdx + jdy * jdy);
+        if (jlen > 1) {
+          const perpX = -jdy / jlen, perpY = jdx / jlen;
+          const jiggle = (Math.random() - 0.5) * 4;
+          const mx = (jdx / jlen + perpX * jiggle) * z.speed;
+          const my = (jdy / jlen + perpY * jiggle) * z.speed;
+          applyMove(z, mx, my, moveR);
+        }
+        continue;
+      } else if (z.stuckFrames < 120) {
+        // Medium stuck: move toward nearest free tile center (respecting walls)
+        const free = nearestFreeTileCenter(z.x, z.y);
+        const toDx = free.x - z.x, toDy = free.y - z.y;
+        const toLen = Math.sqrt(toDx * toDx + toDy * toDy);
+        if (toLen > 2) {
+          applyMove(z, (toDx / toLen) * z.speed * 1.5, (toDy / toLen) * z.speed * 1.5, moveR);
+        }
+        continue;
       } else {
-        // We're at the free tile center — teleport if still stuck
+        // Hard stuck: teleport to nearest free tile (last resort)
+        const free = nearestFreeTileCenter(z.x, z.y);
         z.x = free.x;
         z.y = free.y;
+        z.stuckFrames = 0;
+        continue;
       }
-      z.stuckFrames = 0;
-      continue; // skip normal movement this frame
     }
 
     // skip normal movement for charging brute
