@@ -4638,8 +4638,8 @@ function drawCityTile(tctx, col, row) {
 
   if (tile === 1) {
     // BUILDING ROOFTOP — solid, no entry
-    const bx = Math.floor(col / CITY_PERIOD_X);
-    const by = Math.floor(row / CITY_PERIOD_Y);
+    const bx = Math.floor(col / 12);
+    const by = Math.floor(row / 10);
     const bseed = (((bx * 53 + by * 97) % 3) + 3) % 3;
     const roofBase = ['#2a2018', '#201414', '#1e2020'][bseed];
     tctx.fillStyle = roofBase;
