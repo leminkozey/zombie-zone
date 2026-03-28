@@ -7666,12 +7666,14 @@ function applyDelta(base, delta) {
   if (delta.waveKills !== undefined) result.waveKills = delta.waveKills;
   if (delta.waveTotal !== undefined) result.waveTotal = delta.waveTotal;
 
-  // Players — merge delta fields
+  // Players — merge delta fields (preserve players not in delta)
   if (delta.players) {
-    result.players = delta.players.map(dp => {
-      const bp = base.players.find(p => p.id === dp.id);
-      return bp ? { ...bp, ...dp } : dp;
-    });
+    const pMap = new Map((base.players || []).map(p => [p.id, p]));
+    for (const dp of delta.players) {
+      const existing = pMap.get(dp.id);
+      pMap.set(dp.id, existing ? { ...existing, ...dp } : dp);
+    }
+    result.players = [...pMap.values()];
   }
 
   // Zombies — merge updates + remove deleted
@@ -7866,6 +7868,11 @@ function mpEndGame() {
   stopAmbient();
   mpEnabled = false;
   mpGameState = null;
+  mpPrevState = null;
+  mpPendingInputs = [];
+  mpPredictedX = 0;
+  mpPredictedY = 0;
+  mpInputSeq = 0;
   showGameMenu();
 }
 
@@ -7902,9 +7909,7 @@ function mpLoop(now) {
     const scaleY = canvas.height / rect.height;
     const canvasMouseX = mouseX * scaleX;
     const canvasMouseY = mouseY * scaleY;
-    const aimAngle = (mpPredictedX || mpPredictedY)
-      ? Math.atan2(canvasMouseY - mpPredictedY, canvasMouseX - mpPredictedX)
-      : 0;
+    const aimAngle = Math.atan2(canvasMouseY - mpPredictedY, canvasMouseX - mpPredictedX);
 
     mpInputSeq++;
     const inputData = {
@@ -7935,7 +7940,7 @@ function mpLoop(now) {
   const state = mpGameState;
 
   // Find local player for camera/angle
-  const localPlayer = state.players.find(p => p.id === mpLocalId);
+  const localPlayer = (state.players || []).find(p => p.id === mpLocalId);
 
   // Draw pickups (server sends { health: [...], ammo: [...] })
   const pkData = state.pickups || {};
@@ -8006,6 +8011,11 @@ function mpLoop(now) {
     };
     drawZombie(tempZ);
   }
+
+  // Update + draw particles/decals (drawZombie pushes to these arrays)
+  updateParticles();
+  drawBloodDecals();
+  drawParticles();
 
   // Draw ALL players — same skin, same drawPlayer function
   for (const p of (state.players || [])) {

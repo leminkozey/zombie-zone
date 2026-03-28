@@ -241,10 +241,20 @@ class GameRoom {
   }
 
   addInput(playerId, input) {
-    if (this.inputs[playerId]) {
-      this.inputs[playerId] = input;
-      if (input.seq !== undefined) this.inputs[playerId]._lastSeq = input.seq;
-    }
+    if (!this.inputs[playerId]) return;
+    if (!input || typeof input !== 'object') return;
+    if (!input.keys || typeof input.keys !== 'object') return;
+    if (typeof input.mouseAngle !== 'number' || !isFinite(input.mouseAngle)) return;
+    this.inputs[playerId] = {
+      keys: {
+        up: !!input.keys.up, down: !!input.keys.down,
+        left: !!input.keys.left, right: !!input.keys.right,
+        shoot: !!input.keys.shoot, reload: !!input.keys.reload,
+        dash: !!input.keys.dash, rescue: !!input.keys.rescue,
+      },
+      mouseAngle: input.mouseAngle,
+      _lastSeq: typeof input.seq === 'number' ? input.seq : 0,
+    };
   }
 
   // ── TICK ───────────────────────────────────────────
@@ -260,6 +270,8 @@ class GameRoom {
     this._tickBullets();
     this._tickSpitterProjectiles();
     this._tickPickups();
+    // Clean up dead zombies to prevent unbounded array growth
+    this.zombies = this.zombies.filter(z => z.alive);
   }
 
   // ── PLAYER TICK ────────────────────────────────────
@@ -852,6 +864,8 @@ class GameRoom {
   }
 
   handleRevive(reviverId, targetId) {
+    if (reviverId === targetId) return; // no self-revive
+    if (typeof targetId !== 'string') return;
     const reviver = this.players.find(p => p.id === reviverId);
     const target = this.players.find(p => p.id === targetId);
     if (!reviver || !target) return;

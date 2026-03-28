@@ -28,7 +28,11 @@ class SqlJsStatement {
   run(...params) {
     this._rawDb.run(this._sql, params);
     this._save();
-    return { changes: this._rawDb.getRowsModified() };
+    const rowId = this._rawDb.exec("SELECT last_insert_rowid()");
+    return {
+      changes: this._rawDb.getRowsModified(),
+      lastInsertRowid: rowId[0]?.values[0]?.[0],
+    };
   }
   get(...params) {
     const stmt = this._rawDb.prepare(this._sql);

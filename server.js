@@ -631,7 +631,7 @@ io.on('connection', (socket) => {
         } else {
           io.to(p.id).emit('game-state', fullState);
         }
-        lastSentState.set(p.id, fullState);
+        lastSentState.set(p.id, JSON.parse(JSON.stringify(fullState)));
       }
 
       if (lobby.gameRoom.isGameOver()) {
