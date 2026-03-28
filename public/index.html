@@ -1677,6 +1677,20 @@ function wallCollide(x, y, r) {
   return offsets.some(([dx,dy]) => isWall(x+dx, y+dy));
 }
 
+// Ray-march through tiles — returns true if no wall between two points
+function hasLineOfSight(x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < TILE) return true;
+  const step = TILE * 0.4;
+  const steps = Math.ceil(dist / step);
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (isWall(x1 + dx * t, y1 + dy * t)) return false;
+  }
+  return true;
+}
+
 // ── SPAWNING ────────────────────────────────────────
 let SPAWN_EDGES = [];
 function rebuildSpawnEdges() {
@@ -3734,19 +3748,22 @@ function updateZombies() {
 
       let moveX, moveY;
 
-      // ALWAYS follow flowfield — only go direct when touching-distance
-      if (dist < TILE * 0.8) {
-        // Melee range — direct
+      // Line-of-sight check (cache per zombie, recheck every 6 frames)
+      if (z.frame % 6 === 0 || z._los === undefined) {
+        z._los = hasLineOfSight(z.x, z.y, player.x, player.y);
+      }
+
+      if (dist < TILE * 0.8 || z._los) {
+        // Clear path to player — walk straight
         moveX = dirX * finalSpeed;
         moveY = dirY * finalSpeed;
       } else if (flowfield) {
-        // Follow flowfield ONLY
+        // Obstacle in the way — follow flowfield around it
         const smooth = getSmoothedFlowDir(z.x, z.y);
         if (smooth && (smooth.dx !== 0 || smooth.dy !== 0)) {
           moveX = smooth.dx * finalSpeed;
           moveY = smooth.dy * finalSpeed;
         } else {
-          // Flowfield has no data here — fallback direct
           moveX = dirX * finalSpeed;
           moveY = dirY * finalSpeed;
         }
