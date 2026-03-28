@@ -3704,9 +3704,7 @@ function updateZombies() {
             const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
             const mx = (tdx/tdist) * spd * cryoMult;
             const my = (tdy/tdist) * spd * cryoMult;
-            const mr = z.radius - 2;
-            if (!wallCollide(z.x + mx, z.y + my, mr)) { z.x += mx; z.y += my; }
-            else { if (!wallCollide(z.x + mx, z.y, mr)) z.x += mx; if (!wallCollide(z.x, z.y + my, mr)) z.y += my; }
+            applyMove(z, mx, my, moveR);
             z.angle = Math.atan2(tdy, tdx);
             turretAggroed = true;
             break;
