@@ -52,21 +52,17 @@ class SqlJsDb {
   constructor(rawDb, filename) {
     this._rawDb = rawDb;
     this._filename = filename;
-    this._dirty = false;
-    this._saveInterval = setInterval(() => { if (this._dirty) this._saveSync(); }, 500);
   }
-  _markDirty() { this._dirty = true; }
-  _saveSync() {
+  _save() {
     fs.writeFileSync(this._filename, Buffer.from(this._rawDb.export()));
-    this._dirty = false;
   }
   pragma() {}
   exec(sql) {
     this._rawDb.exec(sql);
-    this._markDirty();
+    this._save();
   }
   prepare(sql) {
-    return new SqlJsStatement(this._rawDb, sql, () => this._markDirty());
+    return new SqlJsStatement(this._rawDb, sql, () => this._save());
   }
   transaction(fn) {
     const self = this;
@@ -75,7 +71,7 @@ class SqlJsDb {
       try {
         const result = fn(...args);
         self._rawDb.exec('COMMIT');
-        self._saveSync();
+        self._save();
         return result;
       } catch(e) {
         self._rawDb.exec('ROLLBACK');
