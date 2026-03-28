@@ -831,6 +831,28 @@ class GameRoom {
     return this.players.every(p => p.dead);
   }
 
+  handleRevive(reviverId, targetId) {
+    const reviver = this.players.find(p => p.id === reviverId);
+    const target = this.players.find(p => p.id === targetId);
+    if (!reviver || !target) return;
+    if (reviver.dead || reviver.downed) return;
+    if (!target.downed || target.dead) return;
+
+    const dx = reviver.x - target.x, dy = reviver.y - target.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > PLAYER_R * 4) return; // must be close
+
+    target.downed = false;
+    target.downedTimer = 0;
+    target.hp = Math.round(target.maxHp * 0.3);
+    this.tickEvents.push({ type: 'player_revived', id: target.id, reviverId: reviver.id });
+  }
+
+  removePlayer(playerId) {
+    this.players = this.players.filter(p => p.id !== playerId);
+    delete this.inputs[playerId];
+  }
+
   destroy() {
     this.players = [];
     this.zombies = [];

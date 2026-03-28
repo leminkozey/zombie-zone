@@ -1,9 +1,12 @@
+const http = require('http');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
+const { Server } = require('socket.io');
+const GameRoom = require('./game-server');
 const {
   createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath,
   getUserWeapons, getWeapon, buyWeapon, addGold, setGold, addDiamonds, upgradeWeaponStat,
@@ -469,4 +472,131 @@ app.post('/api/change-password', auth, (req, res) => {
 });
 
 const PORT = process.env.PORT || 4444;
-app.listen(PORT, () => console.log(`DEAD ZONE server running on http://localhost:${PORT}`));
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
+
+// ── LOBBY SYSTEM ──────────────────────────────────────
+
+const lobbies = new Map(); // code → { host, players[], state, gameRoom, gameInterval }
+
+function generateCode() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code;
+  do { code = ''; for (let i = 0; i < 4; i++) code += c[Math.floor(Math.random() * c.length)]; } while (lobbies.has(code));
+  return code;
+}
+
+io.on('connection', (socket) => {
+  let currentLobby = null;
+  let playerInfo = { id: socket.id, name: 'Unknown', level: 0, weapon: 'pistol' };
+
+  socket.on('set-player-info', (data) => {
+    playerInfo.name = String(data.name || 'Unknown').substring(0, 30);
+    playerInfo.level = Math.max(0, Number(data.level) || 0);
+    playerInfo.weapon = String(data.weapon || 'pistol').substring(0, 20);
+  });
+
+  socket.on('create-lobby', (cb) => {
+    if (currentLobby) return cb({ error: 'Already in lobby' });
+    const code = generateCode();
+    lobbies.set(code, { code, host: socket.id, players: [{ ...playerInfo, id: socket.id, slot: 0 }], state: 'waiting', gameRoom: null, gameInterval: null });
+    currentLobby = code;
+    socket.join(code);
+    cb({ code, playerId: socket.id, slot: 0 });
+  });
+
+  socket.on('join-lobby', (code, cb) => {
+    if (currentLobby) return cb({ error: 'Already in lobby' });
+    code = String(code).toUpperCase();
+    const lobby = lobbies.get(code);
+    if (!lobby) return cb({ error: 'Not found' });
+    if (lobby.players.length >= 4) return cb({ error: 'Full' });
+    if (lobby.state !== 'waiting') return cb({ error: 'In game' });
+    const slot = [0,1,2,3].find(s => !lobby.players.some(p => p.slot === s));
+    lobby.players.push({ ...playerInfo, id: socket.id, slot });
+    currentLobby = code;
+    socket.join(code);
+    cb({ code, playerId: socket.id, slot, players: lobby.players, hostId: lobby.host });
+    socket.to(code).emit('lobby-updated', { players: lobby.players, hostId: lobby.host });
+  });
+
+  socket.on('leave-lobby', () => {
+    if (!currentLobby) return;
+    const lobby = lobbies.get(currentLobby);
+    if (!lobby) { currentLobby = null; return; }
+    lobby.players = lobby.players.filter(p => p.id !== socket.id);
+    socket.leave(currentLobby);
+    if (lobby.players.length === 0) {
+      if (lobby.gameInterval) clearInterval(lobby.gameInterval);
+      if (lobby.gameRoom) lobby.gameRoom.destroy();
+      lobbies.delete(currentLobby);
+    } else {
+      if (lobby.host === socket.id) lobby.host = lobby.players[0].id;
+      io.to(currentLobby).emit('lobby-updated', { players: lobby.players, hostId: lobby.host });
+    }
+    currentLobby = null;
+  });
+
+  socket.on('start-game', () => {
+    if (!currentLobby) return;
+    const lobby = lobbies.get(currentLobby);
+    if (!lobby || lobby.host !== socket.id || lobby.players.length < 2) return;
+    lobby.state = 'playing';
+    // Create GameRoom
+    lobby.gameRoom = new GameRoom(currentLobby, lobby.players.map(p => ({
+      id: p.id, name: p.name, level: p.level, weapon: p.weapon,
+    })));
+    // Start game loop — 20 ticks/sec
+    lobby.gameInterval = setInterval(() => {
+      if (!lobby.gameRoom) return;
+      lobby.gameRoom.tick();
+      const state = lobby.gameRoom.getState();
+      io.to(lobby.code).emit('game-state', state);
+      if (lobby.gameRoom.isGameOver()) {
+        io.to(lobby.code).emit('game-over', {});
+        clearInterval(lobby.gameInterval);
+        lobby.gameRoom.destroy();
+        lobby.gameRoom = null;
+        lobby.gameInterval = null;
+        lobby.state = 'waiting';
+      }
+    }, 50);
+    io.to(currentLobby).emit('game-start', { players: lobby.players });
+  });
+
+  // Player input — just forward to GameRoom
+  socket.on('input', (data) => {
+    if (!currentLobby) return;
+    const lobby = lobbies.get(currentLobby);
+    if (!lobby || !lobby.gameRoom) return;
+    lobby.gameRoom.addInput(socket.id, data);
+  });
+
+  // Revive interaction
+  socket.on('revive', (targetId) => {
+    if (!currentLobby) return;
+    const lobby = lobbies.get(currentLobby);
+    if (!lobby || !lobby.gameRoom) return;
+    lobby.gameRoom.handleRevive(socket.id, targetId);
+  });
+
+  socket.on('disconnect', () => {
+    if (currentLobby) {
+      const lobby = lobbies.get(currentLobby);
+      if (lobby) {
+        lobby.players = lobby.players.filter(p => p.id !== socket.id);
+        if (lobby.gameRoom) lobby.gameRoom.removePlayer(socket.id);
+        if (lobby.players.length === 0) {
+          if (lobby.gameInterval) clearInterval(lobby.gameInterval);
+          if (lobby.gameRoom) lobby.gameRoom.destroy();
+          lobbies.delete(currentLobby);
+        } else {
+          if (lobby.host === socket.id) lobby.host = lobby.players[0].id;
+          io.to(currentLobby).emit('lobby-updated', { players: lobby.players, hostId: lobby.host });
+        }
+      }
+    }
+  });
+});
+
+server.listen(PORT, () => console.log(`DEAD ZONE server running on http://localhost:${PORT}`));
