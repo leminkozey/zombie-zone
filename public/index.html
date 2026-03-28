@@ -1417,6 +1417,12 @@ let mpLocalId = null;
 let mpGameState = null; // latest server state
 let mpPrevState = null; // previous state for interpolation
 let mpInterpT = 0;
+// Client-side prediction
+let mpInputSeq = 0;
+let mpPendingInputs = [];
+let mpPredictedX = 0;
+let mpPredictedY = 0;
+let mpLocalSpeed = 2.8;
 
 let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
 let activeWeaponId = localStorage.getItem('dz_activeWeapon') || 'pistol';
@@ -7631,6 +7637,68 @@ function switchMenuTab(tabName) {
   if (tabName === 'shop') { renderShop(); }
 }
 
+// ── MULTIPLAYER HELPERS ──────────────────────────────
+
+function mpPredictLocalMovement(input) {
+  let mx = 0, my = 0;
+  if (input.keys.up) my -= 1;
+  if (input.keys.down) my += 1;
+  if (input.keys.left) mx -= 1;
+  if (input.keys.right) mx += 1;
+  if (mx === 0 && my === 0) return;
+  const len = Math.sqrt(mx * mx + my * my);
+  // Server moves speed*FRAME_MULT(3) per tick. Client renders 3 frames per tick.
+  // So per client frame: speed * 3 / 3 = speed
+  mx = (mx / len) * mpLocalSpeed;
+  my = (my / len) * mpLocalSpeed;
+  if (!wallCollide(mpPredictedX + mx, mpPredictedY + my, PLAYER_R)) {
+    mpPredictedX += mx; mpPredictedY += my;
+  } else {
+    if (!wallCollide(mpPredictedX + mx, mpPredictedY, PLAYER_R)) mpPredictedX += mx;
+    if (!wallCollide(mpPredictedX, mpPredictedY + my, PLAYER_R)) mpPredictedY += my;
+  }
+}
+
+function applyDelta(base, delta) {
+  const result = { ...base, tick: delta.tick };
+
+  if (delta.wave !== undefined) result.wave = delta.wave;
+  if (delta.waveKills !== undefined) result.waveKills = delta.waveKills;
+  if (delta.waveTotal !== undefined) result.waveTotal = delta.waveTotal;
+
+  // Players — merge delta fields
+  if (delta.players) {
+    result.players = delta.players.map(dp => {
+      const bp = base.players.find(p => p.id === dp.id);
+      return bp ? { ...bp, ...dp } : dp;
+    });
+  }
+
+  // Zombies — merge updates + remove deleted
+  if (delta.zombies || delta.zombiesRemoved) {
+    const zMap = new Map((base.zombies || []).map(z => [z.id, z]));
+    if (delta.zombiesRemoved) {
+      for (const id of delta.zombiesRemoved) zMap.delete(id);
+    }
+    if (delta.zombies) {
+      for (const dz of delta.zombies) {
+        const existing = zMap.get(dz.id);
+        zMap.set(dz.id, existing ? { ...existing, ...dz } : dz);
+      }
+    }
+    result.zombies = [...zMap.values()];
+  }
+
+  if (delta.bullets !== undefined) result.bullets = delta.bullets;
+  if (delta.spitterProjectiles !== undefined) result.spitterProjectiles = delta.spitterProjectiles;
+  if (delta.hitTrails !== undefined) result.hitTrails = delta.hitTrails;
+  else result.hitTrails = [];
+  if (delta.pickups !== undefined) result.pickups = delta.pickups;
+  result.events = delta.events || [];
+
+  return result;
+}
+
 // ── MULTIPLAYER FUNCTIONS ─────────────────────────────
 function mpConnect() {
   if (mpSocket) return;
@@ -7648,7 +7716,28 @@ function mpConnect() {
   });
   mpSocket.on('lobby-updated', (data) => { mpPlayers = data.players; mpIsHost = data.hostId === mpSocket.id; renderMpLobby(); });
   mpSocket.on('game-start', (data) => { mpStartGame(data); });
-  mpSocket.on('game-state', (data) => { mpPrevState = mpGameState; mpGameState = data; mpInterpT = 0; if (!mpPrevState) console.log('[MP] First game-state received, zombies:', (data.zombies||[]).length, 'players:', (data.players||[]).length); });
+  mpSocket.on('game-state', (data) => {
+    mpPrevState = mpGameState;
+    // Delta or full state?
+    if (data._delta && mpGameState) {
+      mpGameState = applyDelta(mpGameState, data);
+    } else {
+      mpGameState = data;
+    }
+    mpInterpT = 0;
+    // Server reconciliation — snap to server pos, replay pending inputs
+    const serverMe = mpGameState.players ? mpGameState.players.find(p => p.id === mpLocalId) : null;
+    if (serverMe) {
+      mpPredictedX = serverMe.x;
+      mpPredictedY = serverMe.y;
+      if (serverMe.speed) mpLocalSpeed = serverMe.speed;
+      const lastAck = serverMe.lastInputSeq || 0;
+      mpPendingInputs = mpPendingInputs.filter(inp => inp.seq > lastAck);
+      if (mpPendingInputs.length > 200) mpPendingInputs = mpPendingInputs.slice(-100);
+      for (const inp of mpPendingInputs) mpPredictLocalMovement(inp);
+    }
+    if (!mpPrevState) console.log('[MP] First game-state received, zombies:', (mpGameState.zombies||[]).length, 'players:', (mpGameState.players||[]).length);
+  });
   mpSocket.on('game-over', () => { mpEndGame(); });
   mpSocket.on('kicked', () => { mpDisconnect(); alert('Du wurdest gekickt'); });
 }
@@ -7746,6 +7835,9 @@ function mpStartGame(data) {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   mpGameState = null; mpPrevState = null;
+  mpInputSeq = 0; mpPendingInputs = [];
+  mpPredictedX = 0; mpPredictedY = 0;
+  mpLocalSpeed = Math.round(getPlayerStat('moveSpeed') * 100) / 100;
   // Init global arrays used by rendering functions (drawZombie pushes particles, etc.)
   floatingTexts = [];
   particles = [];
@@ -7804,16 +7896,19 @@ function mpLoop(now) {
     const shootInput = mouseDown || player._shootBuffered;
     player._shootBuffered = false;
 
-    // Calculate mouse angle properly — convert screen mouse to canvas coordinates
+    // Calculate mouse angle — use predicted position for accurate aiming
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const canvasMouseX = mouseX * scaleX;
     const canvasMouseY = mouseY * scaleY;
-    const lp = mpGameState && mpGameState.players ? mpGameState.players.find(p => p.id === mpLocalId) : null;
-    const aimAngle = lp ? Math.atan2(canvasMouseY - lp.y, canvasMouseX - lp.x) : 0;
+    const aimAngle = (mpPredictedX || mpPredictedY)
+      ? Math.atan2(canvasMouseY - mpPredictedY, canvasMouseX - mpPredictedX)
+      : 0;
 
-    mpSocket.emit('input', {
+    mpInputSeq++;
+    const inputData = {
+      seq: mpInputSeq,
       keys: {
         up: !!keys[keybinds.moveUp], down: !!keys[keybinds.moveDown],
         left: !!keys[keybinds.moveLeft], right: !!keys[keybinds.moveRight],
@@ -7821,7 +7916,11 @@ function mpLoop(now) {
         shoot: shootInput, rescue: !!keys[keybinds.rescue],
       },
       mouseAngle: aimAngle,
-    });
+    };
+    mpSocket.emit('input', inputData);
+    // Client-side prediction — predict own movement locally
+    mpPendingInputs.push(inputData);
+    mpPredictLocalMovement(inputData);
   }
 
   // Interpolation
@@ -7911,9 +8010,14 @@ function mpLoop(now) {
   // Draw ALL players — same skin, same drawPlayer function
   for (const p of (state.players || [])) {
     if (p.dead || p.rescued) continue;
+    // Use predicted position for local player, server position for others
+    const isLocal = (p.id === mpLocalId);
+    const renderX = isLocal ? mpPredictedX : p.x;
+    const renderY = isLocal ? mpPredictedY : p.y;
+
     const saved = { x: player.x, y: player.y, angle: player.angle, hp: player.hp, maxHp: player.maxHp, recoil: player.recoil, shield: player.shield, maxShield: player.maxShield };
     const savedWeapon = activeWeaponId;
-    player.x = p.x; player.y = p.y; player.angle = p.angle;
+    player.x = renderX; player.y = renderY; player.angle = p.angle;
     player.hp = p.hp; player.maxHp = p.maxHp;
     player.recoil = p.recoil || 0;
     player.shield = p.shield || 0; player.maxShield = p.maxShield || 0;
@@ -7930,18 +8034,18 @@ function mpLoop(now) {
     // Nametag + HP bar above each player
     ctx.save();
     ctx.font = "10px 'JetBrains Mono', monospace";
-    ctx.fillStyle = p.id === mpLocalId ? '#88aa66' : '#8090a0';
+    ctx.fillStyle = isLocal ? '#88aa66' : '#8090a0';
     ctx.textAlign = 'center';
-    ctx.fillText(p.name, p.x, p.y - 22);
+    ctx.fillText(p.name, renderX, renderY - 22);
     // HP bar
     ctx.fillStyle = '#1a0000';
-    ctx.fillRect(p.x - 14, p.y - 18, 28, 3);
+    ctx.fillRect(renderX - 14, renderY - 18, 28, 3);
     ctx.fillStyle = p.downed ? '#cc2200' : '#33cc44';
-    ctx.fillRect(p.x - 14, p.y - 18, 28 * Math.max(0, p.hp / (p.maxHp || 100)), 3);
+    ctx.fillRect(renderX - 14, renderY - 18, 28 * Math.max(0, p.hp / (p.maxHp || 100)), 3);
     // Downed indicator
     if (p.downed) {
       ctx.strokeStyle = '#cc2200'; ctx.lineWidth = 2; ctx.globalAlpha = 0.5 + Math.sin(frameCount*0.1)*0.3;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 18, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(renderX, renderY, 18, 0, Math.PI*2); ctx.stroke();
     }
     ctx.restore();
   }
@@ -7967,8 +8071,11 @@ function mpLoop(now) {
     // Players on minimap
     for (const p of (state.players || [])) {
       if (p.dead) continue;
-      ctx.fillStyle = p.id === mpLocalId ? '#00ff88' : (p.downed ? '#cc2200' : '#33aaff');
-      ctx.fillRect(ox + (p.x/TILE)*S - 2, oy + (p.y/TILE)*S - 2, 4, 4);
+      const isLocal = (p.id === mpLocalId);
+      const px = isLocal ? mpPredictedX : p.x;
+      const py = isLocal ? mpPredictedY : p.y;
+      ctx.fillStyle = isLocal ? '#00ff88' : (p.downed ? '#cc2200' : '#33aaff');
+      ctx.fillRect(ox + (px/TILE)*S - 2, oy + (py/TILE)*S - 2, 4, 4);
     }
     ctx.restore();
     // Wave info under minimap

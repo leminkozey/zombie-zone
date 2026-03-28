@@ -243,6 +243,7 @@ class GameRoom {
   addInput(playerId, input) {
     if (this.inputs[playerId]) {
       this.inputs[playerId] = input;
+      if (input.seq !== undefined) this.inputs[playerId]._lastSeq = input.seq;
     }
   }
 
@@ -808,13 +809,14 @@ class GameRoom {
         x: Math.round(p.x * 10) / 10,
         y: Math.round(p.y * 10) / 10,
         angle: Math.round(p.angle * 100) / 100,
-        hp: p.hp, maxHp: p.maxHp,
+        hp: p.hp, maxHp: p.maxHp, speed: p.speed,
         ammo: p.ammo, maxAmmo: p.maxAmmo,
         weaponId: p.weaponId,
         recoil: p.recoil,
         reloading: p.reloading,
         downed: p.downed, dead: p.dead,
         score: p.score, gold: p.gold, kills: p.kills,
+        lastInputSeq: this.inputs[p.id] ? (this.inputs[p.id]._lastSeq || 0) : 0,
       })),
       zombies: this.zombies.filter(z => z.alive).map(z => ({
         id: z.id, type: z.type,

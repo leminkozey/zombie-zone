@@ -483,6 +483,67 @@ const io = new Server(server, { cors: { origin: '*' } });
 // ── LOBBY SYSTEM ──────────────────────────────────────
 
 const lobbies = new Map(); // code → { host, players[], state, gameRoom, gameInterval }
+const lastSentState = new Map(); // socketId → previous full state (for delta compression)
+
+function computeDelta(prev, curr) {
+  const delta = { tick: curr.tick, _delta: true };
+
+  // Wave data — only if changed
+  if (prev.wave !== curr.wave || prev.waveKills !== curr.waveKills || prev.waveTotal !== curr.waveTotal) {
+    delta.wave = curr.wave;
+    delta.waveKills = curr.waveKills;
+    delta.waveTotal = curr.waveTotal;
+  }
+
+  // Players — always send, but only changed fields per player
+  delta.players = curr.players.map(cp => {
+    const pp = prev.players.find(p => p.id === cp.id);
+    if (!pp) return cp;
+    const pd = { id: cp.id };
+    for (const key of Object.keys(cp)) {
+      if (key === 'id') continue;
+      if (cp[key] !== pp[key]) pd[key] = cp[key];
+    }
+    return pd;
+  });
+
+  // Zombies — only changed + removed IDs
+  const prevZMap = new Map(prev.zombies.map(z => [z.id, z]));
+  const currZMap = new Map(curr.zombies.map(z => [z.id, z]));
+  const zUpdates = [];
+  for (const cz of curr.zombies) {
+    const pz = prevZMap.get(cz.id);
+    if (!pz) { zUpdates.push(cz); continue; }
+    const zd = { id: cz.id };
+    let changed = false;
+    for (const key of Object.keys(cz)) {
+      if (key === 'id') continue;
+      if (cz[key] !== pz[key]) { zd[key] = cz[key]; changed = true; }
+    }
+    if (changed) zUpdates.push(zd);
+  }
+  const zRemoved = [];
+  for (const [id] of prevZMap) { if (!currZMap.has(id)) zRemoved.push(id); }
+  if (zUpdates.length > 0) delta.zombies = zUpdates;
+  if (zRemoved.length > 0) delta.zombiesRemoved = zRemoved;
+
+  // Bullets + spitter projectiles — short-lived, always send full
+  delta.bullets = curr.bullets;
+  delta.spitterProjectiles = curr.spitterProjectiles;
+
+  // Hit trails — one-shot events, always send
+  delta.hitTrails = curr.hitTrails;
+
+  // Pickups — only if changed
+  if (JSON.stringify(prev.pickups) !== JSON.stringify(curr.pickups)) {
+    delta.pickups = curr.pickups;
+  }
+
+  // Events — one-shot, always send
+  if (curr.events.length > 0) delta.events = curr.events;
+
+  return delta;
+}
 
 function generateCode() {
   const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -530,6 +591,7 @@ io.on('connection', (socket) => {
 
   socket.on('leave-lobby', () => {
     if (!currentLobby) return;
+    lastSentState.delete(socket.id);
     const lobby = lobbies.get(currentLobby);
     if (!lobby) { currentLobby = null; return; }
     lobby.players = lobby.players.filter(p => p.id !== socket.id);
@@ -559,11 +621,23 @@ io.on('connection', (socket) => {
     lobby.gameInterval = setInterval(() => {
       if (!lobby.gameRoom) return;
       lobby.gameRoom.tick();
-      const state = lobby.gameRoom.getState();
-      io.to(lobby.code).emit('game-state', state);
+      const fullState = lobby.gameRoom.getState();
+      const isResync = (fullState.tick % 100 === 0); // full state every 5s
+
+      for (const p of lobby.players) {
+        const prev = lastSentState.get(p.id);
+        if (prev && !isResync) {
+          io.to(p.id).emit('game-state', computeDelta(prev, fullState));
+        } else {
+          io.to(p.id).emit('game-state', fullState);
+        }
+        lastSentState.set(p.id, fullState);
+      }
+
       if (lobby.gameRoom.isGameOver()) {
         io.to(lobby.code).emit('game-over', {});
         clearInterval(lobby.gameInterval);
+        for (const p of lobby.players) lastSentState.delete(p.id);
         lobby.gameRoom.destroy();
         lobby.gameRoom = null;
         lobby.gameInterval = null;
@@ -590,6 +664,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    lastSentState.delete(socket.id);
     if (currentLobby) {
       const lobby = lobbies.get(currentLobby);
       if (lobby) {
