@@ -1707,8 +1707,8 @@ function computeFlowfield() {
   let startCol, startRow, w, h;
 
   if (camActive) {
-    // Local flowfield around player for infinite city
-    const radius = 25;
+    // Local flowfield — must cover zombie spawn distance (W*0.6+200 px)
+    const radius = Math.ceil((Math.max(W, H) * 0.6 + 250) / TILE) + 5;
     startCol = pTileX - radius;
     startRow = pTileY - radius;
     w = radius * 2 + 1;
@@ -1994,7 +1994,7 @@ async function init() {
   rebuildSpawnEdges();
   flowfield = null;
   mapCacheCanvas = null;
-  lastFlowfieldUpdate = 0;
+  lastFlowfieldUpdate = -999; // force immediate flowfield compute on first frame
 
   const mapW = camActive ? W : COLS * TILE;
   const mapH = camActive ? H : ROWS * TILE;
@@ -6565,20 +6565,19 @@ function loop(now) {
 
   movePlayer();
 
-  // Update flowfield every few frames
-  if (frameCount - lastFlowfieldUpdate > 3) {
-    // City: skip recompute if player hasn't moved far from flowfield center
+  // Update flowfield
+  if (frameCount - lastFlowfieldUpdate > 5) {
     if (camActive && flowfield) {
+      // City: recompute if player moved >2 tiles from flowfield center
       const ptx = Math.floor(player.x / TILE);
       const pty = Math.floor(player.y / TILE);
-      if (Math.abs(ptx - ffCenterCol) > 3 || Math.abs(pty - ffCenterRow) > 3) {
+      if (Math.abs(ptx - ffCenterCol) > 2 || Math.abs(pty - ffCenterRow) > 2) {
         computeFlowfield();
-        lastFlowfieldUpdate = frameCount;
       }
     } else {
       computeFlowfield();
-      lastFlowfieldUpdate = frameCount;
     }
+    lastFlowfieldUpdate = frameCount;
   }
 
   updateDash();
