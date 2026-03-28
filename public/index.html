@@ -7723,6 +7723,9 @@ function mpStartGame(data) {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   mpGameState = null; mpPrevState = null;
+  // Init minimal player object for MP (not full init — server handles game state)
+  if (!player) player = {};
+  player._lastMouseDown = false;
   running = true;
   ensureAudio(); startAmbient();
   requestAnimationFrame(mpLoop);
