@@ -779,6 +779,10 @@ class GameRoom {
 
   // ── STATE ──────────────────────────────────────────
 
+  getMapData() {
+    return { cols: COLS, rows: ROWS, tile: TILE, map: this.MAP };
+  }
+
   getState() {
     return {
       tick: this.tickCount,

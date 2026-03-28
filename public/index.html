@@ -7704,6 +7704,21 @@ function renderMpLobby() {
 function mpStartGame(data) {
   mpEnabled = true;
   mpPlayers = data.players;
+
+  // Load server map — override local map so all clients have same map
+  if (data.map) {
+    COLS = data.map.cols;
+    ROWS = data.map.rows;
+    TILE = data.map.tile || 40;
+    MAP = data.map.map;
+    mapCacheCanvas = null;
+    _floorNoise = null;
+    canvas.width = COLS * TILE;
+    canvas.height = ROWS * TILE;
+    W = canvas.width;
+    H = canvas.height;
+  }
+
   document.getElementById('mp-lobby-screen').style.display = 'none';
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
@@ -7737,7 +7752,11 @@ function mpLoop(now) {
         reload: !!keys[keybinds.reload], dash: !!keys[keybinds.dash],
         shoot: shootInput, rescue: !!keys[keybinds.rescue],
       },
-      mouseAngle: Math.atan2(mouseY - H/2, mouseX - W/2),
+      mouseAngle: (function() {
+        const lp = mpGameState.players ? mpGameState.players.find(p => p.id === mpLocalId) : null;
+        if (lp) return Math.atan2(mouseY - lp.y, mouseX - lp.x);
+        return Math.atan2(mouseY - H/2, mouseX - W/2);
+      })(),
     });
     player._lastMouseDown = mouseDown;
   }

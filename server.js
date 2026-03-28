@@ -561,7 +561,7 @@ io.on('connection', (socket) => {
         lobby.state = 'waiting';
       }
     }, 50);
-    io.to(currentLobby).emit('game-start', { players: lobby.players });
+    io.to(currentLobby).emit('game-start', { players: lobby.players, map: lobby.gameRoom.getMapData() });
   });
 
   // Player input — just forward to GameRoom
