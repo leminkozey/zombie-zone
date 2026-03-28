@@ -7736,9 +7736,18 @@ function mpStartGame(data) {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   mpGameState = null; mpPrevState = null;
-  // Init minimal player object for MP (not full init — server handles game state)
-  if (!player) player = {};
-  player._lastMouseDown = false;
+  // Init player object for MP rendering (drawPlayer needs these properties)
+  player = {
+    x: 0, y: 0, angle: 0, hp: 100, maxHp: 100, speed: 2.8,
+    ammo: 30, maxAmmo: 30, recoil: 0, shootCooldown: 0,
+    shield: 0, maxShield: 0, shieldRegenTimer: 0,
+    secondWindUsed: false, dashInvulnerable: false,
+    downed: false, downedTimer: 0, _lastMouseDown: false,
+    soldierRush: false, juggernautActive: false,
+    ironSkinReady: false, ironSkinCooldown: 0,
+    killRushTimer: 0, killRushBoost: 0, lastDamageTime: 0,
+    reviving: false,
+  };
   running = true;
   ensureAudio(); startAmbient();
   requestAnimationFrame(mpLoop);
@@ -7839,7 +7848,8 @@ function mpLoop(now) {
 
   // Draw zombies from server state
   for (const z of (state.zombies || [])) {
-    const tempZ = { ...z, wobble: (frameCount * 0.08 + (z.id ? z.id.charCodeAt(0) : 0)), frame: frameCount, hitting: false, deathTimer: 0, alive: z.alive !== false, throwAnim: 0, shieldBroken: (z.shieldHp || 0) <= 0 && z.type === 'shielder', shieldMaxHp: z.type === 'shielder' ? 15 : 0, screamCooldown: 0, isBoss: false };
+    const idHash = typeof z.id === 'string' ? z.id.charCodeAt(0) : (z.id || 0);
+    const tempZ = { ...z, wobble: (frameCount * 0.08 + idHash), frame: frameCount, hitting: false, deathTimer: 0, alive: true, throwAnim: 0, shieldBroken: false, shieldMaxHp: 0, screamCooldown: 0, isBoss: false };
     drawZombie(tempZ);
   }
 
@@ -7922,12 +7932,6 @@ function mpLoop(now) {
     bar.style.background = pct > 0.6 ? '#33cc44' : pct > 0.3 ? '#ccaa00' : '#cc2200';
     document.getElementById('ammo-val').textContent = localPlayer.ammo || 0;
   }
-
-  // Wave info
-  ctx.save();
-  ctx.font = "14px 'Oswald', sans-serif"; ctx.fillStyle = '#666'; ctx.textAlign = 'center';
-  ctx.fillText('WAVE ' + (state.wave || 1), W - 48*3 - 10 + 48*3, 10 + 27*3 + 18);
-  ctx.restore();
 
   // Process events for sounds
   for (const ev of (state.events || [])) {
