@@ -2010,7 +2010,7 @@ async function init() {
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
   healZones = [];
-  for (const b of builderBlocks) { if (MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
+  for (const b of builderBlocks) { if (!camActive && MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
   builderBlocks = [];
   turrets = [];
   timeScale = 1; frozenBullets = []; timeTravelerPhase = 'none'; timeTravelerTimer = 0; timeTravelerKillCount = 0; miniSlowmoTimer = 0;
@@ -2270,7 +2270,7 @@ function spawnRescueCircle() {
     for (let r = -checkRadius; r <= checkRadius && !tooClose; r++) {
       for (let c = -checkRadius; c <= checkRadius && !tooClose; c++) {
         const cr = ty + r, cc = tx + c;
-        if (cr >= 0 && cr < ROWS && cc >= 0 && cc < COLS && MAP[cr][cc] >= 1) {
+        if (isWall(cc * TILE + TILE/2, cr * TILE + TILE/2)) {
           const wx = cc * TILE + TILE/2, wy = cr * TILE + TILE/2;
           const ddx = x - wx, ddy = y - wy;
           if (Math.sqrt(ddx*ddx + ddy*ddy) < minWallDist) tooClose = true;
@@ -2693,19 +2693,19 @@ function activateOperatorAbility() {
         existing.hp = existing.maxHp;
         floatingTexts.push({ x: tx * TILE + TILE/2, y: ty * TILE, text: 'REINFORCED', life: 30, maxLife: 30, color: '#88aa66' });
         playSound('ui_click');
-      } else if (MAP[ty][tx] === 0) {
+      } else if (!camActive && MAP[ty] && MAP[ty][tx] === 0) {
         // new block
         if (builderBlocks.length >= 15) {
           // remove oldest non-reinforced, or oldest reinforced if all reinforced
           const oldIdx = builderBlocks.findIndex(b => !b.reinforced);
           const removeIdx = oldIdx >= 0 ? oldIdx : 0;
           const old = builderBlocks.splice(removeIdx, 1)[0];
-          if (MAP[old.y] && MAP[old.y][old.x] === 2) MAP[old.y][old.x] = 0;
+          if (!camActive && MAP[old.y] && MAP[old.y][old.x] === 2) MAP[old.y][old.x] = 0;
           mapCacheCanvas = null;
           _floorNoise = null;
         }
         builderBlocks.push({ x: tx, y: ty, hp: 10, maxHp: 10, placedAt: frameCount, reinforced: false });
-        MAP[ty][tx] = 2;
+        if (!camActive) MAP[ty][tx] = 2;
         mapCacheCanvas = null;
         _floorNoise = null;
         playSound('ui_click');
@@ -2840,7 +2840,7 @@ function updateBuilderBlocks() {
     }
     // Remove if destroyed
     if (b.hp <= 0) {
-      MAP[b.y][b.x] = 0;
+      if (MAP[b.y] && MAP[b.y][b.x] !== undefined) MAP[b.y][b.x] = 0;
       mapCacheCanvas = null;
       _floorNoise = null;
       builderBlocks.splice(i, 1);
@@ -3698,7 +3698,7 @@ function updateZombies() {
       const ztx = Math.floor(z.x / TILE);
       const zty = Math.floor(z.y / TILE);
       for (const b of builderBlocks) {
-        if (Math.abs(b.x - ztx) <= 1 && Math.abs(b.y - zty) <= 1 && MAP[b.y][b.x] === 2 && !b.reinforced) {
+        if (Math.abs(b.x - ztx) <= 1 && Math.abs(b.y - zty) <= 1 && (!camActive && MAP[b.y] && MAP[b.y][b.x] === 2) && !b.reinforced) {
           if (z.frame % 40 === 0) {
             b.hp -= 1;
             b.placedAt = frameCount; // reset heal timer on damage
@@ -4808,6 +4808,18 @@ function drawMap() {
 }
 
 function findFreeSpawnTile() {
+  if (camActive) {
+    // City: pick random tiles near player
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const rx = player.x + (Math.random() - 0.5) * W * 0.8;
+      const ry = player.y + (Math.random() - 0.5) * H * 0.8;
+      if (!isWall(rx, ry)) {
+        const dx = rx - player.x, dy = ry - player.y;
+        if (Math.sqrt(dx*dx + dy*dy) > TILE * 3) return { x: rx, y: ry };
+      }
+    }
+    return null;
+  }
   const freeTiles = [];
   for (let r = 1; r < ROWS - 1; r++) {
     for (let c = 1; c < COLS - 1; c++) {
@@ -6297,7 +6309,7 @@ async function gameOver() {
   operatorAbilityCooldown = 0;
   operatorAbilityActive = false;
   operatorAbilityTimer = 0;
-  for (const b of builderBlocks) { if (MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
+  for (const b of builderBlocks) { if (!camActive && MAP[b.y] && MAP[b.y][b.x] === 2) MAP[b.y][b.x] = 0; }
   builderBlocks = [];
   turrets = [];
   mapCacheCanvas = null;
