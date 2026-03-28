@@ -1824,8 +1824,10 @@ function getSmoothedFlowDir(px, py) {
   const d01 = getDist(ix, iy + 1);
   const d11 = getDist(ix + 1, iy + 1);
 
-  // If all corners are unreachable, fall back to raw flowfield
-  if (d00 === Infinity && d10 === Infinity && d01 === Infinity && d11 === Infinity) {
+  // If ANY corner is a wall/unreachable, use raw BFS direction (no interpolation)
+  // Interpolation near walls creates bad gradients that push away from wall
+  // instead of along the path around it
+  if (d00 === Infinity || d10 === Infinity || d01 === Infinity || d11 === Infinity) {
     const tx = Math.floor(px / TILE) - ffOffsetCol;
     const ty = Math.floor(py / TILE) - ffOffsetRow;
     if (tx >= 0 && tx < ffWidth && ty >= 0 && ty < ffHeight && flowfield[ty][tx].dist < Infinity) {
@@ -1835,17 +1837,9 @@ function getSmoothedFlowDir(px, py) {
     return null;
   }
 
-  // Replace Infinity with a large finite value for interpolation
-  const maxD = 9999;
-  const s00 = d00 === Infinity ? maxD : d00;
-  const s10 = d10 === Infinity ? maxD : d10;
-  const s01 = d01 === Infinity ? maxD : d01;
-  const s11 = d11 === Infinity ? maxD : d11;
-
-  // Bilinear interpolation of distance
-  // Gradient points from high distance to low distance (toward player)
-  const ddx = -((s10 - s00) * (1 - wy) + (s11 - s01) * wy);
-  const ddy = -((s01 - s00) * (1 - wx) + (s11 - s10) * wx);
+  // All corners valid — bilinear interpolation for smooth movement in open areas
+  const ddx = -((d10 - d00) * (1 - wy) + (d11 - d01) * wy);
+  const ddy = -((d01 - d00) * (1 - wx) + (d11 - d10) * wx);
 
   const len = Math.sqrt(ddx * ddx + ddy * ddy);
   if (len < 0.001) return null;
@@ -2770,6 +2764,7 @@ function activateOperatorAbility() {
         if (!camActive) MAP[ty][tx] = 2;
         mapCacheCanvas = null;
         _floorNoise = null;
+        computeFlowfield(); // immediate recompute so zombies path around
         playSound('ui_click');
       }
     }
@@ -2906,6 +2901,7 @@ function updateBuilderBlocks() {
       mapCacheCanvas = null;
       _floorNoise = null;
       builderBlocks.splice(i, 1);
+      computeFlowfield(); // recompute so zombies update paths
     }
   }
 }
