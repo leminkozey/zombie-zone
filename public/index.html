@@ -2386,6 +2386,7 @@ function drawRescueHUD() {
 let paused = false;
 
 function togglePause() {
+  if (mpEnabled) return; // no pause in multiplayer
   if (!running && !paused) return; // game over, nicht pausieren
   paused = !paused;
   if (paused) {
@@ -2402,6 +2403,8 @@ document.addEventListener('keydown', e => {
   if (document.activeElement.tagName === 'INPUT') return;
   if (e.code === keybinds.pause) { togglePause(); return; }
   keys[e.code] = true;
+  // In MP mode, only track keys — server handles all game logic
+  if (mpEnabled) { e.preventDefault(); return; }
   if (e.code === keybinds.reload && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
   const weaponKeys = { 'Digit1': 'pistol', 'Digit2': 'smg', 'Digit3': 'shotgun', 'Digit4': 'assault_rifle', 'Digit5': 'sniper', 'Digit6': 'minigun' };
   if (weaponKeys[e.code] && ownedWeaponIds.includes(weaponKeys[e.code]) && running && !paused) {
@@ -7736,6 +7739,12 @@ function mpStartGame(data) {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('hud').style.display = 'block';
   mpGameState = null; mpPrevState = null;
+  // Init global arrays used by rendering functions (drawZombie pushes particles, etc.)
+  floatingTexts = [];
+  particles = [];
+  bloodDecals = [];
+  hitTrails = [];
+  frameCount = 0;
   // Init player object for MP rendering (drawPlayer needs these properties)
   player = {
     x: 0, y: 0, angle: 0, hp: 100, maxHp: 100, speed: 2.8,
@@ -7846,10 +7855,40 @@ function mpLoop(now) {
     ctx.restore();
   }
 
+  // Draw spitter projectiles from server
+  for (const sp of (state.spitterProjectiles || [])) {
+    ctx.save();
+    ctx.fillStyle = '#66cc22'; ctx.shadowBlur = 8; ctx.shadowColor = '#44aa00';
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, 8, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
   // Draw zombies from server state
   for (const z of (state.zombies || [])) {
     const idHash = typeof z.id === 'string' ? z.id.charCodeAt(0) : (z.id || 0);
-    const tempZ = { ...z, wobble: (frameCount * 0.08 + idHash), frame: frameCount, hitting: false, deathTimer: 0, alive: true, throwAnim: 0, shieldBroken: false, shieldMaxHp: 0, screamCooldown: 0, isBoss: false };
+    const tempZ = {
+      ...z,
+      wobble: (frameCount * 0.08 + idHash),
+      frame: frameCount,
+      hitting: false,
+      deathTimer: 0,
+      alive: true,
+      throwAnim: 0,
+      shieldBroken: false,
+      shieldHp: 0,
+      shieldMaxHp: 0,
+      shieldRegenTimer: 0,
+      screamCooldown: 0,
+      isBoss: false,
+      burrowed: false,
+      charging: false,
+      speed: z.speed || 1,
+      burnTimer: 0,
+      cryoTimer: 0,
+      shielded: false,
+    };
     drawZombie(tempZ);
   }
 
@@ -7933,13 +7972,17 @@ function mpLoop(now) {
     document.getElementById('ammo-val').textContent = localPlayer.ammo || 0;
   }
 
-  // Process events for sounds
+  // Process events for sounds and feedback
   for (const ev of (state.events || [])) {
     if (ev.type === 'sound') playSoundThrottled(ev.sound, 30);
-    if (ev.type === 'kill' && ev.killerId === mpLocalId) {
-      floatingTexts.push({ x: ev.x || 0, y: (ev.y || 0) - 10, text: '+' + (ev.gold || 0) + 'G', life: 40, maxLife: 40, color: '#ddaa00' });
+    if (ev.type === 'shoot') playSoundThrottled('shoot_' + (ev.weapon || 'pistol'), 30);
+    if (ev.type === 'gold' && ev.playerId === mpLocalId) {
+      floatingTexts.push({ x: ev.x || 0, y: (ev.y || 0) - 10, text: '+' + (ev.amount || 0) + 'G', life: 40, maxLife: 40, color: ev.jackpot ? '#ffcc00' : '#ddaa00' });
     }
-    if (ev.type === 'wave') showWaveBanner('WAVE ' + ev.wave);
+    if (ev.type === 'wave_start') showWaveBanner('WAVE ' + ev.wave);
+    if (ev.type === 'wave_clear') showWaveBanner('WAVE ' + ev.wave + ' CLEAR!');
+    if (ev.type === 'player_downed' && ev.id === mpLocalId) showWaveBanner('DU BIST DOWN!');
+    if (ev.type === 'player_revived' && ev.id === mpLocalId) showWaveBanner('WIEDERBELEBT!');
   }
 
   // Update floating texts

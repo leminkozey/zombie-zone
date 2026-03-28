@@ -275,12 +275,12 @@ class GameRoom {
       const input = this.inputs[p.id];
       if (!input) continue;
 
-      // Movement
+      // Movement (client sends up/down/left/right)
       let mx = 0, my = 0;
-      if (input.keys.w || input.keys.W) my -= 1;
-      if (input.keys.s || input.keys.S) my += 1;
-      if (input.keys.a || input.keys.A) mx -= 1;
-      if (input.keys.d || input.keys.D) mx += 1;
+      if (input.keys.up) my -= 1;
+      if (input.keys.down) my += 1;
+      if (input.keys.left) mx -= 1;
+      if (input.keys.right) mx += 1;
 
       if (mx !== 0 || my !== 0) {
         const len = Math.sqrt(mx * mx + my * my);
@@ -310,10 +310,15 @@ class GameRoom {
         continue; // can't shoot while reloading
       }
 
+      // Manual reload (client sends keys.reload)
+      if (input.keys.reload && !p.reloading && p.ammo < p.maxAmmo) {
+        this._startReload(p);
+      }
+
       // Shooting
       if (p.shootCooldown > 0) p.shootCooldown--;
 
-      if (input.shoot && p.shootCooldown <= 0 && !p.reloading) {
+      if (input.keys.shoot && p.shootCooldown <= 0 && !p.reloading) {
         this._playerShoot(p);
       }
     }
@@ -780,7 +785,7 @@ class GameRoom {
   // ── STATE ──────────────────────────────────────────
 
   getMapData() {
-    return { cols: COLS, rows: ROWS, tile: TILE, map: this.MAP };
+    return { cols: COLS, rows: ROWS, tile: TILE, map: this.map };
   }
 
   getState() {
