@@ -3768,14 +3768,21 @@ function updateZombies() {
         moveY = dirY * finalSpeed;
       }
 
+      // Wall repulsion — keep zombies away from wall surfaces to prevent corner-sticking
+      const repDist = moveR + 6;
+      if (isWall(z.x + repDist, z.y)) moveX -= 0.8;
+      if (isWall(z.x - repDist, z.y)) moveX += 0.8;
+      if (isWall(z.x, z.y + repDist)) moveY -= 0.8;
+      if (isWall(z.x, z.y - repDist)) moveY += 0.8;
+
       // Apply movement with wall collision + corner rounding
       applyMove(z, moveX, moveY, moveR);
     }
 
-    // spitter shooting
+    // spitter shooting — only if line of sight to player
     if (z.type === 'spitter' && z.alive) {
       z.shootCooldown -= timeScale;
-      if (z.shootCooldown <= 0 && dist < 300) {
+      if (z.shootCooldown <= 0 && dist < 300 && hasLineOfSight(z.x, z.y, player.x, player.y)) {
         z.shootCooldown = 150; // ~2.5s at 60fps
         z.throwAnim = 8;
         const shootAngle = Math.atan2(player.y - z.y, player.x - z.x);
