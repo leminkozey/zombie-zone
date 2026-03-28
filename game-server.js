@@ -63,7 +63,7 @@ function pickZombieType(wave) {
 
 // ── MAP GENERATION ─────────────────────────────────────
 
-function generateMap() {
+function generateMap(mapType) {
   const map = [];
   for (let r = 0; r < ROWS; r++) {
     const row = [];
@@ -79,19 +79,62 @@ function generateMap() {
     if (r > 0 && r < ROWS - 1 && c > 0 && c < COLS - 1) map[r][c] = 1;
   }
 
-  const cx1 = Math.floor(COLS * 0.22);
-  const cy1 = Math.floor(ROWS * 0.2);
-  place(cx1, cy1); place(cx1 + 1, cy1); place(cx1, cy1 + 1);
-  place(COLS - 1 - cx1, cy1); place(COLS - 2 - cx1, cy1); place(COLS - 1 - cx1, cy1 + 1);
-  place(cx1, ROWS - 1 - cy1); place(cx1 + 1, ROWS - 1 - cy1); place(cx1, ROWS - 2 - cy1);
-  place(COLS - 1 - cx1, ROWS - 1 - cy1); place(COLS - 2 - cx1, ROWS - 1 - cy1); place(COLS - 1 - cx1, ROWS - 2 - cy1);
+  const type = mapType || 'warehouse';
 
-  const px = Math.floor(COLS * 0.4);
-  const py = Math.floor(ROWS * 0.33);
-  place(px, py); place(px, py + 1);
-  place(COLS - 1 - px, py); place(COLS - 1 - px, py + 1);
-  place(px, ROWS - 1 - py); place(px, ROWS - 2 - py);
-  place(COLS - 1 - px, ROWS - 1 - py); place(COLS - 1 - px, ROWS - 2 - py);
+  if (type === 'warehouse') {
+    const cx1 = Math.floor(COLS * 0.22), cy1 = Math.floor(ROWS * 0.2);
+    place(cx1, cy1); place(cx1 + 1, cy1); place(cx1, cy1 + 1);
+    place(COLS-1-cx1, cy1); place(COLS-2-cx1, cy1); place(COLS-1-cx1, cy1+1);
+    place(cx1, ROWS-1-cy1); place(cx1+1, ROWS-1-cy1); place(cx1, ROWS-2-cy1);
+    place(COLS-1-cx1, ROWS-1-cy1); place(COLS-2-cx1, ROWS-1-cy1); place(COLS-1-cx1, ROWS-2-cy1);
+    const px = Math.floor(COLS * 0.4), py = Math.floor(ROWS * 0.33);
+    place(px, py); place(px, py+1);
+    place(COLS-1-px, py); place(COLS-1-px, py+1);
+    place(px, ROWS-1-py); place(px, ROWS-2-py);
+    place(COLS-1-px, ROWS-1-py); place(COLS-1-px, ROWS-2-py);
+  } else if (type === 'bunker') {
+    // Horizontal corridor walls with gaps
+    for (let c = 3; c < COLS - 3; c++) {
+      if (Math.abs(c - midC) > 2) { place(c, Math.floor(ROWS * 0.3)); place(c, Math.floor(ROWS * 0.7)); }
+    }
+    // Vertical corridor walls with gaps
+    for (let r = 3; r < ROWS - 3; r++) {
+      if (Math.abs(r - midR) > 2) { place(Math.floor(COLS * 0.3), r); place(Math.floor(COLS * 0.7), r); }
+    }
+    // Doorways
+    const dx = Math.floor(COLS * 0.3), dy = Math.floor(ROWS * 0.3);
+    const rx = Math.floor(COLS * 0.7), by = Math.floor(ROWS * 0.7);
+    map[dy][Math.floor(dx*0.6)] = 0; map[dy][Math.floor(dx*0.6)+1] = 0;
+    map[Math.floor(dy*0.6)][dx] = 0; map[Math.floor(dy*0.6)+1][dx] = 0;
+    map[dy][rx+Math.floor((COLS-rx)*0.4)] = 0; map[dy][rx+Math.floor((COLS-rx)*0.4)+1] = 0;
+    map[Math.floor(dy*0.6)][rx] = 0; map[Math.floor(dy*0.6)+1][rx] = 0;
+    map[by][Math.floor(dx*0.6)] = 0; map[by][Math.floor(dx*0.6)+1] = 0;
+    map[by][rx+Math.floor((COLS-rx)*0.4)] = 0; map[by][rx+Math.floor((COLS-rx)*0.4)+1] = 0;
+    map[midR+Math.floor((ROWS-midR)*0.35)][dx] = 0; map[midR+Math.floor((ROWS-midR)*0.35)+1][dx] = 0;
+    map[midR+Math.floor((ROWS-midR)*0.35)][rx] = 0; map[midR+Math.floor((ROWS-midR)*0.35)+1][rx] = 0;
+    place(midC-1, midR); place(midC+1, midR); place(midC, midR-1); place(midC, midR+1);
+  } else if (type === 'city') {
+    const blockW = 4, blockH = 3, streetW = 3;
+    const startC = 3, startR = 3;
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 4; bc++) {
+        const c0 = startC + bc * (blockW + streetW);
+        const r0 = startR + br * (blockH + streetW);
+        if (c0 + blockW >= COLS - 1 || r0 + blockH >= ROWS - 1) continue;
+        for (let r = r0; r < r0 + blockH && r < ROWS - 1; r++) {
+          for (let c = c0; c < c0 + blockW && c < COLS - 1; c++) {
+            place(c, r);
+          }
+        }
+        const side = (br + bc) % 4;
+        if (side === 0 && r0 > 1) map[r0][c0+1] = 0;
+        else if (side === 1 && c0+blockW < COLS-1) map[r0+1][c0+blockW-1] = 0;
+        else if (side === 2 && r0+blockH < ROWS-1) map[r0+blockH-1][c0+1] = 0;
+        else map[r0+1][c0] = 0;
+      }
+    }
+    place(midC, midR); place(midC+1, midR);
+  }
 
   return map;
 }

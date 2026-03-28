@@ -439,9 +439,18 @@
       </div>
       <div style="position:absolute;bottom:24px;left:24px">
         <div style="font-size:11px;letter-spacing:3px;color:#3a4450;margin-bottom:10px">KARTE</div>
-        <div class="map-option active" style="width:180px;padding:12px 16px;border:1px solid #ee2200;background:rgba(238,34,0,0.04);margin-bottom:6px;font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:2px;color:#8090a0">WAREHOUSE</div>
-        <div class="map-option" style="width:180px;padding:10px 16px;border:1px solid #1a1e22;margin-bottom:6px;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:2px;color:#2a3040;opacity:0.5">BUNKER <span style="font-size:8px;color:#3a4450;margin-left:6px">SOON</span></div>
-        <div class="map-option" style="width:180px;padding:10px 16px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:2px;color:#2a3040;opacity:0.5">CITY <span style="font-size:8px;color:#3a4450;margin-left:6px">SOON</span></div>
+        <div class="map-option active" data-map="warehouse" style="cursor:pointer;width:180px;padding:12px 16px;border:1px solid #ee2200;background:rgba(238,34,0,0.04);margin-bottom:6px;font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:2px;color:#8090a0">WAREHOUSE</div>
+        <div class="map-option" data-map="bunker" style="cursor:pointer;width:180px;padding:10px 16px;border:1px solid #1a1e22;margin-bottom:6px;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:2px;color:#3a5060">BUNKER</div>
+        <div class="map-option" data-map="city" style="cursor:pointer;width:180px;padding:10px 16px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:2px;color:#3a5060">CITY</div>
+        <div style="font-size:11px;letter-spacing:3px;color:#3a4450;margin-top:16px;margin-bottom:10px">STARTWELLE</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;width:186px">
+          <div class="wave-option active" data-wave="1" style="cursor:pointer;padding:6px 10px;border:1px solid #ee2200;background:rgba(238,34,0,0.04);font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:#8090a0;min-width:28px;text-align:center">1</div>
+          <div class="wave-option" data-wave="5" style="cursor:pointer;padding:6px 10px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:#3a5060;min-width:28px;text-align:center">5</div>
+          <div class="wave-option" data-wave="10" style="cursor:pointer;padding:6px 10px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:#3a5060;min-width:28px;text-align:center">10</div>
+          <div class="wave-option" data-wave="15" style="cursor:pointer;padding:6px 10px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:#3a5060;min-width:28px;text-align:center">15</div>
+          <div class="wave-option" data-wave="20" style="cursor:pointer;padding:6px 10px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:#3a5060;min-width:28px;text-align:center">20</div>
+          <div class="wave-option" data-wave="30" style="cursor:pointer;padding:6px 10px;border:1px solid #1a1e22;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:1px;color:#3a5060;min-width:28px;text-align:center">30</div>
+        </div>
       </div>
       <div style="position:absolute;bottom:24px;right:24px;display:flex;flex-direction:column;align-items:flex-end;gap:10px">
         <button class="start-btn" id="start-btn" style="font-size:32px;padding:20px 80px;letter-spacing:10px;border-width:2px">STARTEN</button>
@@ -1426,6 +1435,8 @@ let mpLocalSpeed = 2.8;
 
 let playerWeapons = []; // from server: [{weapon_id, dmg_level, range_level, ...}]
 let activeWeaponId = localStorage.getItem('dz_activeWeapon') || 'pistol';
+let selectedMap = 'warehouse';
+let startWave = 1;
 function setActiveWeapon(id) { activeWeaponId = id; localStorage.setItem('dz_activeWeapon', id); }
 let ownedWeaponIds = ['pistol'];
 let selectedArsenalWeapon = 'pistol';
@@ -1492,8 +1503,8 @@ function pickZombieType(wave) {
 let COLS, ROWS, MAP;
 let _floorNoise = null;
 
-function generateMap() {
-  _floorNoise = null; // reset floor tile cache
+function generateMap(mapType) {
+  _floorNoise = null;
   COLS = Math.floor(W / TILE);
   ROWS = Math.floor(H / TILE);
   if (COLS < 10) COLS = 10;
@@ -1503,40 +1514,86 @@ function generateMap() {
   for (let r = 0; r < ROWS; r++) {
     const row = [];
     for (let c = 0; c < COLS; c++) {
-      if (r === 0 || r === ROWS-1 || c === 0 || c === COLS-1) {
-        row.push(1); // rand
-      } else {
-        row.push(0);
-      }
+      row.push((r === 0 || r === ROWS-1 || c === 0 || c === COLS-1) ? 1 : 0);
     }
     MAP.push(row);
   }
 
-  // symmetrische Hindernisse platzieren
-  const midC = Math.floor(COLS / 2);
-  const midR = Math.floor(ROWS / 2);
+  const type = mapType || selectedMap || 'warehouse';
+  if (type === 'warehouse') generateWarehouse();
+  else if (type === 'bunker') generateBunker();
+  else if (type === 'city') generateCity();
+}
 
-  // ecken-cluster (oben-links + gespiegelt)
-  const cx1 = Math.floor(COLS * 0.22);
-  const cy1 = Math.floor(ROWS * 0.2);
-  placeWall(cx1, cy1); placeWall(cx1+1, cy1);
-  placeWall(cx1, cy1+1);
-  placeWall(COLS-1-cx1, cy1); placeWall(COLS-2-cx1, cy1);
-  placeWall(COLS-1-cx1, cy1+1);
-  placeWall(cx1, ROWS-1-cy1); placeWall(cx1+1, ROWS-1-cy1);
-  placeWall(cx1, ROWS-2-cy1);
-  placeWall(COLS-1-cx1, ROWS-1-cy1); placeWall(COLS-2-cx1, ROWS-1-cy1);
-  placeWall(COLS-1-cx1, ROWS-2-cy1);
-
-  // mitte-pillar
-  const px = Math.floor(COLS * 0.4);
-  const py = Math.floor(ROWS * 0.33);
+function generateWarehouse() {
+  const cx1 = Math.floor(COLS * 0.22), cy1 = Math.floor(ROWS * 0.2);
+  placeWall(cx1, cy1); placeWall(cx1+1, cy1); placeWall(cx1, cy1+1);
+  placeWall(COLS-1-cx1, cy1); placeWall(COLS-2-cx1, cy1); placeWall(COLS-1-cx1, cy1+1);
+  placeWall(cx1, ROWS-1-cy1); placeWall(cx1+1, ROWS-1-cy1); placeWall(cx1, ROWS-2-cy1);
+  placeWall(COLS-1-cx1, ROWS-1-cy1); placeWall(COLS-2-cx1, ROWS-1-cy1); placeWall(COLS-1-cx1, ROWS-2-cy1);
+  const px = Math.floor(COLS * 0.4), py = Math.floor(ROWS * 0.33);
   placeWall(px, py); placeWall(px, py+1);
   placeWall(COLS-1-px, py); placeWall(COLS-1-px, py+1);
   placeWall(px, ROWS-1-py); placeWall(px, ROWS-2-py);
   placeWall(COLS-1-px, ROWS-1-py); placeWall(COLS-1-px, ROWS-2-py);
+}
 
-  // seiten-blocker entfernt — Zombies blieben dort stecken
+function generateBunker() {
+  const midC = Math.floor(COLS / 2), midR = Math.floor(ROWS / 2);
+  // Horizontal corridors
+  for (let c = 3; c < COLS - 3; c++) {
+    if (Math.abs(c - midC) > 2) { placeWall(c, Math.floor(ROWS * 0.3)); placeWall(c, Math.floor(ROWS * 0.7)); }
+  }
+  // Vertical corridors
+  for (let r = 3; r < ROWS - 3; r++) {
+    if (Math.abs(r - midR) > 2) { placeWall(Math.floor(COLS * 0.3), r); placeWall(Math.floor(COLS * 0.7), r); }
+  }
+  // Corner rooms (cut doorways)
+  const dx = Math.floor(COLS * 0.3), dy = Math.floor(ROWS * 0.3);
+  // Top-left room doorway
+  MAP[dy][Math.floor(dx * 0.6)] = 0; MAP[dy][Math.floor(dx * 0.6) + 1] = 0;
+  MAP[Math.floor(dy * 0.6)][dx] = 0; MAP[Math.floor(dy * 0.6) + 1][dx] = 0;
+  // Top-right room doorway
+  const rx = Math.floor(COLS * 0.7);
+  MAP[dy][rx + Math.floor((COLS - rx) * 0.4)] = 0; MAP[dy][rx + Math.floor((COLS - rx) * 0.4) + 1] = 0;
+  MAP[Math.floor(dy * 0.6)][rx] = 0; MAP[Math.floor(dy * 0.6) + 1][rx] = 0;
+  // Bottom doorways
+  const by = Math.floor(ROWS * 0.7);
+  MAP[by][Math.floor(dx * 0.6)] = 0; MAP[by][Math.floor(dx * 0.6) + 1] = 0;
+  MAP[by][rx + Math.floor((COLS - rx) * 0.4)] = 0; MAP[by][rx + Math.floor((COLS - rx) * 0.4) + 1] = 0;
+  MAP[midR + Math.floor((ROWS - midR) * 0.35)][dx] = 0; MAP[midR + Math.floor((ROWS - midR) * 0.35) + 1][dx] = 0;
+  MAP[midR + Math.floor((ROWS - midR) * 0.35)][rx] = 0; MAP[midR + Math.floor((ROWS - midR) * 0.35) + 1][rx] = 0;
+  // Center pillars
+  placeWall(midC - 1, midR); placeWall(midC + 1, midR);
+  placeWall(midC, midR - 1); placeWall(midC, midR + 1);
+}
+
+function generateCity() {
+  // City blocks — grid of buildings with streets between
+  const blockW = 4, blockH = 3, streetW = 3;
+  const startC = 3, startR = 3;
+  for (let br = 0; br < 3; br++) {
+    for (let bc = 0; bc < 4; bc++) {
+      const c0 = startC + bc * (blockW + streetW);
+      const r0 = startR + br * (blockH + streetW);
+      if (c0 + blockW >= COLS - 1 || r0 + blockH >= ROWS - 1) continue;
+      // Place building block
+      for (let r = r0; r < r0 + blockH && r < ROWS - 1; r++) {
+        for (let c = c0; c < c0 + blockW && c < COLS - 1; c++) {
+          placeWall(c, r);
+        }
+      }
+      // Cut a doorway on a random side
+      const side = (br + bc) % 4;
+      if (side === 0 && r0 > 1) MAP[r0][c0 + 1] = 0; // top
+      else if (side === 1 && c0 + blockW < COLS - 1) MAP[r0 + 1][c0 + blockW - 1] = 0; // right
+      else if (side === 2 && r0 + blockH < ROWS - 1) MAP[r0 + blockH - 1][c0 + 1] = 0; // bottom
+      else MAP[r0 + 1][c0] = 0; // left
+    }
+  }
+  // Barricades in intersections
+  const midC = Math.floor(COLS / 2), midR = Math.floor(ROWS / 2);
+  placeWall(midC, midR); placeWall(midC + 1, midR);
 }
 
 function placeWall(c, r) {
@@ -1897,7 +1954,7 @@ async function init() {
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
-  wave = 0; waveKills = 0; waveTotal = 0; waveActive = false;
+  wave = Math.max(0, startWave - 1); waveKills = 0; waveTotal = 0; waveActive = false;
   reloading = false; reloadStart = 0;
   hurtFlash = 0; score = 0; frameCount = 0;
   mouseX = W/2; mouseY = H/2;
@@ -8141,6 +8198,46 @@ document.querySelectorAll('.menu-tab').forEach(tab => {
 
 document.getElementById('st-back').addEventListener('click', () => {
   switchMenuTab('lobby');
+});
+
+// Map selector
+document.querySelectorAll('.map-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    playSound('ui_click');
+    document.querySelectorAll('.map-option').forEach(o => {
+      o.classList.remove('active');
+      o.style.border = '1px solid #1a1e22';
+      o.style.background = 'transparent';
+      o.style.color = '#3a5060';
+      o.style.fontSize = '12px';
+      o.style.padding = '10px 16px';
+    });
+    opt.classList.add('active');
+    opt.style.border = '1px solid #ee2200';
+    opt.style.background = 'rgba(238,34,0,0.04)';
+    opt.style.color = '#8090a0';
+    opt.style.fontSize = '14px';
+    opt.style.padding = '12px 16px';
+    selectedMap = opt.dataset.map;
+  });
+});
+
+// Wave selector
+document.querySelectorAll('.wave-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    playSound('ui_click');
+    document.querySelectorAll('.wave-option').forEach(o => {
+      o.classList.remove('active');
+      o.style.border = '1px solid #1a1e22';
+      o.style.background = 'transparent';
+      o.style.color = '#3a5060';
+    });
+    opt.classList.add('active');
+    opt.style.border = '1px solid #ee2200';
+    opt.style.background = 'rgba(238,34,0,0.04)';
+    opt.style.color = '#8090a0';
+    startWave = parseInt(opt.dataset.wave) || 1;
+  });
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
