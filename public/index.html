@@ -4491,6 +4491,7 @@ function getFloorNoise(col, row) {
 }
 
 function drawMap() {
+  if (!MAP || MAP.length === 0) return; // no map data yet
   if (mapCacheCanvas) {
     ctx.drawImage(mapCacheCanvas, 0, 0);
     return;
@@ -7706,11 +7707,23 @@ function mpStartGame(data) {
   mpPlayers = data.players;
 
   // Load server map — override local map so all clients have same map
-  if (data.map) {
-    COLS = data.map.cols;
-    ROWS = data.map.rows;
+  if (data.map && data.map.map) {
+    COLS = data.map.cols || 48;
+    ROWS = data.map.rows || 27;
     TILE = data.map.tile || 40;
     MAP = data.map.map;
+    mapCacheCanvas = null;
+    _floorNoise = null;
+    canvas.width = COLS * TILE;
+    canvas.height = ROWS * TILE;
+    W = canvas.width;
+    H = canvas.height;
+    console.log('[MP] Map loaded:', COLS, 'x', ROWS, 'MAP rows:', MAP.length);
+  } else {
+    // Fallback: generate local map with server dimensions
+    console.warn('[MP] No map data from server, generating locally');
+    COLS = 48; ROWS = 27; TILE = 40;
+    generateMap();
     mapCacheCanvas = null;
     _floorNoise = null;
     canvas.width = COLS * TILE;
