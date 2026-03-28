@@ -3768,15 +3768,22 @@ function updateZombies() {
         moveY = dirY * finalSpeed;
       }
 
-      // Wall repulsion — keep zombies away from wall surfaces to prevent corner-sticking
-      const repDist = moveR + 6;
-      if (isWall(z.x + repDist, z.y)) moveX -= 0.8;
-      if (isWall(z.x - repDist, z.y)) moveX += 0.8;
-      if (isWall(z.x, z.y + repDist)) moveY -= 0.8;
-      if (isWall(z.x, z.y - repDist)) moveY += 0.8;
-
       // Apply movement with wall collision + corner rounding
-      applyMove(z, moveX, moveY, moveR);
+      if (!applyMove(z, moveX, moveY, moveR) && !z._los) {
+        // Completely blocked while pathfinding — try perpendicular to flowfield dir
+        const pLen = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (pLen > 0.01) {
+          const perpX = -moveY / pLen * finalSpeed * 0.7;
+          const perpY = moveX / pLen * finalSpeed * 0.7;
+          // Pick whichever perpendicular direction makes progress toward player
+          const dot1 = perpX * dirX + perpY * dirY;
+          if (dot1 > 0) {
+            applyMove(z, perpX, perpY, moveR);
+          } else {
+            applyMove(z, -perpX, -perpY, moveR);
+          }
+        }
+      }
     }
 
     // spitter shooting — only if line of sight to player
