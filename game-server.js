@@ -213,9 +213,9 @@ class GameRoom {
       x: cx + offset,
       y: cy,
       angle: 0,
-      hp: 100,
-      maxHp: 100,
-      speed: 2.8,
+      hp: info.maxHp || 100,
+      maxHp: info.maxHp || 100,
+      speed: info.speed || 2.8,
       ammo: wpn.magSize,
       maxAmmo: wpn.magSize,
       weaponId,
@@ -224,6 +224,7 @@ class GameRoom {
       reloading: false,
       reloadTimer: 0,
       spinup: 0,
+      _lastShoot: false,
       downed: false,
       downedTimer: 0,
       dead: false,
@@ -318,7 +319,13 @@ class GameRoom {
       // Shooting
       if (p.shootCooldown > 0) p.shootCooldown--;
 
-      if (input.keys.shoot && p.shootCooldown <= 0 && !p.reloading) {
+      // Semi/Single weapons: only fire on click, not hold
+      const wpn = WEAPONS[p.weaponId];
+      const isSemi = wpn && (wpn.type === 'Semi' || wpn.type === 'Single' || wpn.type === 'Spread');
+      const shouldShoot = isSemi ? (input.keys.shoot && !p._lastShoot) : input.keys.shoot;
+      p._lastShoot = !!input.keys.shoot;
+
+      if (shouldShoot && p.shootCooldown <= 0 && !p.reloading) {
         this._playerShoot(p);
       }
     }

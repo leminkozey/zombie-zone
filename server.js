@@ -494,6 +494,8 @@ io.on('connection', (socket) => {
     playerInfo.name = String(data.name || 'Unknown').substring(0, 30);
     playerInfo.level = Math.max(0, Number(data.level) || 0);
     playerInfo.weapon = String(data.weapon || 'pistol').substring(0, 20);
+    playerInfo.maxHp = Math.min(500, Math.max(100, Number(data.maxHp) || 100));
+    playerInfo.speed = Math.min(5, Math.max(1, Number(data.speed) || 2.8));
   });
 
   socket.on('create-lobby', (cb) => {

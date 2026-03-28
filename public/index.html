@@ -7637,7 +7637,13 @@ function mpConnect() {
   mpSocket = io();
   mpSocket.on('connect', () => {
     mpLocalId = mpSocket.id;
-    mpSocket.emit('set-player-info', { name: currentUser, level: getLevelFromXp(globalXp), weapon: activeWeaponId });
+    mpSocket.emit('set-player-info', {
+      name: currentUser,
+      level: getLevelFromXp(globalXp),
+      weapon: activeWeaponId,
+      maxHp: getPlayerStat('maxHp'),
+      speed: getPlayerStat('moveSpeed'),
+    });
   });
   mpSocket.on('lobby-updated', (data) => { mpPlayers = data.players; mpIsHost = data.hostId === mpSocket.id; renderMpLobby(); });
   mpSocket.on('game-start', (data) => { mpStartGame(data); });
@@ -7751,7 +7757,7 @@ function mpStartGame(data) {
     ammo: 30, maxAmmo: 30, recoil: 0, shootCooldown: 0,
     shield: 0, maxShield: 0, shieldRegenTimer: 0,
     secondWindUsed: false, dashInvulnerable: false,
-    downed: false, downedTimer: 0, _lastMouseDown: false,
+    downed: false, downedTimer: 0, _lastMouseDown: false, _shootBuffered: false,
     soldierRush: false, juggernautActive: false,
     ironSkinReady: false, ironSkinCooldown: 0,
     killRushTimer: 0, killRushBoost: 0, lastDamageTime: 0,
@@ -7788,10 +7794,14 @@ function mpLoop(now) {
   }
   frameCount++;
 
-  // Send inputs to server every frame
-  if (mpSocket) {
-    const wpnType = WEAPONS[activeWeaponId] ? WEAPONS[activeWeaponId].type : 'Auto';
-    const shootInput = (wpnType === 'Semi' || wpnType === 'Single') ? (mouseDown && !player._lastMouseDown) : mouseDown;
+  // Track shoot clicks (buffered between sends for semi weapons)
+  if (mouseDown && !player._lastMouseDown) player._shootBuffered = true;
+  player._lastMouseDown = mouseDown;
+
+  // Send inputs to server (throttled to ~20/sec to match server tick rate)
+  if (mpSocket && frameCount % 3 === 0) {
+    const shootInput = mouseDown || player._shootBuffered;
+    player._shootBuffered = false;
     mpSocket.emit('input', {
       keys: {
         up: !!keys[keybinds.moveUp], down: !!keys[keybinds.moveDown],
@@ -7805,7 +7815,6 @@ function mpLoop(now) {
         return Math.atan2(mouseY - H/2, mouseX - W/2);
       })(),
     });
-    player._lastMouseDown = mouseDown;
   }
 
   // Interpolation
