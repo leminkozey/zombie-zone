@@ -1600,26 +1600,47 @@ function generateBunker() {
 }
 
 // City: truly infinite procedural map — no MAP array needed
-// Tile type computed on-the-fly from world coordinates
-const CITY_BLOCK_W = 5, CITY_BLOCK_H = 4;
-const CITY_STREET_W = 3, CITY_STREET_H = 3;
-const CITY_PERIOD_X = CITY_BLOCK_W + CITY_STREET_W; // 8
-const CITY_PERIOD_Y = CITY_BLOCK_H + CITY_STREET_H; // 7
+// Uses varying block sizes and wide streets for open feel
 
 function getCityTile(wc, wr) {
-  // Repeating city grid: buildings with streets between
-  const lx = ((wc % CITY_PERIOD_X) + CITY_PERIOD_X) % CITY_PERIOD_X;
-  const ly = ((wr % CITY_PERIOD_Y) + CITY_PERIOD_Y) % CITY_PERIOD_Y;
-  // Street zone
-  if (lx >= CITY_BLOCK_W || ly >= CITY_BLOCK_H) return 0;
-  // Some blocks are plazas (open) based on block seed
-  const bx = Math.floor(wc / CITY_PERIOD_X);
-  const by = Math.floor(wr / CITY_PERIOD_Y);
-  const blockSeed = (((bx * 137 + by * 311) % 1000) + 1000) % 1000;
-  if (blockSeed < 120) return 0; // ~12% chance of open plaza
-  // Clear spawn area around origin
-  if (Math.abs(wc) <= 3 && Math.abs(wr) <= 3) return 0;
-  return 1; // building (solid, no doors)
+  // Clear spawn area
+  if (Math.abs(wc) <= 4 && Math.abs(wr) <= 4) return 0;
+
+  // Use larger grid cells with varying building sizes inside
+  // Grid cell: 12x10 tiles (plenty of street space)
+  const cellW = 12, cellH = 10;
+  const cellX = Math.floor((wc >= 0 ? wc : wc - cellW + 1) / cellW);
+  const cellY = Math.floor((wr >= 0 ? wr : wr - cellH + 1) / cellH);
+  const lx = ((wc % cellW) + cellW) % cellW;
+  const ly = ((wr % cellH) + cellH) % cellH;
+
+  // Block seed determines building shape per cell
+  const bs = (((cellX * 137 + cellY * 311) % 1000) + 1000) % 1000;
+  const bs2 = (((cellX * 53 + cellY * 97) % 1000) + 1000) % 1000;
+
+  // ~25% of cells are completely empty (parks, plazas, intersections)
+  if (bs < 250) return 0;
+
+  // Building dimensions vary per cell (3-6 wide, 2-5 tall)
+  const bw = 3 + (bs % 4);   // 3-6
+  const bh = 2 + (bs2 % 4);  // 2-5
+  // Building offset within cell (always leaves street margins)
+  const ox = 1 + (bs2 % 2);  // 1-2 tiles from left edge
+  const oy = 1 + (bs % 2);   // 1-2 tiles from top edge
+
+  // Check if this tile is inside the building
+  if (lx >= ox && lx < ox + bw && ly >= oy && ly < oy + bh) return 1;
+
+  // Some cells have a second smaller building
+  if (bs > 700) {
+    const bw2 = 2 + (bs % 2);
+    const bh2 = 2;
+    const ox2 = ox + bw + 1;
+    const oy2 = oy + (bs2 % 2);
+    if (ox2 + bw2 <= cellW - 1 && lx >= ox2 && lx < ox2 + bw2 && ly >= oy2 && ly < oy2 + bh2) return 1;
+  }
+
+  return 0;
 }
 
 function generateCity() {
@@ -4676,18 +4697,17 @@ function drawCityTile(tctx, col, row) {
       if (s > 0.88) { tctx.fillStyle = '#0c0a0a'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + s * 4, 4 + s2 * 3, 0, 0, Math.PI * 2); tctx.fill(); tctx.strokeStyle = '#222020'; tctx.lineWidth = 0.5; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + s * 4, 4 + s2 * 3, 0, 0, Math.PI * 2); tctx.stroke(); }
       // Cracks
       if (s2 > 0.6 && s2 < 0.75) { tctx.strokeStyle = 'rgba(8,6,6,0.7)'; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(x, y + s * TILE); tctx.lineTo(x + TILE * 0.3, y + s * TILE + 4); tctx.lineTo(x + TILE * 0.7, y + s * TILE - 2); tctx.lineTo(x + TILE, y + s * TILE + 6); tctx.stroke(); }
-      // Center lane markings on streets that are in the middle of the street gap
-      const ly = ((row % CITY_PERIOD_Y) + CITY_PERIOD_Y) % CITY_PERIOD_Y;
-      const lx = ((col % CITY_PERIOD_X) + CITY_PERIOD_X) % CITY_PERIOD_X;
-      const streetMidY = CITY_BLOCK_H + Math.floor(CITY_STREET_H / 2);
-      const streetMidX = CITY_BLOCK_W + Math.floor(CITY_STREET_W / 2);
-      if (ly === streetMidY && lx >= CITY_BLOCK_W) {
-        tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.2)'; tctx.lineWidth = 1.5;
-        tctx.beginPath(); tctx.moveTo(x, y + TILE / 2); tctx.lineTo(x + TILE, y + TILE / 2); tctx.stroke(); tctx.setLineDash([]);
-      }
-      if (lx === streetMidX && ly >= CITY_BLOCK_H) {
-        tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.2)'; tctx.lineWidth = 1.5;
-        tctx.beginPath(); tctx.moveTo(x + TILE / 2, y); tctx.lineTo(x + TILE / 2, y + TILE); tctx.stroke(); tctx.setLineDash([]);
+      // Road markings — dashed lines on open road tiles far from buildings
+      if (!adjBuilding) {
+        // Horizontal marking every 10 rows, vertical every 12 cols
+        if (((row % 10) + 10) % 10 === 5 && getCityTile(col, row - 1) === 0 && getCityTile(col, row + 1) === 0) {
+          tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.18)'; tctx.lineWidth = 1.5;
+          tctx.beginPath(); tctx.moveTo(x, y + TILE / 2); tctx.lineTo(x + TILE, y + TILE / 2); tctx.stroke(); tctx.setLineDash([]);
+        }
+        if (((col % 12) + 12) % 12 === 6 && getCityTile(col - 1, row) === 0 && getCityTile(col + 1, row) === 0) {
+          tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.18)'; tctx.lineWidth = 1.5;
+          tctx.beginPath(); tctx.moveTo(x + TILE / 2, y); tctx.lineTo(x + TILE / 2, y + TILE); tctx.stroke(); tctx.setLineDash([]);
+        }
       }
     }
   }
