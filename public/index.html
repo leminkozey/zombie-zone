@@ -1438,6 +1438,39 @@ let activeWeaponId = localStorage.getItem('dz_activeWeapon') || 'pistol';
 let selectedMap = 'warehouse';
 let startWave = 1;
 let camX = 0, camY = 0, camActive = false;
+
+// Map-specific color themes
+const MAP_THEMES = {
+  warehouse: {
+    floor: ['#1a1814', '#1c1a16', '#181610'],
+    debris: ['#2a2418', '#24201a'],
+    grid: '#221e16',
+    wallBase: '#2a2218', wallTop: '#3a3228', wallLeft: '#322a20',
+    wallBody: '#241c14', wallLine: '#1e1810',
+    wallShadowR: '#161008', wallShadowB: '#100c06', wallBevel: '#40382c',
+    bg: '#0e0c08',
+  },
+  bunker: {
+    floor: ['#0c100c', '#0e120e', '#0a0e0a'],
+    debris: ['#182018', '#142014'],
+    grid: '#141a14',
+    wallBase: '#1a2818', wallTop: '#2a3a20', wallLeft: '#223018',
+    wallBody: '#142210', wallLine: '#0e1a0c',
+    wallShadowR: '#081208', wallShadowB: '#060e06', wallBevel: '#344830',
+    bg: '#060806',
+  },
+  city: {
+    floor: ['#1a1818', '#1c1a18', '#181616'],
+    debris: ['#2a2420', '#24201c'],
+    grid: '#222018',
+    wallBase: '#2a2220', wallTop: '#3a2e28', wallLeft: '#322820',
+    wallBody: '#221a18', wallLine: '#1c1410',
+    wallShadowR: '#14100e', wallShadowB: '#100c0a', wallBevel: '#3e3228',
+    bg: '#0a0808',
+  },
+};
+
+function getTheme() { return MAP_THEMES[selectedMap] || MAP_THEMES.warehouse; }
 function setActiveWeapon(id) { activeWeaponId = id; localStorage.setItem('dz_activeWeapon', id); }
 let ownedWeaponIds = ['pistol'];
 let selectedArsenalWeapon = 'pistol';
@@ -1540,38 +1573,30 @@ function generateWarehouse() {
 }
 
 function generateBunker() {
+  // Open floor with bunker-themed obstacles — NO closed rooms
   const midC = Math.floor(COLS / 2), midR = Math.floor(ROWS / 2);
-  // Fill everything with walls, then carve out rooms and corridors
-  for (let r = 2; r < ROWS - 2; r++)
-    for (let c = 2; c < COLS - 2; c++) MAP[r][c] = 1;
 
-  // Central hub (5x5)
-  for (let r = midR - 2; r <= midR + 2; r++)
-    for (let c = midC - 2; c <= midC + 2; c++) MAP[r][c] = 0;
-
-  // 4 corridors from center (width 2)
-  for (let c = 2; c < midC - 2; c++) { MAP[midR][c] = 0; MAP[midR - 1][c] = 0; } // left
-  for (let c = midC + 3; c < COLS - 2; c++) { MAP[midR][c] = 0; MAP[midR - 1][c] = 0; } // right
-  for (let r = 2; r < midR - 2; r++) { MAP[r][midC] = 0; MAP[r][midC + 1] = 0; } // up
-  for (let r = midR + 3; r < ROWS - 2; r++) { MAP[r][midC] = 0; MAP[r][midC + 1] = 0; } // down
-
-  // 4 corner rooms (6x4 each)
-  function carveRoom(c0, r0, w, h) {
-    for (let r = r0; r < r0 + h && r < ROWS - 1; r++)
-      for (let c = c0; c < c0 + w && c < COLS - 1; c++) if (r > 0 && c > 0) MAP[r][c] = 0;
-  }
-  const rw = Math.min(7, Math.floor(COLS * 0.18)), rh = Math.min(5, Math.floor(ROWS * 0.22));
-  carveRoom(3, 3, rw, rh); // top-left
-  carveRoom(COLS - 3 - rw, 3, rw, rh); // top-right
-  carveRoom(3, ROWS - 3 - rh, rw, rh); // bottom-left
-  carveRoom(COLS - 3 - rw, ROWS - 3 - rh, rw, rh); // bottom-right
-
-  // Side alcoves off corridors
-  const alcW = 3, alcH = 2;
-  carveRoom(Math.floor(COLS * 0.3), midR + 2, alcW, alcH); // left corridor alcove
-  carveRoom(Math.floor(COLS * 0.65), midR - 3, alcW, alcH); // right corridor alcove
-  carveRoom(midC - 3, Math.floor(ROWS * 0.25), alcH, alcW); // top corridor alcove
-  carveRoom(midC + 3, Math.floor(ROWS * 0.7), alcH, alcW); // bottom corridor alcove
+  // Control console clusters (2x1 blocks scattered)
+  const obstacles = [
+    // Center cross
+    [midC, midR - 1], [midC, midR + 1], [midC - 1, midR], [midC + 1, midR],
+    // Corner barricades (L-shapes)
+    [3, 3], [4, 3], [3, 4],
+    [COLS-4, 3], [COLS-5, 3], [COLS-4, 4],
+    [3, ROWS-4], [4, ROWS-4], [3, ROWS-5],
+    [COLS-4, ROWS-4], [COLS-5, ROWS-4], [COLS-4, ROWS-5],
+    // Mid pillars
+    [Math.floor(COLS*0.3), Math.floor(ROWS*0.3)], [Math.floor(COLS*0.3)+1, Math.floor(ROWS*0.3)],
+    [Math.floor(COLS*0.7), Math.floor(ROWS*0.3)], [Math.floor(COLS*0.7), Math.floor(ROWS*0.3)+1],
+    [Math.floor(COLS*0.3), Math.floor(ROWS*0.7)], [Math.floor(COLS*0.3), Math.floor(ROWS*0.7)-1],
+    [Math.floor(COLS*0.7), Math.floor(ROWS*0.7)], [Math.floor(COLS*0.7)-1, Math.floor(ROWS*0.7)],
+    // Side barricades
+    [Math.floor(COLS*0.5), Math.floor(ROWS*0.2)], [Math.floor(COLS*0.5)+1, Math.floor(ROWS*0.2)],
+    [Math.floor(COLS*0.5), Math.floor(ROWS*0.8)], [Math.floor(COLS*0.5)-1, Math.floor(ROWS*0.8)],
+    [Math.floor(COLS*0.15), midR], [Math.floor(COLS*0.15), midR+1],
+    [Math.floor(COLS*0.85), midR], [Math.floor(COLS*0.85), midR-1],
+  ];
+  for (const [c, r] of obstacles) placeWall(c, r);
 }
 
 // City: truly infinite procedural map — no MAP array needed
@@ -1628,14 +1653,14 @@ function wallCollide(x, y, r) {
 let SPAWN_EDGES = [];
 function rebuildSpawnEdges() {
   SPAWN_EDGES = [];
-  // Only add edge positions where the tile is actually floor (not wall)
+  if (camActive) return; // City: infinite map, zombies spawn around player
   for (let col = 1; col < COLS-1; col++) {
-    if (MAP[1][col] === 0) SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: TILE+TILE/2 });
-    if (MAP[ROWS-2][col] === 0) SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: (ROWS-2)*TILE+TILE/2 });
+    if (MAP[1] && MAP[1][col] === 0) SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: TILE+TILE/2 });
+    if (MAP[ROWS-2] && MAP[ROWS-2][col] === 0) SPAWN_EDGES.push({ x: col*TILE+TILE/2, y: (ROWS-2)*TILE+TILE/2 });
   }
   for (let row = 1; row < ROWS-1; row++) {
-    if (MAP[row][1] === 0) SPAWN_EDGES.push({ x: TILE+TILE/2, y: row*TILE+TILE/2 });
-    if (MAP[row][COLS-2] === 0) SPAWN_EDGES.push({ x: (COLS-2)*TILE+TILE/2, y: row*TILE+TILE/2 });
+    if (MAP[row] && MAP[row][1] === 0) SPAWN_EDGES.push({ x: TILE+TILE/2, y: row*TILE+TILE/2 });
+    if (MAP[row] && MAP[row][COLS-2] === 0) SPAWN_EDGES.push({ x: (COLS-2)*TILE+TILE/2, y: row*TILE+TILE/2 });
   }
 }
 rebuildSpawnEdges();
@@ -1645,6 +1670,7 @@ let flowfield = null; // 2D array of {dx, dy} directions
 let mapCacheCanvas = null; // pre-rendered map for perf
 
 function computeFlowfield() {
+  if (camActive) { flowfield = null; return; } // City: no flowfield, zombies move directly
   const pTileX = Math.floor(player.x / TILE);
   const pTileY = Math.floor(player.y / TILE);
 
@@ -4671,26 +4697,58 @@ function drawTileAt(tctx, col, row) {
   if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
   const cell = MAP[row][col];
   const x = col * TILE, y = row * TILE;
-  if (cell === 1) {
-    tctx.fillStyle = '#141418'; tctx.fillRect(x, y, TILE, TILE);
-    tctx.fillStyle = '#2a2a30'; tctx.fillRect(x, y, TILE, 6);
-    tctx.fillStyle = '#252530'; tctx.fillRect(x, y, 3, TILE);
-    tctx.fillStyle = '#1a1a20'; tctx.fillRect(x + 3, y + 6, TILE - 6, TILE - 9);
-    tctx.strokeStyle = '#16161c'; tctx.lineWidth = 0.6;
+  const th = getTheme();
+  if (cell >= 1) {
+    tctx.fillStyle = th.wallBase; tctx.fillRect(x, y, TILE, TILE);
+    tctx.fillStyle = th.wallTop; tctx.fillRect(x, y, TILE, 6);
+    tctx.fillStyle = th.wallLeft; tctx.fillRect(x, y, 3, TILE);
+    tctx.fillStyle = th.wallBody; tctx.fillRect(x + 3, y + 6, TILE - 6, TILE - 9);
+    tctx.strokeStyle = th.wallLine; tctx.lineWidth = 0.6;
     tctx.beginPath();
     tctx.moveTo(x + 4, y + Math.floor(TILE * 0.35)); tctx.lineTo(x + TILE - 4, y + Math.floor(TILE * 0.35));
     tctx.moveTo(x + 4, y + Math.floor(TILE * 0.65)); tctx.lineTo(x + TILE - 4, y + Math.floor(TILE * 0.65));
     tctx.stroke();
-    tctx.fillStyle = '#0e0e12'; tctx.fillRect(x + TILE - 2, y, 2, TILE);
-    tctx.fillStyle = '#0a0a0e'; tctx.fillRect(x, y + TILE - 3, TILE, 3);
-    tctx.fillStyle = '#333340'; tctx.fillRect(x, y, TILE, 1); tctx.fillRect(x, y, 1, TILE);
+    // Bunker: bolt dots instead of brick lines
+    if (selectedMap === 'bunker') {
+      tctx.fillStyle = th.wallBevel;
+      [[5,5],[TILE-6,5],[5,TILE-6],[TILE-6,TILE-6]].forEach(([bx,by]) => {
+        tctx.beginPath(); tctx.arc(x+bx, y+by, 1.5, 0, Math.PI*2); tctx.fill();
+      });
+    }
+    tctx.fillStyle = th.wallShadowR; tctx.fillRect(x + TILE - 2, y, 2, TILE);
+    tctx.fillStyle = th.wallShadowB; tctx.fillRect(x, y + TILE - 3, TILE, 3);
+    tctx.fillStyle = th.wallBevel; tctx.fillRect(x, y, TILE, 1); tctx.fillRect(x, y, 1, TILE);
+    // Bunker: green light strip on walls adjacent to floor above
+    if (selectedMap === 'bunker' && row > 0 && MAP[row-1] && MAP[row-1][col] === 0) {
+      tctx.fillStyle = '#33ff55'; tctx.fillRect(x + 4, y, TILE - 8, 1.5);
+      tctx.shadowBlur = 4; tctx.shadowColor = '#33ff55'; tctx.fillRect(x + 4, y, TILE - 8, 1); tctx.shadowBlur = 0;
+    }
   } else {
-    const noise = getFloorNoise(col, row);
-    tctx.fillStyle = noise.variant; tctx.fillRect(x, y, TILE, TILE);
-    tctx.strokeStyle = '#181820'; tctx.lineWidth = 0.3; tctx.strokeRect(x, y, TILE, TILE);
-    for (const d of noise.debris) { tctx.fillStyle = d.color; tctx.fillRect(x + d.ox, y + d.oy, d.r, d.r); }
-    if (row > 0 && row < ROWS && MAP[row-1] && MAP[row-1][col] >= 1) { tctx.fillStyle = 'rgba(0,0,0,0.25)'; tctx.fillRect(x, y, TILE, 4); }
-    if (col > 0 && MAP[row][col-1] >= 1) { tctx.fillStyle = 'rgba(0,0,0,0.2)'; tctx.fillRect(x, y, 3, TILE); }
+    const s = ((col * 137 + row * 311) % 1000) / 1000;
+    tctx.fillStyle = s < 0.33 ? th.floor[0] : s < 0.66 ? th.floor[1] : th.floor[2];
+    tctx.fillRect(x, y, TILE, TILE);
+    tctx.strokeStyle = th.grid; tctx.lineWidth = 0.3; tctx.strokeRect(x, y, TILE, TILE);
+    // Debris
+    for (let d = 0; d < 3; d++) {
+      const ds = ((col * 53 + row * 97 + d * 31) % 1000) / 1000;
+      const ds2 = ((col * 71 + row * 43 + d * 67) % 1000) / 1000;
+      tctx.fillStyle = th.debris[d % th.debris.length];
+      tctx.fillRect(x + ds * (TILE - 4) + 2, y + ds2 * (TILE - 4) + 2, 0.5 + ds, 0.5 + ds2);
+    }
+    // Bunker diamond plate pattern
+    if (selectedMap === 'bunker') {
+      tctx.fillStyle = 'rgba(20,30,20,0.25)';
+      for (let dy = 2; dy < TILE; dy += 8) {
+        for (let dx = ((dy/8|0) % 2) * 4; dx < TILE; dx += 8) {
+          tctx.beginPath();
+          tctx.moveTo(x+dx, y+dy-2); tctx.lineTo(x+dx+2, y+dy); tctx.lineTo(x+dx, y+dy+2); tctx.lineTo(x+dx-2, y+dy);
+          tctx.closePath(); tctx.fill();
+        }
+      }
+    }
+    // Shadows from adjacent walls
+    if (row > 0 && MAP[row-1] && MAP[row-1][col] >= 1) { tctx.fillStyle = 'rgba(0,0,0,0.25)'; tctx.fillRect(x, y, TILE, 5); }
+    if (col > 0 && MAP[row][col-1] >= 1) { tctx.fillStyle = 'rgba(0,0,0,0.2)'; tctx.fillRect(x, y, 4, TILE); }
     if (row < ROWS-1 && MAP[row+1] && MAP[row+1][col] >= 1) { tctx.fillStyle = 'rgba(0,0,0,0.12)'; tctx.fillRect(x, y + TILE - 2, TILE, 2); }
     if (col < COLS-1 && MAP[row][col+1] >= 1) { tctx.fillStyle = 'rgba(0,0,0,0.12)'; tctx.fillRect(x + TILE - 2, y, 2, TILE); }
   }
@@ -4718,99 +4776,14 @@ function drawMap() {
     ctx.drawImage(mapCacheCanvas, 0, 0);
     return;
   }
-  // Create off-screen cache — render map once
+  // Create off-screen cache using themed drawTileAt
   mapCacheCanvas = document.createElement('canvas');
   mapCacheCanvas.width = COLS * TILE;
   mapCacheCanvas.height = ROWS * TILE;
   const mctx = mapCacheCanvas.getContext('2d');
-
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const cell = MAP[row][col];
-      const x = col * TILE, y = row * TILE;
-      if (cell === 1) {
-        // Wall — 3D beveled concrete block
-        // Side face (darker)
-        mctx.fillStyle = '#141418';
-        mctx.fillRect(x, y, TILE, TILE);
-
-        // Top face (lighter, gives depth)
-        mctx.fillStyle = '#2a2a30';
-        mctx.fillRect(x, y, TILE, 6);
-
-        // Left edge highlight
-        mctx.fillStyle = '#252530';
-        mctx.fillRect(x, y, 3, TILE);
-
-        // Main body with brick-like horizontal lines
-        mctx.fillStyle = '#1a1a20';
-        mctx.fillRect(x + 3, y + 6, TILE - 6, TILE - 9);
-
-        // Brick lines
-        mctx.strokeStyle = '#16161c';
-        mctx.lineWidth = 0.6;
-        const brickY1 = y + Math.floor(TILE * 0.35);
-        const brickY2 = y + Math.floor(TILE * 0.65);
-        mctx.beginPath();
-        mctx.moveTo(x + 4, brickY1); mctx.lineTo(x + TILE - 4, brickY1);
-        mctx.moveTo(x + 4, brickY2); mctx.lineTo(x + TILE - 4, brickY2);
-        mctx.stroke();
-
-        // Right edge shadow
-        mctx.fillStyle = '#0e0e12';
-        mctx.fillRect(x + TILE - 2, y, 2, TILE);
-
-        // Bottom edge shadow
-        mctx.fillStyle = '#0a0a0e';
-        mctx.fillRect(x, y + TILE - 3, TILE, 3);
-
-        // Top-left bevel highlight
-        mctx.fillStyle = '#333340';
-        mctx.fillRect(x, y, TILE, 1);
-        mctx.fillRect(x, y, 1, TILE);
-
-      } else {
-        // Floor — cracked concrete with noise variation
-        const noise = getFloorNoise(col, row);
-        mctx.fillStyle = noise.variant;
-        mctx.fillRect(x, y, TILE, TILE);
-
-        // Subtle grid lines (very faint)
-        mctx.strokeStyle = '#181820';
-        mctx.lineWidth = 0.3;
-        mctx.strokeRect(x, y, TILE, TILE);
-
-        // Debris dots
-        for (const d of noise.debris) {
-          mctx.fillStyle = d.color;
-          mctx.fillRect(x + d.ox, y + d.oy, d.r, d.r);
-        }
-
-        // Shadow along wall bases — check adjacent walls
-        if (row > 0 && MAP[row-1][col] >= 1) {
-          // Wall above — cast shadow down
-          mctx.fillStyle = 'rgba(0,0,0,0.25)';
-          mctx.fillRect(x, y, TILE, 4);
-        }
-        if (col > 0 && MAP[row][col-1] >= 1) {
-          // Wall to the left — cast shadow right
-          mctx.fillStyle = 'rgba(0,0,0,0.2)';
-          mctx.fillRect(x, y, 3, TILE);
-        }
-        if (row < ROWS-1 && MAP[row+1][col] >= 1) {
-          // Wall below — subtle top shadow
-          mctx.fillStyle = 'rgba(0,0,0,0.12)';
-          mctx.fillRect(x, y + TILE - 2, TILE, 2);
-        }
-        if (col < COLS-1 && MAP[row][col+1] >= 1) {
-          // Wall to the right — subtle left shadow
-          mctx.fillStyle = 'rgba(0,0,0,0.12)';
-          mctx.fillRect(x + TILE - 2, y, 2, TILE);
-        }
-      }
-    }
-  }
-  // Blit the cache to the main canvas
+  for (let row = 0; row < ROWS; row++)
+    for (let col = 0; col < COLS; col++)
+      drawTileAt(mctx, col, row);
   ctx.drawImage(mapCacheCanvas, 0, 0);
 }
 
