@@ -1578,8 +1578,8 @@ function generateBunker() {
 
   // Control console clusters (2x1 blocks scattered)
   const obstacles = [
-    // Center cross
-    [midC, midR - 1], [midC, midR + 1], [midC - 1, midR], [midC + 1, midR],
+    // Center pillars (offset from spawn)
+    [midC - 3, midR], [midC + 3, midR], [midC, midR - 3], [midC, midR + 3],
     // Corner barricades (L-shapes)
     [3, 3], [4, 3], [3, 4],
     [COLS-4, 3], [COLS-5, 3], [COLS-4, 4],
