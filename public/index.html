@@ -7804,19 +7804,22 @@ function mpLoop(now) {
   // Find local player for camera/angle
   const localPlayer = state.players.find(p => p.id === mpLocalId);
 
-  // Draw pickups
-  for (const pk of (state.pickups || [])) {
-    ctx.save();
-    ctx.translate(pk.x, pk.y);
+  // Draw pickups (server sends { health: [...], ammo: [...] })
+  const pkData = state.pickups || {};
+  for (const h of (pkData.health || [])) {
+    ctx.save(); ctx.translate(h.x, h.y);
     const pulse = 0.8 + Math.sin(frameCount * 0.1) * 0.2;
     ctx.globalAlpha = pulse;
-    if (pk.type === 'health') {
-      ctx.fillStyle = '#33cc44'; ctx.shadowBlur = 12; ctx.shadowColor = '#33cc4488';
-      ctx.fillRect(-3, -8, 6, 16); ctx.fillRect(-8, -3, 16, 6);
-    } else {
-      ctx.fillStyle = '#ccaa00'; ctx.shadowBlur = 12; ctx.shadowColor = '#ccaa0088';
-      ctx.fillRect(-2, -8, 4, 12);
-    }
+    ctx.fillStyle = '#33cc44'; ctx.shadowBlur = 12; ctx.shadowColor = '#33cc4488';
+    ctx.fillRect(-3, -8, 6, 16); ctx.fillRect(-8, -3, 16, 6);
+    ctx.restore();
+  }
+  for (const a of (pkData.ammo || [])) {
+    ctx.save(); ctx.translate(a.x, a.y);
+    const pulse = 0.8 + Math.sin(frameCount * 0.1) * 0.2;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#ccaa00'; ctx.shadowBlur = 12; ctx.shadowColor = '#ccaa0088';
+    ctx.fillRect(-2, -8, 4, 12);
     ctx.restore();
   }
 
