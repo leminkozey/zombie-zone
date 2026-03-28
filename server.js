@@ -7,6 +7,11 @@ const fs = require('fs');
 const path = require('path');
 const { Server } = require('socket.io');
 const GameRoom = require('./game-server');
+const database = require('./database');
+
+// Async init needed for sql.js fallback (no-op when better-sqlite3 works)
+(async () => {
+await database.init();
 const {
   createUser, findUserByName, addXp, getUser, getUserSkills, upsertSkill, applyDeath,
   getUserWeapons, getWeapon, buyWeapon, addGold, setGold, addDiamonds, upgradeWeaponStat,
@@ -14,7 +19,7 @@ const {
   addStats, getStats, incrementRescues, updatePassword,
   getUserOperators, getOperator, buyOperator, setActiveOperator,
   resetOperatorUpgrades, upgradeOperatorSlot,
-} = require('./database');
+} = database;
 
 const app = express();
 app.use(express.json());
@@ -496,6 +501,7 @@ io.on('connection', (socket) => {
     playerInfo.weapon = String(data.weapon || 'pistol').substring(0, 20);
     playerInfo.maxHp = Math.min(500, Math.max(100, Number(data.maxHp) || 100));
     playerInfo.speed = Math.min(5, Math.max(1, Number(data.speed) || 2.8));
+    playerInfo.operator = data.operator ? String(data.operator).substring(0, 20) : null;
   });
 
   socket.on('create-lobby', (cb) => {
@@ -547,6 +553,7 @@ io.on('connection', (socket) => {
     // Create GameRoom
     lobby.gameRoom = new GameRoom(currentLobby, lobby.players.map(p => ({
       id: p.id, name: p.name, level: p.level, weapon: p.weapon,
+      maxHp: p.maxHp, speed: p.speed, operator: p.operator,
     })));
     // Start game loop — 20 ticks/sec
     lobby.gameInterval = setInterval(() => {
@@ -602,3 +609,4 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => console.log(`DEAD ZONE server running on http://localhost:${PORT}`));
+})();
