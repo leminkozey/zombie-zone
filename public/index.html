@@ -7637,7 +7637,7 @@ function mpConnect() {
   });
   mpSocket.on('lobby-updated', (data) => { mpPlayers = data.players; mpIsHost = data.hostId === mpSocket.id; renderMpLobby(); });
   mpSocket.on('game-start', (data) => { mpStartGame(data); });
-  mpSocket.on('game-state', (data) => { mpPrevState = mpGameState; mpGameState = data; mpInterpT = 0; });
+  mpSocket.on('game-state', (data) => { mpPrevState = mpGameState; mpGameState = data; mpInterpT = 0; if (!mpPrevState) console.log('[MP] First game-state received, zombies:', (data.zombies||[]).length, 'players:', (data.players||[]).length); });
   mpSocket.on('game-over', () => { mpEndGame(); });
   mpSocket.on('kicked', () => { mpDisconnect(); alert('Du wurdest gekickt'); });
 }
@@ -7738,7 +7738,20 @@ function mpEndGame() {
 
 // ── MULTIPLAYER GAME LOOP ────────────────────────────
 function mpLoop(now) {
-  if (!mpEnabled || !mpGameState) { if (mpEnabled) requestAnimationFrame(mpLoop); return; }
+  if (!mpEnabled) return;
+  if (!mpGameState) {
+    // Warte auf ersten Server-State — zeichne Map als Ladebildschirm
+    ctx.clearRect(0, 0, W, H);
+    if (MAP && MAP.length > 0) drawMap();
+    ctx.save();
+    ctx.font = "24px 'Bebas Neue', sans-serif";
+    ctx.fillStyle = '#ee2200';
+    ctx.textAlign = 'center';
+    ctx.fillText('WARTE AUF SERVER...', W/2, H/2);
+    ctx.restore();
+    requestAnimationFrame(mpLoop);
+    return;
+  }
   frameCount++;
 
   // Send inputs to server every frame
