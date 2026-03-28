@@ -7641,8 +7641,9 @@ function mpConnect() {
       name: currentUser,
       level: getLevelFromXp(globalXp),
       weapon: activeWeaponId,
-      maxHp: getPlayerStat('maxHp'),
-      speed: getPlayerStat('moveSpeed'),
+      maxHp: Math.round(getPlayerStat('maxHp')),
+      speed: Math.round(getPlayerStat('moveSpeed') * 100) / 100,
+      operator: activeOperatorId,
     });
   });
   mpSocket.on('lobby-updated', (data) => { mpPlayers = data.players; mpIsHost = data.hostId === mpSocket.id; renderMpLobby(); });
@@ -7798,10 +7799,20 @@ function mpLoop(now) {
   if (mouseDown && !player._lastMouseDown) player._shootBuffered = true;
   player._lastMouseDown = mouseDown;
 
-  // Send inputs to server (throttled to ~20/sec to match server tick rate)
-  if (mpSocket && frameCount % 3 === 0) {
+  // Send inputs to server EVERY FRAME (throttling caused input drops)
+  if (mpSocket) {
     const shootInput = mouseDown || player._shootBuffered;
     player._shootBuffered = false;
+
+    // Calculate mouse angle properly — convert screen mouse to canvas coordinates
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasMouseX = mouseX * scaleX;
+    const canvasMouseY = mouseY * scaleY;
+    const lp = mpGameState && mpGameState.players ? mpGameState.players.find(p => p.id === mpLocalId) : null;
+    const aimAngle = lp ? Math.atan2(canvasMouseY - lp.y, canvasMouseX - lp.x) : 0;
+
     mpSocket.emit('input', {
       keys: {
         up: !!keys[keybinds.moveUp], down: !!keys[keybinds.moveDown],
@@ -7809,11 +7820,7 @@ function mpLoop(now) {
         reload: !!keys[keybinds.reload], dash: !!keys[keybinds.dash],
         shoot: shootInput, rescue: !!keys[keybinds.rescue],
       },
-      mouseAngle: (function() {
-        const lp = mpGameState.players ? mpGameState.players.find(p => p.id === mpLocalId) : null;
-        if (lp) return Math.atan2(mouseY - lp.y, mouseX - lp.x);
-        return Math.atan2(mouseY - H/2, mouseX - W/2);
-      })(),
+      mouseAngle: aimAngle,
     });
   }
 
@@ -7979,6 +7986,9 @@ function mpLoop(now) {
     bar.style.width = (pct * 100) + '%';
     bar.style.background = pct > 0.6 ? '#33cc44' : pct > 0.3 ? '#ccaa00' : '#cc2200';
     document.getElementById('ammo-val').textContent = localPlayer.ammo || 0;
+    // Show level
+    const xpLvl = document.getElementById('xp-level');
+    if (xpLvl) xpLvl.textContent = 'LVL ' + (localPlayer.level || 1);
   }
 
   // Process events for sounds and feedback

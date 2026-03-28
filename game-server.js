@@ -210,6 +210,8 @@ class GameRoom {
     const p = {
       id: info.id,
       name: info.name || 'Player',
+      level: info.level || 1,
+      operator: info.operator || null,
       x: cx + offset,
       y: cy,
       angle: 0,
@@ -802,7 +804,7 @@ class GameRoom {
       waveKills: this.waveKills,
       waveTotal: this.waveTotal,
       players: this.players.map(p => ({
-        id: p.id, name: p.name,
+        id: p.id, name: p.name, level: p.level || 1, operator: p.operator || null,
         x: Math.round(p.x * 10) / 10,
         y: Math.round(p.y * 10) / 10,
         angle: Math.round(p.angle * 100) / 100,
