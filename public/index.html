@@ -3540,8 +3540,24 @@ function applyMove(entity, mx, my, collR) {
   return false;
 }
 
+// ── SPATIAL HASH FOR ZOMBIE SEPARATION ───────────────
+const ZHASH_CELL = 80; // ~2 tiles, covers max zombie radius overlap
+const _zombieHash = new Map();
+
+function buildZombieHash() {
+  _zombieHash.clear();
+  for (const z of zombies) {
+    if (!z.alive || z.burrowed) continue;
+    const key = (Math.floor(z.x / ZHASH_CELL) * 100000) + Math.floor(z.y / ZHASH_CELL);
+    let cell = _zombieHash.get(key);
+    if (!cell) { cell = []; _zombieHash.set(key, cell); }
+    cell.push(z);
+  }
+}
+
 // ── ZOMBIE UPDATE ────────────────────────────────────
 function updateZombies() {
+  buildZombieHash();
   for (const z of zombies) {
     if (!z.alive) continue;
 
@@ -3761,15 +3777,24 @@ function updateZombies() {
       z.hitting = false;
     }
 
-    // Zombie-zombie separation (full radius)
-    for (const z2 of zombies) {
-      if (z2 === z || !z2.alive || z.burrowed || z2.burrowed) continue;
-      const ex = z.x - z2.x, ey = z.y - z2.y;
-      const ed = Math.sqrt(ex*ex+ey*ey);
-      if (ed < z.radius + z2.radius && ed > 0) {
-        const push = (z.radius + z2.radius - ed) / 2 * 0.3;
-        z.x += (ex/ed)*push; z.y += (ey/ed)*push;
-        z2.x -= (ex/ed)*push; z2.y -= (ey/ed)*push;
+    // Zombie-zombie separation (spatial hash — O(n) avg)
+    const zcx = Math.floor(z.x / ZHASH_CELL);
+    const zcy = Math.floor(z.y / ZHASH_CELL);
+    for (let ndy = -1; ndy <= 1; ndy++) {
+      for (let ndx = -1; ndx <= 1; ndx++) {
+        const nkey = (zcx + ndx) * 100000 + (zcy + ndy);
+        const cell = _zombieHash.get(nkey);
+        if (!cell) continue;
+        for (const z2 of cell) {
+          if (z2 === z) continue;
+          const ex = z.x - z2.x, ey = z.y - z2.y;
+          const ed = Math.sqrt(ex * ex + ey * ey);
+          if (ed < z.radius + z2.radius && ed > 0) {
+            const push = (z.radius + z2.radius - ed) / 2 * 0.3;
+            z.x += (ex / ed) * push; z.y += (ey / ed) * push;
+            z2.x -= (ex / ed) * push; z2.y -= (ey / ed) * push;
+          }
+        }
       }
     }
 
