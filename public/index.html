@@ -3674,7 +3674,7 @@ function updateZombies() {
       const adx = dashAfterimage.x - z.x, ady = dashAfterimage.y - z.y;
       const adist = Math.sqrt(adx*adx + ady*ady);
       if (adist < 150) {
-        const spd = z.speed;
+        const spd = z.speed * timeScale;
         applyMove(z, (adx/adist) * spd, (ady/adist) * spd, moveR);
         z.angle = Math.atan2(ady, adx);
         continue;
@@ -3685,7 +3685,7 @@ function updateZombies() {
     if ((z.type === 'spitter' || z.type === 'screamer' || z.type === 'healer') && dist > 1) {
       if (dist < 150) {
         // flee from player
-        const spd = z.speed;
+        const spd = z.speed * timeScale;
         applyMove(z, -(dx/dist) * spd, -(dy/dist) * spd, moveR);
       }
       // if dist 150-200, do nothing (hold position)
@@ -3700,7 +3700,7 @@ function updateZombies() {
           const tdx = t.x - z.x, tdy = t.y - z.y;
           const tdist = Math.sqrt(tdx*tdx + tdy*tdy);
           if (tdist < 200 && tdist > 15) {
-            const spd = z.speed;
+            const spd = z.speed * timeScale;
             const cryoMult = z.cryoTimer > 0 ? 0.7 : 1.0;
             const mx = (tdx/tdist) * spd * cryoMult;
             const my = (tdy/tdist) * spd * cryoMult;
@@ -3757,7 +3757,7 @@ function updateZombies() {
 
     // spitter shooting
     if (z.type === 'spitter' && z.alive) {
-      z.shootCooldown--;
+      z.shootCooldown -= timeScale;
       if (z.shootCooldown <= 0 && dist < 300) {
         z.shootCooldown = 150; // ~2.5s at 60fps
         z.throwAnim = 8;
@@ -3775,7 +3775,8 @@ function updateZombies() {
 
     // Zombie hits player (full radius for combat)
     if (dist < PLAYER_R + z.radius - 2) {
-      if (!z.hitting || frameCount - z.lastHit > 40) {
+      const hitCooldown = timeScale < 1 ? Math.ceil(40 / timeScale) : 40;
+      if (!z.hitting || frameCount - z.lastHit > hitCooldown) {
         z.lastHit = frameCount;
         damagePlayer(z.screamBuff > 0 ? 10 : 8, 'melee');
       }
@@ -4066,7 +4067,7 @@ function updateSpecialZombies() {
 
     // Screamer buff
     if (z.type === 'screamer') {
-      z.screamCooldown--;
+      z.screamCooldown -= timeScale;
       if (z.screamCooldown <= 0) {
         z.screamCooldown = 300;
         for (const oz of zombies) {
@@ -4131,7 +4132,7 @@ function updateSpecialZombies() {
           floatingTexts.push({ x: z.x, y: z.y - 15, text: 'BURROW!', life: 30, maxLife: 30, color: '#887744' });
         }
       } else {
-        z.burrowCooldown--;
+        z.burrowCooldown -= timeScale;
         if (z.burrowCooldown <= 0) {
           z.burrowed = true;
           z.burrowTimer = 90;
@@ -4144,7 +4145,7 @@ function updateSpecialZombies() {
 
     // Broodmother egg laying
     if (z.type === 'broodmother') {
-      z.eggCooldown--;
+      z.eggCooldown -= timeScale;
       if (z.eggCooldown <= 0 && z.eggs < 3) {
         z.eggCooldown = 480;
         z.eggs++;
