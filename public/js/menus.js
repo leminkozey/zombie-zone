@@ -98,6 +98,175 @@ function stDiamondPath(ctx, x, y, r) {
   ctx.closePath();
 }
 
+function drawSkillConnections(col, connections) {
+  for (const c of connections) {
+    const from = SKILL_MAP[c.from], to = SKILL_MAP[c.to];
+    const p1 = stWorldToScreen(from.x, from.y), p2 = stWorldToScreen(to.x, to.y);
+    const fromInvested = getSkillLevel(from.id) > 0 || from.tier === 0;
+    const active = fromInvested;
+
+    if (active) {
+      stCtx.save();
+      stCtx.strokeStyle = col.glow; stCtx.lineWidth = 4 * stZoom;
+      stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
+      stCtx.restore();
+    }
+
+    stCtx.strokeStyle = active ? col.line : '#111418';
+    stCtx.lineWidth = (active ? 2 : 1) * stZoom;
+    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
+
+    if (active) {
+      for (let i = 0; i < 3; i++) {
+        const t = ((stTime * 0.25 + i / 3) % 1);
+        const fx = p1.x + (p2.x - p1.x) * t;
+        const fy = p1.y + (p2.y - p1.y) * t;
+        stCtx.fillStyle = col.main;
+        stCtx.globalAlpha = 0.5 * (1 - Math.abs(t - 0.5) * 2);
+        stCtx.beginPath(); stCtx.arc(fx, fy, 1.5 * stZoom, 0, Math.PI * 2); stCtx.fill();
+      }
+      stCtx.globalAlpha = 1;
+
+      const at = 0.7;
+      const ax = p1.x + (p2.x - p1.x) * at;
+      const ay = p1.y + (p2.y - p1.y) * at;
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      const arrowSize = 4 * stZoom;
+      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.6;
+      stCtx.beginPath();
+      stCtx.moveTo(ax + Math.cos(angle) * arrowSize, ay + Math.sin(angle) * arrowSize);
+      stCtx.lineTo(ax + Math.cos(angle + 2.5) * arrowSize * 0.7, ay + Math.sin(angle + 2.5) * arrowSize * 0.7);
+      stCtx.lineTo(ax + Math.cos(angle - 2.5) * arrowSize * 0.7, ay + Math.sin(angle - 2.5) * arrowSize * 0.7);
+      stCtx.fill();
+      stCtx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawSkillNodes(col, skillDefs) {
+  for (const s of skillDefs) {
+    const p = stWorldToScreen(s.x, s.y);
+    const isHovered = stHovered === s;
+    const r = s.r * stZoom;
+    const invested = getSkillLevel(s.id);
+    const unlockable = isSkillUnlockable(s);
+    const hasInvestment = invested > 0;
+    const isTier3 = s.tier === 3;
+    const isStart = s.tier === 0;
+    const isLocked = !hasInvestment && !unlockable && !isStart;
+
+    if ((hasInvestment || isHovered) && !isStart) {
+      stCtx.save();
+      stCtx.shadowBlur = isHovered ? 30 : 18;
+      stCtx.shadowColor = col.main;
+      isTier3 ? stDiamondPath(stCtx, p.x, p.y, r) : stHexPath(stCtx, p.x, p.y, r);
+      stCtx.fillStyle = 'rgba(0,0,0,0.01)'; stCtx.fill();
+      stCtx.restore();
+    }
+
+    if (isTier3) {
+      const pulse = r + 5*stZoom + Math.sin(stTime * 2) * 2*stZoom;
+      stCtx.save();
+      stDiamondPath(stCtx, p.x, p.y, pulse);
+      stCtx.strokeStyle = hasInvestment ? col.main : col.dim;
+      stCtx.lineWidth = stZoom;
+      stCtx.globalAlpha = 0.3 + Math.sin(stTime * 2) * 0.15;
+      stCtx.setLineDash([3*stZoom, 3*stZoom]); stCtx.stroke();
+      stCtx.restore();
+    }
+
+    stCtx.save();
+    if (isTier3) {
+      stDiamondPath(stCtx, p.x, p.y, r);
+    } else if (isStart) {
+      stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    } else {
+      stHexPath(stCtx, p.x, p.y, r);
+    }
+
+    if (hasInvestment) {
+      stCtx.fillStyle = col.bg;
+    } else if (isStart) {
+      stCtx.fillStyle = 'rgba(15,18,22,0.9)';
+    } else if (isLocked) {
+      stCtx.fillStyle = '#0a0c0e';
+    } else if (isHovered) {
+      stCtx.fillStyle = 'rgba(20,25,30,0.95)';
+    } else {
+      stCtx.fillStyle = '#0c0e12';
+    }
+    stCtx.fill();
+
+    if (hasInvestment) {
+      stCtx.strokeStyle = col.main;
+      stCtx.lineWidth = 2 * stZoom;
+    } else if (unlockable) {
+      stCtx.strokeStyle = col.dim;
+      stCtx.lineWidth = 1.5 * stZoom;
+    } else if (isStart) {
+      stCtx.strokeStyle = col.dim;
+      stCtx.lineWidth = 1.5 * stZoom;
+    } else {
+      stCtx.strokeStyle = '#1a1e22';
+      stCtx.lineWidth = 1 * stZoom;
+    }
+    stCtx.stroke();
+    stCtx.restore();
+
+    if (isStart) {
+      stCtx.save();
+      stCtx.beginPath(); stCtx.arc(p.x, p.y, r * 0.4, 0, Math.PI * 2);
+      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.4; stCtx.fill();
+      stCtx.restore();
+    }
+
+    if (isLocked && stZoom > 0.5) {
+      stCtx.save();
+      stCtx.globalAlpha = 0.15;
+      stCtx.strokeStyle = '#333';
+      stCtx.lineWidth = 2 * stZoom;
+      const lw = r * 0.6;
+      stCtx.beginPath();
+      stCtx.moveTo(p.x - lw, p.y - 1*stZoom); stCtx.lineTo(p.x + lw, p.y - 1*stZoom);
+      stCtx.moveTo(p.x - lw*0.7, p.y + 3*stZoom); stCtx.lineTo(p.x + lw*0.7, p.y + 3*stZoom);
+      stCtx.stroke();
+      stCtx.restore();
+    }
+
+    if (stZoom > 0.35 && !isLocked) {
+      stCtx.save();
+      stCtx.font = Math.max(12, r * 0.7) + 'px serif';
+      stCtx.textAlign = 'center'; stCtx.textBaseline = 'middle';
+      stCtx.globalAlpha = hasInvestment || isStart ? 1 : 0.6;
+      stCtx.fillText(s.icon, p.x, p.y);
+      stCtx.restore();
+    }
+
+    if (stZoom > 0.55) {
+      stCtx.save();
+      stCtx.font = Math.max(8, 9*stZoom) + "px 'JetBrains Mono', monospace";
+      stCtx.textAlign = 'center';
+      stCtx.fillStyle = hasInvestment ? col.main : isHovered ? '#778' : isLocked ? '#222' : '#445';
+      const labelY = isTier3 ? p.y + r * 1.3 + 10*stZoom : p.y + r + 12*stZoom;
+      stCtx.fillText(s.name, p.x, labelY);
+      stCtx.restore();
+    }
+
+    if (s.maxLvl > 0 && stZoom > 0.5) {
+      const pipW = 5*stZoom, pipH = 2.5*stZoom, gap = 2*stZoom;
+      const totalW = s.maxLvl * (pipW + gap) - gap;
+      const startX = p.x - totalW / 2;
+      const pipY = isTier3 ? p.y - r * 1.3 - 6*stZoom : p.y - r - 6*stZoom;
+      for (let i = 0; i < s.maxLvl; i++) {
+        stCtx.fillStyle = i < invested ? col.main : '#1a1e22';
+        stCtx.globalAlpha = i < invested ? 1 : 0.5;
+        stCtx.fillRect(startX + i * (pipW + gap), pipY, pipW, pipH);
+      }
+      stCtx.globalAlpha = 1;
+    }
+  }
+}
+
 function drawSkillTree() {
   if (!stActive) return;
   stTime += 0.016;
@@ -109,11 +278,9 @@ function drawSkillTree() {
 
   stCtx.clearRect(0, 0, sw, sh);
 
-  // Background — dark tactical
   stCtx.fillStyle = '#06080a';
   stCtx.fillRect(0, 0, sw, sh);
 
-  // Hex grid background
   const hexSize = 40 * stZoom;
   if (hexSize > 8) {
     stCtx.strokeStyle = '#0e1014';
@@ -136,192 +303,12 @@ function drawSkillTree() {
   }
 
   const col = ST_COLORS[stActivePath];
-  const activeSkillDefs = SKILLS.filter(s => s.path === stActivePath);
   const activeConns = SKILL_CONNECTIONS.filter(c => c.path === stActivePath);
+  const activeSkillDefs = SKILLS.filter(s => s.path === stActivePath);
 
-  // Connections — angular lines with flow dots
-  for (const c of activeConns) {
-    const from = SKILL_MAP[c.from], to = SKILL_MAP[c.to];
-    const p1 = stWorldToScreen(from.x, from.y), p2 = stWorldToScreen(to.x, to.y);
-    const fromInvested = getSkillLevel(from.id) > 0 || from.tier === 0;
-    const toInvested = getSkillLevel(to.id) > 0;
-    const active = fromInvested;
+  drawSkillConnections(col, activeConns);
+  drawSkillNodes(col, activeSkillDefs);
 
-    // Line glow (only for active connections)
-    if (active) {
-      stCtx.save();
-      stCtx.strokeStyle = col.glow; stCtx.lineWidth = 4 * stZoom;
-      stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
-      stCtx.restore();
-    }
-
-    // Main line
-    stCtx.strokeStyle = active ? col.line : '#111418';
-    stCtx.lineWidth = (active ? 2 : 1) * stZoom;
-    stCtx.beginPath(); stCtx.moveTo(p1.x, p1.y); stCtx.lineTo(p2.x, p2.y); stCtx.stroke();
-
-    // Flow dots (only on active connections)
-    if (active) {
-      for (let i = 0; i < 3; i++) {
-        const t = ((stTime * 0.25 + i / 3) % 1);
-        const fx = p1.x + (p2.x - p1.x) * t;
-        const fy = p1.y + (p2.y - p1.y) * t;
-        stCtx.fillStyle = col.main;
-        stCtx.globalAlpha = 0.5 * (1 - Math.abs(t - 0.5) * 2);
-        stCtx.beginPath(); stCtx.arc(fx, fy, 1.5 * stZoom, 0, Math.PI * 2); stCtx.fill();
-      }
-      stCtx.globalAlpha = 1;
-
-      // Arrow tip at 70% along line
-      const at = 0.7;
-      const ax = p1.x + (p2.x - p1.x) * at;
-      const ay = p1.y + (p2.y - p1.y) * at;
-      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-      const arrowSize = 4 * stZoom;
-      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.6;
-      stCtx.beginPath();
-      stCtx.moveTo(ax + Math.cos(angle) * arrowSize, ay + Math.sin(angle) * arrowSize);
-      stCtx.lineTo(ax + Math.cos(angle + 2.5) * arrowSize * 0.7, ay + Math.sin(angle + 2.5) * arrowSize * 0.7);
-      stCtx.lineTo(ax + Math.cos(angle - 2.5) * arrowSize * 0.7, ay + Math.sin(angle - 2.5) * arrowSize * 0.7);
-      stCtx.fill();
-      stCtx.globalAlpha = 1;
-    }
-  }
-
-  // Nodes
-  for (const s of activeSkillDefs) {
-    const p = stWorldToScreen(s.x, s.y);
-    const isHovered = stHovered === s;
-    const r = s.r * stZoom;
-    const invested = getSkillLevel(s.id);
-    const unlockable = isSkillUnlockable(s);
-    const hasInvestment = invested > 0;
-    const isTier3 = s.tier === 3;
-    const isStart = s.tier === 0;
-    const isLocked = !hasInvestment && !unlockable && !isStart;
-
-    // Glow for invested/hovered nodes
-    if ((hasInvestment || isHovered) && !isStart) {
-      stCtx.save();
-      stCtx.shadowBlur = isHovered ? 30 : 18;
-      stCtx.shadowColor = col.main;
-      isTier3 ? stDiamondPath(stCtx, p.x, p.y, r) : stHexPath(stCtx, p.x, p.y, r);
-      stCtx.fillStyle = 'rgba(0,0,0,0.01)'; stCtx.fill();
-      stCtx.restore();
-    }
-
-    // Tier 3 outer ring — pulsing diamond
-    if (isTier3) {
-      const pulse = r + 5*stZoom + Math.sin(stTime * 2) * 2*stZoom;
-      stCtx.save();
-      stDiamondPath(stCtx, p.x, p.y, pulse);
-      stCtx.strokeStyle = hasInvestment ? col.main : col.dim;
-      stCtx.lineWidth = stZoom;
-      stCtx.globalAlpha = 0.3 + Math.sin(stTime * 2) * 0.15;
-      stCtx.setLineDash([3*stZoom, 3*stZoom]); stCtx.stroke();
-      stCtx.restore();
-    }
-
-    // Node shape
-    stCtx.save();
-    if (isTier3) {
-      stDiamondPath(stCtx, p.x, p.y, r);
-    } else if (isStart) {
-      stCtx.beginPath(); stCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    } else {
-      stHexPath(stCtx, p.x, p.y, r);
-    }
-
-    // Fill
-    if (hasInvestment) {
-      stCtx.fillStyle = col.bg;
-    } else if (isStart) {
-      stCtx.fillStyle = 'rgba(15,18,22,0.9)';
-    } else if (isLocked) {
-      stCtx.fillStyle = '#0a0c0e';
-    } else if (isHovered) {
-      stCtx.fillStyle = 'rgba(20,25,30,0.95)';
-    } else {
-      stCtx.fillStyle = '#0c0e12';
-    }
-    stCtx.fill();
-
-    // Border
-    if (hasInvestment) {
-      stCtx.strokeStyle = col.main;
-      stCtx.lineWidth = 2 * stZoom;
-    } else if (unlockable) {
-      stCtx.strokeStyle = col.dim;
-      stCtx.lineWidth = 1.5 * stZoom;
-    } else if (isStart) {
-      stCtx.strokeStyle = col.dim;
-      stCtx.lineWidth = 1.5 * stZoom;
-    } else {
-      stCtx.strokeStyle = '#1a1e22';
-      stCtx.lineWidth = 1 * stZoom;
-    }
-    stCtx.stroke();
-    stCtx.restore();
-
-    // Start node — inner marker
-    if (isStart) {
-      stCtx.save();
-      stCtx.beginPath(); stCtx.arc(p.x, p.y, r * 0.4, 0, Math.PI * 2);
-      stCtx.fillStyle = col.main; stCtx.globalAlpha = 0.4; stCtx.fill();
-      stCtx.restore();
-    }
-
-    // Locked redaction lines
-    if (isLocked && stZoom > 0.5) {
-      stCtx.save();
-      stCtx.globalAlpha = 0.15;
-      stCtx.strokeStyle = '#333';
-      stCtx.lineWidth = 2 * stZoom;
-      const lw = r * 0.6;
-      stCtx.beginPath();
-      stCtx.moveTo(p.x - lw, p.y - 1*stZoom); stCtx.lineTo(p.x + lw, p.y - 1*stZoom);
-      stCtx.moveTo(p.x - lw*0.7, p.y + 3*stZoom); stCtx.lineTo(p.x + lw*0.7, p.y + 3*stZoom);
-      stCtx.stroke();
-      stCtx.restore();
-    }
-
-    // Icon
-    if (stZoom > 0.35 && !isLocked) {
-      stCtx.save();
-      stCtx.font = Math.max(12, r * 0.7) + 'px serif';
-      stCtx.textAlign = 'center'; stCtx.textBaseline = 'middle';
-      stCtx.globalAlpha = hasInvestment || isStart ? 1 : 0.6;
-      stCtx.fillText(s.icon, p.x, p.y);
-      stCtx.restore();
-    }
-
-    // Name label
-    if (stZoom > 0.55) {
-      stCtx.save();
-      stCtx.font = Math.max(8, 9*stZoom) + "px 'JetBrains Mono', monospace";
-      stCtx.textAlign = 'center';
-      stCtx.fillStyle = hasInvestment ? col.main : isHovered ? '#778' : isLocked ? '#222' : '#445';
-      const labelY = isTier3 ? p.y + r * 1.3 + 10*stZoom : p.y + r + 12*stZoom;
-      stCtx.fillText(s.name, p.x, labelY);
-      stCtx.restore();
-    }
-
-    // Level pips
-    if (s.maxLvl > 0 && stZoom > 0.5) {
-      const pipW = 5*stZoom, pipH = 2.5*stZoom, gap = 2*stZoom;
-      const totalW = s.maxLvl * (pipW + gap) - gap;
-      const startX = p.x - totalW / 2;
-      const pipY = isTier3 ? p.y - r * 1.3 - 6*stZoom : p.y - r - 6*stZoom;
-      for (let i = 0; i < s.maxLvl; i++) {
-        stCtx.fillStyle = i < invested ? col.main : '#1a1e22';
-        stCtx.globalAlpha = i < invested ? 1 : 0.5;
-        stCtx.fillRect(startX + i * (pipW + gap), pipY, pipW, pipH);
-      }
-      stCtx.globalAlpha = 1;
-    }
-  }
-
-  // HUD text
   const pts = getAvailableSkillPoints();
   document.getElementById('st-points').textContent = 'PUNKTE: ' + pts;
   document.getElementById('st-points').style.color = pts > 0 ? col.main : '#556070';
