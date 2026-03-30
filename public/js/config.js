@@ -1,18 +1,18 @@
-// ── CONFIG ──────────────────────────────────────────
+// World & entity sizes
 let TILE = 40;
 const PLAYER_R = 12;
 const ZOMBIE_R = 13;
 const BULLET_R = 4;
 const BULLET_SPD = 9;
 
+// Pickup timing & limits
 const PICKUP_LIFETIME = 600; // 10s at 60fps
 const PICKUP_BLINK = 180; // blink last 3s
-const PICKUP_MAX = 3; // max pro typ
+const PICKUP_MAX = 3;
 const HEALTHPACK_HEAL = 25;
 const HEALTHPACK_INTERVAL = [900, 1200]; // 15-20s at 60fps
 const AMMOPACK_INTERVAL = [1100, 1500]; // 18-25s at 60fps
 
-// ── STAT SYSTEM ────────────────────────────────────────
 const BASE_STATS = {
   maxHp: 100,
   moveSpeed: 2.8,
@@ -79,7 +79,6 @@ function getPlayerStat(stat) {
   return base * (1 + pct) + flat;
 }
 
-// ── SKILL DEFINITIONS ──────────────────────────────────
 const SKILLS = [
   // SURVIVAL — Start
   { id: 'surv_start', path: 'survival', req: null, tier: 0, maxLvl: 0,
@@ -210,7 +209,6 @@ function getSkillLevel(skillId) {
   return found ? found.level : 0;
 }
 
-// ── WEAPON DEFINITIONS ─────────────────────────────────
 const WEAPONS = {
   pistol:         { id: 'pistol', name: 'PISTOL', type: 'Semi', unlockLevel: 0, cost: 0, damage: 1, range: 55, fireRate: 15, reloadMs: 1800, magSize: 12, spread: 0.06, special: null, icon: '🔫' },
   smg:            { id: 'smg', name: 'SMG', type: 'Auto', unlockLevel: 8, cost: 800, damage: 0.35, range: 45, fireRate: 8, reloadMs: 1500, magSize: 35, spread: 0.12, special: null, icon: '⚡' },
@@ -222,7 +220,6 @@ const WEAPONS = {
 
 const UPGRADE_BASE_COSTS = { dmg: 100, range: 80, rate: 120, reload: 80, mag: 100, acc: 60 };
 
-// ── PERK DEFINITIONS ───────────────────────────────────
 const PERK_DEFS = {
   pistol_akimbo:      { weaponId: 'pistol', type: 'active', name: 'AKIMBO', desc: 'Dual-Wield: doppelte Feuerrate, doppelter Spread fuer 1 Magazin.', icon: '\u{1F52B}\u{1F52B}', cooldown: 1200, duration: 0, diamonds: 3, gold: 1000 },
   pistol_hollow:      { weaponId: 'pistol', type: 'passive', name: 'HOLLOW POINT', desc: '+50% Schaden gegen Normal-Zombies.', icon: '\u{1F4A2}', diamonds: 3, gold: 1000 },
@@ -242,7 +239,6 @@ let ownedPerks = []; // perk IDs from server
 let activePerkCooldowns = {}; // { perkId: framesRemaining }
 let activePerkActive = {}; // { perkId: true/false } — currently activated
 
-// ── OPERATOR DEFINITIONS ───────────────────────────────
 const OPERATORS = {
   soldier: {
     id: 'soldier', name: 'SOLDAT', icon: '\u{1F396}', unlockLevel: 15, goldCost: 5000, diamondCost: 30,
@@ -300,7 +296,6 @@ let operatorAbilityCooldown = 0;
 let operatorAbilityActive = false;
 let operatorAbilityTimer = 0;
 
-// ── MULTIPLAYER ──────────────────────────────────────
 let mpEnabled = false;
 let mpSocket = null;
 let mpIsHost = false;

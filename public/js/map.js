@@ -1,14 +1,24 @@
-// ── MAP ─────────────────────────────────────────────
 // 0=floor, 1=wall — dynamisch generiert
 let COLS, ROWS, MAP;
 let _floorNoise = null;
+
+const MIN_COLS = 10;
+const MIN_ROWS = 8;
+const CITY_SPAWN_CLEAR = 4;   // tiles around spawn kept empty
+const CITY_CELL_W = 12;       // grid cell width in tiles
+const CITY_CELL_H = 10;       // grid cell height in tiles
+const CITY_EMPTY_THRESHOLD = 250; // /1000 chance cell has no building
+const CITY_SECOND_BUILDING = 700; // /1000 threshold for second building
+const CITY_MAP_SIZE = 200;    // dummy COLS/ROWS for infinite city
+const LOS_STEP_FACTOR = 0.4;  // ray-march step as fraction of TILE
+const SPAWN_WALL_CHECK_ATTEMPTS = 30;
 
 function generateMap(mapType) {
   _floorNoise = null;
   COLS = Math.floor(W / TILE);
   ROWS = Math.floor(H / TILE);
-  if (COLS < 10) COLS = 10;
-  if (ROWS < 8) ROWS = 8;
+  if (COLS < MIN_COLS) COLS = MIN_COLS;
+  if (ROWS < MIN_ROWS) ROWS = MIN_ROWS;
 
   MAP = [];
   for (let r = 0; r < ROWS; r++) {
@@ -69,41 +79,31 @@ function generateBunker() {
 // Uses varying block sizes and wide streets for open feel
 
 function getCityTile(wc, wr) {
-  // Clear spawn area
-  if (Math.abs(wc) <= 4 && Math.abs(wr) <= 4) return 0;
+  if (Math.abs(wc) <= CITY_SPAWN_CLEAR && Math.abs(wr) <= CITY_SPAWN_CLEAR) return 0;
 
-  // Use larger grid cells with varying building sizes inside
-  // Grid cell: 12x10 tiles (plenty of street space)
-  const cellW = 12, cellH = 10;
-  const cellX = Math.floor((wc >= 0 ? wc : wc - cellW + 1) / cellW);
-  const cellY = Math.floor((wr >= 0 ? wr : wr - cellH + 1) / cellH);
-  const lx = ((wc % cellW) + cellW) % cellW;
-  const ly = ((wr % cellH) + cellH) % cellH;
+  const cellX = Math.floor((wc >= 0 ? wc : wc - CITY_CELL_W + 1) / CITY_CELL_W);
+  const cellY = Math.floor((wr >= 0 ? wr : wr - CITY_CELL_H + 1) / CITY_CELL_H);
+  const lx = ((wc % CITY_CELL_W) + CITY_CELL_W) % CITY_CELL_W;
+  const ly = ((wr % CITY_CELL_H) + CITY_CELL_H) % CITY_CELL_H;
 
-  // Block seed determines building shape per cell
   const bs = (((cellX * 137 + cellY * 311) % 1000) + 1000) % 1000;
   const bs2 = (((cellX * 53 + cellY * 97) % 1000) + 1000) % 1000;
 
-  // ~25% of cells are completely empty (parks, plazas, intersections)
-  if (bs < 250) return 0;
+  if (bs < CITY_EMPTY_THRESHOLD) return 0;
 
-  // Building dimensions vary per cell (3-6 wide, 2-5 tall)
-  const bw = 3 + (bs % 4);   // 3-6
-  const bh = 2 + (bs2 % 4);  // 2-5
-  // Building offset within cell (always leaves street margins)
-  const ox = 1 + (bs2 % 2);  // 1-2 tiles from left edge
-  const oy = 1 + (bs % 2);   // 1-2 tiles from top edge
+  const bw = 3 + (bs % 4);
+  const bh = 2 + (bs2 % 4);
+  const ox = 1 + (bs2 % 2);
+  const oy = 1 + (bs % 2);
 
-  // Check if this tile is inside the building
   if (lx >= ox && lx < ox + bw && ly >= oy && ly < oy + bh) return 1;
 
-  // Some cells have a second smaller building
-  if (bs > 700) {
+  if (bs > CITY_SECOND_BUILDING) {
     const bw2 = 2 + (bs % 2);
     const bh2 = 2;
     const ox2 = ox + bw + 1;
     const oy2 = oy + (bs2 % 2);
-    if (ox2 + bw2 <= cellW - 1 && lx >= ox2 && lx < ox2 + bw2 && ly >= oy2 && ly < oy2 + bh2) return 1;
+    if (ox2 + bw2 <= CITY_CELL_W - 1 && lx >= ox2 && lx < ox2 + bw2 && ly >= oy2 && ly < oy2 + bh2) return 1;
   }
 
   return 0;
@@ -111,9 +111,7 @@ function getCityTile(wc, wr) {
 
 function generateCity() {
   camActive = true;
-  // Set large COLS/ROWS for minimap and compatibility, but map is infinite
-  COLS = 200; ROWS = 200;
-  // Create a dummy MAP that won't be used for city (isWall uses getCityTile)
+  COLS = CITY_MAP_SIZE; ROWS = CITY_MAP_SIZE;
   MAP = [];
   for (let r = 0; r < 1; r++) { MAP[r] = [0]; }
 }
@@ -148,7 +146,7 @@ function hasLineOfSight(x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
   const dist = Math.sqrt(dx * dx + dy * dy);
   if (dist < TILE) return true;
-  const step = TILE * 0.4;
+  const step = TILE * LOS_STEP_FACTOR;
   const steps = Math.ceil(dist / step);
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
@@ -157,7 +155,6 @@ function hasLineOfSight(x1, y1, x2, y2) {
   return true;
 }
 
-// ── SPAWNING ────────────────────────────────────────
 let SPAWN_EDGES = [];
 function rebuildSpawnEdges() {
   SPAWN_EDGES = [];
@@ -173,7 +170,6 @@ function rebuildSpawnEdges() {
 }
 rebuildSpawnEdges();
 
-// ── FLOWFIELD PATHFINDING ──────────────────────────────
 let flowfield = null; // 2D array of {dx, dy} directions — local or full
 let mapCacheCanvas = null; // pre-rendered map for perf
 let ffOffsetCol = 0, ffOffsetRow = 0; // world tile coords of flowfield[0][0]
@@ -261,7 +257,6 @@ function computeFlowfield() {
 
 let lastFlowfieldUpdate = 0;
 
-// ── SMOOTHED FLOWFIELD DIRECTION ─────────────────────
 // Interpolates between neighboring tile distances for sub-tile precision
 function getSmoothedFlowDir(px, py) {
   if (!flowfield) return null;

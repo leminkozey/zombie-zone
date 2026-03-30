@@ -1,4 +1,3 @@
-// ── SOUND SYSTEM ──────────────────────────────────────
 let audioCtx = null;
 let soundEnabled = true;
 let masterVolume = 0.5;
@@ -25,39 +24,39 @@ function playSoundThrottled(type, minInterval, options) {
   playSound(type, options);
 }
 
+const SOUND_MAP = {
+  shoot_pistol:         (vol) => sfxShoot(800, 0.06, vol * 0.3, 0.8),
+  shoot_smg:            (vol) => sfxShoot(1200, 0.04, vol * 0.2, 0.5),
+  shoot_shotgun:        (vol) => sfxShoot(300, 0.12, vol * 0.5, 1.2),
+  shoot_assault_rifle:  (vol) => sfxShoot(900, 0.05, vol * 0.25, 0.7),
+  shoot_sniper:         (vol) => sfxShoot(200, 0.15, vol * 0.6, 1.5),
+  shoot_minigun:        (vol) => sfxShoot(1500, 0.03, vol * 0.15, 0.3),
+  reload:               (vol) => sfxReload(vol * 0.4),
+  hit:                  (vol) => sfxHit(vol * 0.3),
+  kill:                 (vol) => sfxKill(vol * 0.25),
+  zombie_hit:           (vol) => sfxZombieHit(vol * 0.2),
+  player_hurt:          (vol) => sfxPlayerHurt(vol * 0.4),
+  dash:                 (vol) => sfxDash(vol * 0.3),
+  pickup_health:        (vol) => sfxPickup(600, vol * 0.3),
+  pickup_ammo:          (vol) => sfxPickup(800, vol * 0.3),
+  pickup_gold:          (vol) => sfxPickup(1200, vol * 0.15),
+  levelup:              (vol) => sfxLevelUp(vol * 0.4),
+  wave_start:           (vol) => sfxWaveStart(vol * 0.3),
+  empty_mag:            (vol) => sfxClick(2000, vol * 0.2),
+  ui_click:             (vol) => sfxClick(1000, vol * 0.15),
+  rescue_start:         (vol) => sfxRescueStart(vol * 0.3),
+  rescue_success:       (vol) => sfxRescueSuccess(vol * 0.5),
+  death:                (vol) => sfxDeath(vol * 0.5),
+  perk_activate:        (vol) => sfxPerkActivate(vol * 0.4),
+  explosion:            (vol) => sfxExplosion(vol * 0.5),
+};
+
 function playSound(type, options = {}) {
   if (!audioCtx || !soundEnabled) return;
   const vol = (options.volume || 1) * masterVolume;
-
-  switch (type) {
-    case 'shoot_pistol': sfxShoot(800, 0.06, vol * 0.3, 0.8); break;
-    case 'shoot_smg': sfxShoot(1200, 0.04, vol * 0.2, 0.5); break;
-    case 'shoot_shotgun': sfxShoot(300, 0.12, vol * 0.5, 1.2); break;
-    case 'shoot_assault_rifle': sfxShoot(900, 0.05, vol * 0.25, 0.7); break;
-    case 'shoot_sniper': sfxShoot(200, 0.15, vol * 0.6, 1.5); break;
-    case 'shoot_minigun': sfxShoot(1500, 0.03, vol * 0.15, 0.3); break;
-    case 'reload': sfxReload(vol * 0.4); break;
-    case 'hit': sfxHit(vol * 0.3); break;
-    case 'kill': sfxKill(vol * 0.25); break;
-    case 'zombie_hit': sfxZombieHit(vol * 0.2); break;
-    case 'player_hurt': sfxPlayerHurt(vol * 0.4); break;
-    case 'dash': sfxDash(vol * 0.3); break;
-    case 'pickup_health': sfxPickup(600, vol * 0.3); break;
-    case 'pickup_ammo': sfxPickup(800, vol * 0.3); break;
-    case 'pickup_gold': sfxPickup(1200, vol * 0.15); break;
-    case 'levelup': sfxLevelUp(vol * 0.4); break;
-    case 'wave_start': sfxWaveStart(vol * 0.3); break;
-    case 'empty_mag': sfxClick(2000, vol * 0.2); break;
-    case 'ui_click': sfxClick(1000, vol * 0.15); break;
-    case 'rescue_start': sfxRescueStart(vol * 0.3); break;
-    case 'rescue_success': sfxRescueSuccess(vol * 0.5); break;
-    case 'death': sfxDeath(vol * 0.5); break;
-    case 'perk_activate': sfxPerkActivate(vol * 0.4); break;
-    case 'explosion': sfxExplosion(vol * 0.5); break;
-  }
+  const fn = SOUND_MAP[type];
+  if (fn) fn(vol);
 }
-
-// ── SOUND GENERATORS ──────────────────────────────────
 
 function sfxShoot(freq, duration, vol, decay) {
   const osc = audioCtx.createOscillator();

@@ -1,4 +1,3 @@
-// ── STATE ───────────────────────────────────────────
 let runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, bossKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
 
 const DEFAULT_KEYBINDS = {
@@ -128,22 +127,7 @@ function triggerScreenshake(magnitude, durationFrames) {
   shakeTimer = durationFrames;
 }
 
-async function init() {
-  camActive = false;
-  camX = 0; camY = 0;
-  resizeCanvas(); // reset to window size before map gen
-  generateMap();
-  rebuildSpawnEdges();
-  flowfield = null;
-  mapCacheCanvas = null;
-  lastFlowfieldUpdate = -999; // force immediate flowfield compute on first frame
-
-  const mapW = camActive ? W : COLS * TILE;
-  const mapH = camActive ? H : ROWS * TILE;
-  if (!camActive) {
-    canvas.width = mapW; canvas.height = mapH;
-    W = mapW; H = mapH;
-  }
+function initPlayer(mapW, mapH) {
   player = {
     x: camActive ? 0 : mapW/2, y: camActive ? 0 : mapH/2,
     hp: getPlayerStat('maxHp'),
@@ -166,13 +150,13 @@ async function init() {
     juggernautActive: false,
   };
   player.maxAmmo = getWeaponStat(activeWeaponId, 'mag');
+  player.lastDamageTime = 0;
   minigunSpinup = 0;
   operatorAbilityCooldown = 0;
   operatorAbilityActive = false;
   operatorAbilityTimer = 0;
   const shieldWrap = document.getElementById('shield-bar-wrap');
   shieldWrap.style.display = player.maxShield > 0 ? 'block' : 'none';
-  player.lastDamageTime = 0;
 
   const numCharges = getPlayerStat('dashCharges');
   dashCharges = [];
@@ -194,7 +178,9 @@ async function init() {
 
   activePerkCooldowns = {};
   activePerkActive = {};
+}
 
+function initArrays() {
   runStats = { kills: 0, normalKills: 0, runnerKills: 0, tankKills: 0, spitterKills: 0, bossKills: 0, damageDealt: 0, damageTaken: 0, healed: 0, xpEarned: 0, maxWave: 0 };
   bullets = []; zombies = []; particles = []; bloodDecals = []; spitterProjectiles = [];
   healthpacks = []; ammopacks = []; floatingTexts = []; hitTrails = [];
@@ -204,6 +190,9 @@ async function init() {
   turrets = [];
   timeScale = 1; frozenBullets = []; timeTravelerPhase = 'none'; timeTravelerTimer = 0; timeTravelerKillCount = 0; miniSlowmoTimer = 0;
   toxicPools = []; bossSlowTimer = 0; broodEggs = []; playerStunTimer = 0;
+}
+
+function initWaveState() {
   lastHealthpackSpawn = 0; lastAmmopackSpawn = 0;
   nextHealthpackAt = HEALTHPACK_INTERVAL[0] + Math.random() * (HEALTHPACK_INTERVAL[1] - HEALTHPACK_INTERVAL[0]);
   nextAmmopackAt = AMMOPACK_INTERVAL[0] + Math.random() * (AMMOPACK_INTERVAL[1] - AMMOPACK_INTERVAL[0]);
@@ -212,6 +201,28 @@ async function init() {
   hurtFlash = 0; score = 0; frameCount = 0;
   mouseX = W/2; mouseY = H/2;
   running = true;
+}
+
+async function init() {
+  camActive = false;
+  camX = 0; camY = 0;
+  resizeCanvas();
+  generateMap();
+  rebuildSpawnEdges();
+  flowfield = null;
+  mapCacheCanvas = null;
+  lastFlowfieldUpdate = -999;
+
+  const mapW = camActive ? W : COLS * TILE;
+  const mapH = camActive ? H : ROWS * TILE;
+  if (!camActive) {
+    canvas.width = mapW; canvas.height = mapH;
+    W = mapW; H = mapH;
+  }
+
+  initPlayer(mapW, mapH);
+  initArrays();
+  initWaveState();
 
   if (authToken) {
     try {
@@ -265,8 +276,8 @@ function spawnBoss(bossType) {
   do {
     edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
     attempts++;
-  } while (wallCollide(edge.x, edge.y, BOSS_CONFIGS[bossType].radius * 1.2) && attempts < 30);
-  if (attempts >= 30) {
+  } while (wallCollide(edge.x, edge.y, BOSS_CONFIGS[bossType].radius * 1.2) && attempts < SPAWN_WALL_CHECK_ATTEMPTS);
+  if (attempts >= SPAWN_WALL_CHECK_ATTEMPTS) {
     edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
   }
 
@@ -362,7 +373,7 @@ function spawnZombie() {
       const dist = W * 0.6 + Math.random() * 200;
       edge = { x: player.x + Math.cos(angle) * dist, y: player.y + Math.sin(angle) * dist };
       attempts++;
-    } while (wallCollide(edge.x, edge.y, ZOMBIE_R * 1.5) && attempts < 30);
+    } while (wallCollide(edge.x, edge.y, ZOMBIE_R * 1.5) && attempts < SPAWN_WALL_CHECK_ATTEMPTS);
   } else {
     do {
       edge = SPAWN_EDGES[Math.floor(Math.random() * SPAWN_EDGES.length)];
@@ -370,7 +381,7 @@ function spawnZombie() {
     } while (wallCollide(edge.x, edge.y, ZOMBIE_R * 1.5) && attempts < 20);
   }
 
-  if (attempts >= 30) return;
+  if (attempts >= SPAWN_WALL_CHECK_ATTEMPTS) return;
 
   if (rescueCircle) {
     const rdx = edge.x - rescueCircle.x;
