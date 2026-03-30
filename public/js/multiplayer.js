@@ -1,3 +1,10 @@
+const MP_INPUT_BUFFER_MAX = 200;
+const MP_INPUT_BUFFER_TRIM = 100;
+const MP_CONNECT_DELAY_MS = 500;
+const MP_INTERP_STEP = 1 / 3;
+const MP_CLIPBOARD_FEEDBACK_MS = 500;
+const MP_LOBBY_CODE_LENGTH = 4;
+
 function mpPredictLocalMovement(input) {
   let mx = 0, my = 0;
   if (input.keys.up) my -= 1;
@@ -93,7 +100,7 @@ function mpConnect() {
       if (serverMe.speed) mpLocalSpeed = serverMe.speed;
       const lastAck = serverMe.lastInputSeq || 0;
       mpPendingInputs = mpPendingInputs.filter(inp => inp.seq > lastAck);
-      if (mpPendingInputs.length > 200) mpPendingInputs = mpPendingInputs.slice(-100);
+      if (mpPendingInputs.length > MP_INPUT_BUFFER_MAX) mpPendingInputs = mpPendingInputs.slice(-MP_INPUT_BUFFER_TRIM);
       for (const inp of mpPendingInputs) mpPredictLocalMovement(inp);
     }
     if (!mpPrevState) console.log('[MP] First game-state received, zombies:', (mpGameState.zombies||[]).length, 'players:', (mpGameState.players||[]).length);
@@ -117,12 +124,12 @@ function mpCreateLobby() {
       document.getElementById('mp-in-lobby').style.display = 'block';
       renderMpLobby();
     });
-  }, 500);
+  }, MP_CONNECT_DELAY_MS);
 }
 
 function mpJoinLobby() {
   const code = document.getElementById('mp-code-input').value.trim().toUpperCase();
-  if (code.length !== 4) { document.getElementById('mp-error').textContent = 'Code muss 4 Zeichen sein'; return; }
+  if (code.length !== MP_LOBBY_CODE_LENGTH) { document.getElementById('mp-error').textContent = 'Code muss 4 Zeichen sein'; return; }
   mpConnect();
   setTimeout(() => {
     mpSocket.emit('join-lobby', code, (res) => {
@@ -132,7 +139,7 @@ function mpJoinLobby() {
       document.getElementById('mp-in-lobby').style.display = 'block';
       renderMpLobby();
     });
-  }, 500);
+  }, MP_CONNECT_DELAY_MS);
 }
 
 function renderMpLobby() {
@@ -286,7 +293,7 @@ function mpLoop(now) {
   }
 
   // Interpolation
-  mpInterpT = Math.min(1, mpInterpT + 1/3);
+  mpInterpT = Math.min(1, mpInterpT + MP_INTERP_STEP);
 
   // Render
   ctx.clearRect(0, 0, W, H);
@@ -773,7 +780,7 @@ document.getElementById('mp-back-btn').addEventListener('click', () => {
 document.getElementById('mp-lobby-code').addEventListener('click', function() {
   navigator.clipboard.writeText(this.textContent);
   this.style.color = '#33cc44';
-  setTimeout(() => this.style.color = '#ee2200', 500);
+  setTimeout(() => this.style.color = '#ee2200', MP_CLIPBOARD_FEEDBACK_MS);
 });
 document.getElementById('mp-code-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') mpJoinLobby();
