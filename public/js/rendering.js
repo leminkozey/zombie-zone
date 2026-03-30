@@ -1,5 +1,29 @@
-// ── DRAW ─────────────────────────────────────────────
-// Floor tile noise cache (declared near MAP at line 719)
+const SHADOW_ALPHA = 0.3;
+const HEALTH_BAR_HEIGHT = 3;
+const HEALTH_BAR_COLOR_BG = '#1a0000';
+const HEALTH_BAR_COLOR_FG = '#ee2200';
+const PICKUP_PULSE_SPEED = 0.1;
+const PICKUP_PULSE_MIN = 0.8;
+const PICKUP_PULSE_RANGE = 0.2;
+const PICKUP_BLINK_INTERVAL = 8;
+const DEATH_TIMER_NORMAL = 30;
+const DEATH_TIMER_BOSS = 60;
+const DEATH_FRAGMENTS_NORMAL = 6;
+const DEATH_FRAGMENTS_BOSS = 12;
+const DEATH_SCATTER_NORMAL = 22;
+const DEATH_SCATTER_BOSS = 35;
+const ZOMBIE_BASE_RADIUS = 11;
+const WALL_EDGE_WIDTH = 3;
+const BUILDING_BLOCK_COLS = 12;
+const BUILDING_BLOCK_ROWS = 10;
+const ROAD_MARKING_DASH = [6, 8];
+const ROAD_MARKING_COLOR = 'rgba(200,180,40,0.18)';
+const ROAD_MARKING_WIDTH = 1.5;
+const CURB_WIDTH = 2;
+const CURB_COLOR = '#2a2826';
+const SIDEWALK_COLOR = '#201e1c';
+
+// Floor tile noise cache
 function getFloorNoise(col, row) {
   if (!_floorNoise || !_floorNoise[row] || !_floorNoise[row][col]) {
     _floorNoise = [];
@@ -28,86 +52,78 @@ function getFloorNoise(col, row) {
   return _floorNoise[row][col];
 }
 
+function drawCityBuilding(tctx, col, row, seed, seed2) {
+  const x = col * TILE, y = row * TILE;
+  const bx = Math.floor(col / BUILDING_BLOCK_COLS);
+  const by = Math.floor(row / BUILDING_BLOCK_ROWS);
+  const bseed = (((bx * 53 + by * 97) % 3) + 3) % 3;
+  const roofBase = ['#2a2018', '#201414', '#1e2020'][bseed];
+  tctx.fillStyle = roofBase;
+  tctx.fillRect(x, y, TILE, TILE);
+  const top = getCityTile(col, row - 1) !== 1;
+  const bot = getCityTile(col, row + 1) !== 1;
+  const lft = getCityTile(col - 1, row) !== 1;
+  const rgt = getCityTile(col + 1, row) !== 1;
+  if (top) { tctx.fillStyle = '#3a3430'; tctx.fillRect(x, y, TILE, WALL_EDGE_WIDTH); }
+  if (bot) { tctx.fillStyle = '#14100e'; tctx.fillRect(x, y + TILE - WALL_EDGE_WIDTH, TILE, WALL_EDGE_WIDTH); }
+  if (lft) { tctx.fillStyle = '#302a26'; tctx.fillRect(x, y, WALL_EDGE_WIDTH, TILE); }
+  if (rgt) { tctx.fillStyle = '#100e0c'; tctx.fillRect(x + TILE - WALL_EDGE_WIDTH, y, WALL_EDGE_WIDTH, TILE); }
+  if (top) { for (let wx = 6; wx < TILE - 4; wx += 10) { tctx.fillStyle = 'rgba(0,0,0,0.4)'; tctx.fillRect(x + wx, y, 4, WALL_EDGE_WIDTH); tctx.fillStyle = 'rgba(40,60,80,0.15)'; tctx.fillRect(x + wx + 0.5, y + 0.5, 3, 2); } }
+  if (lft) { for (let wy = 6; wy < TILE - 4; wy += 10) { tctx.fillStyle = 'rgba(0,0,0,0.4)'; tctx.fillRect(x, y + wy, WALL_EDGE_WIDTH, 4); tctx.fillStyle = 'rgba(40,60,80,0.15)'; tctx.fillRect(x + 0.5, y + wy + 0.5, 2, 3); } }
+  if (!top && !bot && !lft && !rgt) {
+    if (seed > 0.65) { tctx.fillStyle = '#1e1a18'; tctx.fillRect(x + 10, y + 8, 18, 14); tctx.strokeStyle = '#2a2624'; tctx.lineWidth = 0.5; tctx.strokeRect(x + 10, y + 8, 18, 14); tctx.beginPath(); tctx.arc(x + 19, y + 15, 4, 0, Math.PI * 2); tctx.stroke(); }
+    if (seed > 0.35 && seed < 0.45) { tctx.fillStyle = '#242018'; tctx.fillRect(x + 12, y + 10, 14, 10); tctx.strokeStyle = '#302a22'; tctx.lineWidth = 0.8; tctx.strokeRect(x + 12, y + 10, 14, 10); }
+  }
+  if (seed2 > 0.85) { tctx.fillStyle = '#0a0808'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.4, y + TILE * 0.5, 5 + seed * 4, 4 + seed2 * 3, seed * 2, 0, Math.PI * 2); tctx.fill(); }
+}
+
+function drawCityStreet(tctx, col, row, seed, seed2) {
+  const x = col * TILE, y = row * TILE;
+  const adjBuilding = getCityTile(col - 1, row) === 1 || getCityTile(col + 1, row) === 1 || getCityTile(col, row - 1) === 1 || getCityTile(col, row + 1) === 1;
+  if (adjBuilding) {
+    tctx.fillStyle = SIDEWALK_COLOR;
+    tctx.fillRect(x, y, TILE, TILE);
+    tctx.strokeStyle = 'rgba(40,38,34,0.4)'; tctx.lineWidth = 0.5;
+    tctx.strokeRect(x, y, TILE / 2, TILE / 2); tctx.strokeRect(x + TILE / 2, y, TILE / 2, TILE / 2);
+    tctx.strokeRect(x, y + TILE / 2, TILE / 2, TILE / 2); tctx.strokeRect(x + TILE / 2, y + TILE / 2, TILE / 2, TILE / 2);
+    if (getCityTile(col, row - 1) === 1) { tctx.fillStyle = CURB_COLOR; tctx.fillRect(x, y, TILE, CURB_WIDTH); }
+    if (getCityTile(col, row + 1) === 1) { tctx.fillStyle = CURB_COLOR; tctx.fillRect(x, y + TILE - CURB_WIDTH, TILE, CURB_WIDTH); }
+    if (getCityTile(col - 1, row) === 1) { tctx.fillStyle = CURB_COLOR; tctx.fillRect(x, y, CURB_WIDTH, TILE); }
+    if (getCityTile(col + 1, row) === 1) { tctx.fillStyle = CURB_COLOR; tctx.fillRect(x + TILE - CURB_WIDTH, y, CURB_WIDTH, TILE); }
+    if (getCityTile(col, row - 1) === 1) { tctx.fillStyle = 'rgba(0,0,0,0.3)'; tctx.fillRect(x, y, TILE, 6); }
+    if (getCityTile(col - 1, row) === 1) { tctx.fillStyle = 'rgba(0,0,0,0.25)'; tctx.fillRect(x, y, 5, TILE); }
+  } else {
+    tctx.fillStyle = seed < 0.33 ? '#1a1818' : seed < 0.66 ? '#1c1a18' : '#181616';
+    tctx.fillRect(x, y, TILE, TILE);
+    for (let i = 0; i < 4; i++) {
+      const ns = (((col * 53 + row * 97 + i * 31) % 1000) + 1000) % 1000 / 1000;
+      const ns2 = (((col * 71 + row * 43 + i * 67) % 1000) + 1000) % 1000 / 1000;
+      tctx.fillStyle = ns > 0.5 ? 'rgba(30,28,24,0.3)' : 'rgba(10,8,6,0.3)';
+      tctx.fillRect(x + ns * TILE, y + ns2 * TILE, 2, 2);
+    }
+    if (seed > 0.88) { tctx.fillStyle = '#0c0a0a'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + seed * 4, 4 + seed2 * 3, 0, 0, Math.PI * 2); tctx.fill(); tctx.strokeStyle = '#222020'; tctx.lineWidth = 0.5; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + seed * 4, 4 + seed2 * 3, 0, 0, Math.PI * 2); tctx.stroke(); }
+    if (seed2 > 0.6 && seed2 < 0.75) { tctx.strokeStyle = 'rgba(8,6,6,0.7)'; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(x, y + seed * TILE); tctx.lineTo(x + TILE * 0.3, y + seed * TILE + 4); tctx.lineTo(x + TILE * 0.7, y + seed * TILE - 2); tctx.lineTo(x + TILE, y + seed * TILE + 6); tctx.stroke(); }
+    if (!adjBuilding) {
+      if (((row % 10) + 10) % 10 === 5 && getCityTile(col, row - 1) === 0 && getCityTile(col, row + 1) === 0) {
+        tctx.setLineDash(ROAD_MARKING_DASH); tctx.strokeStyle = ROAD_MARKING_COLOR; tctx.lineWidth = ROAD_MARKING_WIDTH;
+        tctx.beginPath(); tctx.moveTo(x, y + TILE / 2); tctx.lineTo(x + TILE, y + TILE / 2); tctx.stroke(); tctx.setLineDash([]);
+      }
+      if (((col % 12) + 12) % 12 === 6 && getCityTile(col - 1, row) === 0 && getCityTile(col + 1, row) === 0) {
+        tctx.setLineDash(ROAD_MARKING_DASH); tctx.strokeStyle = ROAD_MARKING_COLOR; tctx.lineWidth = ROAD_MARKING_WIDTH;
+        tctx.beginPath(); tctx.moveTo(x + TILE / 2, y); tctx.lineTo(x + TILE / 2, y + TILE); tctx.stroke(); tctx.setLineDash([]);
+      }
+    }
+  }
+}
+
 function drawCityTile(tctx, col, row) {
   const tile = getCityTile(col, row);
-  const x = col * TILE, y = row * TILE;
-  const s = (((col * 137 + row * 311) % 1000) + 1000) % 1000 / 1000;
-  const s2 = (((col * 71 + row * 43) % 1000) + 1000) % 1000 / 1000;
-
+  const seed = (((col * 137 + row * 311) % 1000) + 1000) % 1000 / 1000;
+  const seed2 = (((col * 71 + row * 43) % 1000) + 1000) % 1000 / 1000;
   if (tile === 1) {
-    // BUILDING ROOFTOP — solid, no entry
-    const bx = Math.floor(col / 12);
-    const by = Math.floor(row / 10);
-    const bseed = (((bx * 53 + by * 97) % 3) + 3) % 3;
-    const roofBase = ['#2a2018', '#201414', '#1e2020'][bseed];
-    tctx.fillStyle = roofBase;
-    tctx.fillRect(x, y, TILE, TILE);
-    // Edge detection
-    const top = getCityTile(col, row - 1) !== 1;
-    const bot = getCityTile(col, row + 1) !== 1;
-    const lft = getCityTile(col - 1, row) !== 1;
-    const rgt = getCityTile(col + 1, row) !== 1;
-    // Wall edges visible from top
-    if (top) { tctx.fillStyle = '#3a3430'; tctx.fillRect(x, y, TILE, 3); }
-    if (bot) { tctx.fillStyle = '#14100e'; tctx.fillRect(x, y + TILE - 3, TILE, 3); }
-    if (lft) { tctx.fillStyle = '#302a26'; tctx.fillRect(x, y, 3, TILE); }
-    if (rgt) { tctx.fillStyle = '#100e0c'; tctx.fillRect(x + TILE - 3, y, 3, TILE); }
-    // Windows on building edges
-    if (top) { for (let wx = 6; wx < TILE - 4; wx += 10) { tctx.fillStyle = 'rgba(0,0,0,0.4)'; tctx.fillRect(x + wx, y, 4, 3); tctx.fillStyle = 'rgba(40,60,80,0.15)'; tctx.fillRect(x + wx + 0.5, y + 0.5, 3, 2); } }
-    if (lft) { for (let wy = 6; wy < TILE - 4; wy += 10) { tctx.fillStyle = 'rgba(0,0,0,0.4)'; tctx.fillRect(x, y + wy, 3, 4); tctx.fillStyle = 'rgba(40,60,80,0.15)'; tctx.fillRect(x + 0.5, y + wy + 0.5, 2, 3); } }
-    // Roof details (interior tiles)
-    if (!top && !bot && !lft && !rgt) {
-      if (s > 0.65) { tctx.fillStyle = '#1e1a18'; tctx.fillRect(x + 10, y + 8, 18, 14); tctx.strokeStyle = '#2a2624'; tctx.lineWidth = 0.5; tctx.strokeRect(x + 10, y + 8, 18, 14); tctx.beginPath(); tctx.arc(x + 19, y + 15, 4, 0, Math.PI * 2); tctx.stroke(); }
-      if (s > 0.35 && s < 0.45) { tctx.fillStyle = '#242018'; tctx.fillRect(x + 12, y + 10, 14, 10); tctx.strokeStyle = '#302a22'; tctx.lineWidth = 0.8; tctx.strokeRect(x + 12, y + 10, 14, 10); }
-    }
-    // Damage holes
-    if (s2 > 0.85) { tctx.fillStyle = '#0a0808'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.4, y + TILE * 0.5, 5 + s * 4, 4 + s2 * 3, s * 2, 0, Math.PI * 2); tctx.fill(); }
+    drawCityBuilding(tctx, col, row, seed, seed2);
   } else {
-    // STREET / SIDEWALK
-    const adjBuilding = getCityTile(col - 1, row) === 1 || getCityTile(col + 1, row) === 1 || getCityTile(col, row - 1) === 1 || getCityTile(col, row + 1) === 1;
-    if (adjBuilding) {
-      // Sidewalk
-      tctx.fillStyle = '#201e1c';
-      tctx.fillRect(x, y, TILE, TILE);
-      tctx.strokeStyle = 'rgba(40,38,34,0.4)'; tctx.lineWidth = 0.5;
-      tctx.strokeRect(x, y, TILE / 2, TILE / 2); tctx.strokeRect(x + TILE / 2, y, TILE / 2, TILE / 2);
-      tctx.strokeRect(x, y + TILE / 2, TILE / 2, TILE / 2); tctx.strokeRect(x + TILE / 2, y + TILE / 2, TILE / 2, TILE / 2);
-      // Curb
-      if (getCityTile(col, row - 1) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x, y, TILE, 2); }
-      if (getCityTile(col, row + 1) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x, y + TILE - 2, TILE, 2); }
-      if (getCityTile(col - 1, row) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x, y, 2, TILE); }
-      if (getCityTile(col + 1, row) === 1) { tctx.fillStyle = '#2a2826'; tctx.fillRect(x + TILE - 2, y, 2, TILE); }
-      // Shadow from buildings
-      if (getCityTile(col, row - 1) === 1) { tctx.fillStyle = 'rgba(0,0,0,0.3)'; tctx.fillRect(x, y, TILE, 6); }
-      if (getCityTile(col - 1, row) === 1) { tctx.fillStyle = 'rgba(0,0,0,0.25)'; tctx.fillRect(x, y, 5, TILE); }
-    } else {
-      // Road asphalt
-      tctx.fillStyle = s < 0.33 ? '#1a1818' : s < 0.66 ? '#1c1a18' : '#181616';
-      tctx.fillRect(x, y, TILE, TILE);
-      // Grain noise
-      for (let i = 0; i < 4; i++) {
-        const ns = (((col * 53 + row * 97 + i * 31) % 1000) + 1000) % 1000 / 1000;
-        const ns2 = (((col * 71 + row * 43 + i * 67) % 1000) + 1000) % 1000 / 1000;
-        tctx.fillStyle = ns > 0.5 ? 'rgba(30,28,24,0.3)' : 'rgba(10,8,6,0.3)';
-        tctx.fillRect(x + ns * TILE, y + ns2 * TILE, 2, 2);
-      }
-      // Potholes
-      if (s > 0.88) { tctx.fillStyle = '#0c0a0a'; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + s * 4, 4 + s2 * 3, 0, 0, Math.PI * 2); tctx.fill(); tctx.strokeStyle = '#222020'; tctx.lineWidth = 0.5; tctx.beginPath(); tctx.ellipse(x + TILE * 0.5, y + TILE * 0.5, 6 + s * 4, 4 + s2 * 3, 0, 0, Math.PI * 2); tctx.stroke(); }
-      // Cracks
-      if (s2 > 0.6 && s2 < 0.75) { tctx.strokeStyle = 'rgba(8,6,6,0.7)'; tctx.lineWidth = 1; tctx.beginPath(); tctx.moveTo(x, y + s * TILE); tctx.lineTo(x + TILE * 0.3, y + s * TILE + 4); tctx.lineTo(x + TILE * 0.7, y + s * TILE - 2); tctx.lineTo(x + TILE, y + s * TILE + 6); tctx.stroke(); }
-      // Road markings — dashed lines on open road tiles far from buildings
-      if (!adjBuilding) {
-        // Horizontal marking every 10 rows, vertical every 12 cols
-        if (((row % 10) + 10) % 10 === 5 && getCityTile(col, row - 1) === 0 && getCityTile(col, row + 1) === 0) {
-          tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.18)'; tctx.lineWidth = 1.5;
-          tctx.beginPath(); tctx.moveTo(x, y + TILE / 2); tctx.lineTo(x + TILE, y + TILE / 2); tctx.stroke(); tctx.setLineDash([]);
-        }
-        if (((col % 12) + 12) % 12 === 6 && getCityTile(col - 1, row) === 0 && getCityTile(col + 1, row) === 0) {
-          tctx.setLineDash([6, 8]); tctx.strokeStyle = 'rgba(200,180,40,0.18)'; tctx.lineWidth = 1.5;
-          tctx.beginPath(); tctx.moveTo(x + TILE / 2, y); tctx.lineTo(x + TILE / 2, y + TILE); tctx.stroke(); tctx.setLineDash([]);
-        }
-      }
-    }
+    drawCityStreet(tctx, col, row, seed, seed2);
   }
 }
 
@@ -286,12 +302,12 @@ function updateHealthpacks() {
 
 function drawHealthpacks() {
   for (const h of healthpacks) {
-    if (h.life < PICKUP_BLINK && Math.floor(h.life / 8) % 2 === 0) continue;
+    if (h.life < PICKUP_BLINK && Math.floor(h.life / PICKUP_BLINK_INTERVAL) % 2 === 0) continue;
 
     ctx.save();
     ctx.translate(h.x, h.y);
 
-    const pulse = 0.8 + Math.sin(frameCount * 0.1) * 0.2;
+    const pulse = PICKUP_PULSE_MIN + Math.sin(frameCount * PICKUP_PULSE_SPEED) * PICKUP_PULSE_RANGE;
     ctx.globalAlpha = pulse;
 
     ctx.fillStyle = '#33cc44';
@@ -365,12 +381,12 @@ function updateAmmopacks() {
 
 function drawAmmopacks() {
   for (const a of ammopacks) {
-    if (a.life < PICKUP_BLINK && Math.floor(a.life / 8) % 2 === 0) continue;
+    if (a.life < PICKUP_BLINK && Math.floor(a.life / PICKUP_BLINK_INTERVAL) % 2 === 0) continue;
 
     ctx.save();
     ctx.translate(a.x, a.y);
 
-    const pulse = 0.8 + Math.sin(frameCount * 0.1) * 0.2;
+    const pulse = PICKUP_PULSE_MIN + Math.sin(frameCount * PICKUP_PULSE_SPEED) * PICKUP_PULSE_RANGE;
     ctx.globalAlpha = pulse;
 
     // gelbes Munitions-Symbol (Patrone)
@@ -585,50 +601,264 @@ const ZOMBIE_TYPES = {
   boss_abom_split: { body: '#448822', skin: '#55aa28', arm: '#3a7718', outline: '#336615', scale: 1.5, eyeColor: '#ccff44', eyeGlow: '#aadd22' },
 };
 
-function drawZombie(z) {
-  if (!z.alive && !z.deathTimer) return;
-
-  let typeKey = z.type;
-  if (z.isBoss) {
-    if (z.bossType === 'brute') typeKey = 'boss_brute';
-    else if (z.bossType === 'necromancer') typeKey = 'boss_necro';
-    else if (z.bossType === 'abomination') typeKey = z.hasSplit ? 'boss_abom_split' : 'boss_abom';
+function drawZombieNormal(ctx, z, t, s, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(6*s, (-5 + wobble)*s, 10*s, 2.5*s);
+  ctx.fillRect(6*s, (3.5 - wobble)*s, 8*s, 2.2*s);
+  ctx.fillStyle = '#2a5015';
+  ctx.fillRect((15 + (z.hitting?3:0))*s, (-5.5 + wobble)*s, 3*s, 1.5*s);
+  ctx.fillRect((15 + (z.hitting?3:0))*s, (-3.5 + wobble)*s, 2.5*s, 1.2*s);
+  ctx.fillRect((13 + (z.hitting?3:0))*s, (3 - wobble)*s, 2.5*s, 1.2*s);
+  ctx.fillRect((13 + (z.hitting?3:0))*s, (5 - wobble)*s, 3*s, 1.2*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 10*s, 8.5*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.2*s; ctx.stroke();
+  ctx.strokeStyle = '#2a5518'; ctx.lineWidth = 0.8*s;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-4*s, i*2.8*s);
+    ctx.quadraticCurveTo(0, i*2.2*s, 5*s, i*2.5*s);
+    ctx.stroke();
   }
-  const t = ZOMBIE_TYPES[typeKey] || ZOMBIE_TYPES.normal;
-  const s = t.scale;
-  const r = 11 * s;
-
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#2a5518'; ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.arc(4*s, -3.5*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(4*s, 3.5*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
   ctx.save();
-  ctx.translate(z.x, z.y);
-
-  // Death — fragments scatter
-  if (!z.alive && z.deathTimer > 0) {
-    const maxTimer = z.isBoss ? 60 : 30;
-    const prog = 1 - z.deathTimer / maxTimer;
-    const fragmentCount = z.isBoss ? 12 : 6;
-    for (let f = 0; f < fragmentCount; f++) {
-      const a = (f / fragmentCount) * Math.PI * 2 + z.angle;
-      const d = prog * (z.isBoss ? 35 : 22) * s;
-      ctx.globalAlpha = (1 - prog) * 0.7;
-      ctx.fillStyle = f % 2 === 0 ? t.body : t.skin;
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, (z.isBoss ? 5 : 3) * s, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-    return;
-  }
-
-  // Shadow
-  ctx.save();
-  ctx.globalAlpha = 0.3;
-  ctx.fillStyle = '#000';
-  ctx.beginPath();
-  ctx.ellipse(0, 3, r * 1.1, r * 0.55, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.shadowBlur = 6*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(7.5*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7.5*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
   ctx.restore();
+}
 
-  // Runner: motion trail
+function drawZombieRunner(ctx, z, t, s, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.save(); ctx.translate(-4*s, -4*s); ctx.rotate(0.5 + wobble*0.03);
+  ctx.fillRect(0, -1*s, -12*s, 2.5*s); ctx.restore();
+  ctx.save(); ctx.translate(-4*s, 4*s); ctx.rotate(-0.5 - wobble*0.03);
+  ctx.fillRect(0, -1*s, -12*s, 2.5*s); ctx.restore();
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 11*s, 6.5*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(7*s, 0, 4*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#882200';
+  ctx.beginPath();
+  ctx.moveTo(9*s, -1.5*s); ctx.lineTo(12*s, 0); ctx.lineTo(9*s, 1.5*s);
+  ctx.fill();
+  ctx.save();
+  ctx.shadowBlur = 7*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(8.5*s, -2*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(8.5*s, 2*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieTank(ctx, z, t, s) {
+  const tSwing = Math.sin(z.wobble * 0.3) * 1.5;
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(4*s, (-8 + tSwing)*s, 9*s, 4*s);
+  ctx.fillRect(2*s, (4 - tSwing)*s, 15*s, 6.5*s);
+  ctx.beginPath(); ctx.arc(16*s, (7 - tSwing)*s, 4.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = t.body;
+  ctx.beginPath();
+  ctx.moveTo(-12*s, -13*s);
+  ctx.lineTo(8*s, -14*s);
+  ctx.lineTo(10*s, 14*s);
+  ctx.lineTo(-11*s, 12*s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 2*s; ctx.stroke();
+  ctx.strokeStyle = '#551010'; ctx.lineWidth = 1.2*s;
+  ctx.beginPath();
+  ctx.moveTo(-8*s, -10*s); ctx.lineTo(0, 0); ctx.lineTo(-5*s, 10*s);
+  ctx.stroke();
+  ctx.fillStyle = t.skin;
+  ctx.save();
+  ctx.translate(7*s, -2*s); ctx.rotate(-0.15);
+  ctx.beginPath(); ctx.arc(0, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(9*s, -4.5*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(10*s, 0.5*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieSpitter(ctx, z, t, s, wobble) {
+  const throwExt = z.throwAnim > 0 ? z.throwAnim * 1.5 : 0;
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(5*s, (-5 + wobble)*s, (9 + throwExt)*s, 2.8*s);
+  ctx.fillRect(5*s, (3 - wobble)*s, 9*s, 2.8*s);
+  ctx.fillStyle = t.glowDim; ctx.globalAlpha = 0.5;
+  ctx.fillRect((13 + throwExt)*s, (-4.5 + wobble)*s, 1.5*s, 4*s);
+  ctx.fillRect(13*s, (3.5 - wobble)*s, 1.5*s, 3.5*s);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 9*s, 8.5*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.2*s; ctx.stroke();
+  ctx.strokeStyle = t.glowDim; ctx.lineWidth = 0.7*s; ctx.globalAlpha = 0.4;
+  ctx.beginPath(); ctx.arc(-1*s, 0, 5*s, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-4*s, -4*s); ctx.lineTo(4*s, 4*s);
+  ctx.moveTo(-4*s, 4*s); ctx.lineTo(4*s, -4*s);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.save();
+  const gp = 0.15 + Math.sin(frameCount * 0.1) * 0.08;
+  ctx.globalAlpha = gp; ctx.fillStyle = t.glow;
+  ctx.beginPath(); ctx.arc(5*s, 0, 9*s, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1; ctx.restore();
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 6.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.save();
+  ctx.shadowBlur = 8*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.glow;
+  ctx.beginPath(); ctx.arc(9*s, 0, 2.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(7.5*s, -3*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7.5*s, 3*s, 1.6*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieExploder(ctx, z, t, s, r, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(4*s, (-5+wobble)*s, 8*s, 3*s);
+  ctx.fillRect(4*s, (3-wobble)*s, 8*s, 3*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = '#ff6622'; ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.arc(0, 0, r*0.5, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 4*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 5*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(7*s, -2*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7*s, 2*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieScreamer(ctx, z, t, s, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(3*s, (-6+wobble)*s, 10*s, 2.5*s);
+  ctx.fillRect(3*s, (4-wobble)*s, 10*s, 2.5*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 9*s, 7.5*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.2*s; ctx.stroke();
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(8*s, 0, 3*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 6*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(6*s, -3*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(6*s, 3*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieHealer(ctx, z, t, s, r, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(4*s, (-5+wobble)*s, 9*s, 2.8*s);
+  ctx.fillRect(4*s, (3-wobble)*s, 9*s, 2.8*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = '#66ff88'; ctx.globalAlpha = 0.3;
+  ctx.fillRect(-1.5*s, -5*s, 3*s, 10*s);
+  ctx.fillRect(-5*s, -1.5*s, 10*s, 3*s);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 5*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(7*s, -2.2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7*s, 2.2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieShielder(ctx, z, t, s, r, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(3*s, (-7+wobble)*s, 10*s, 4*s);
+  ctx.fillRect(3*s, (4-wobble)*s, 10*s, 4*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, r*0.95, r*1.1, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.8*s; ctx.stroke();
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(6*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(8*s, -2.2*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(8*s, 2.2*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieBroodmother(ctx, z, t, s, r, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(3*s, (-7+wobble)*s, 8*s, 4.5*s);
+  ctx.fillRect(3*s, (3-wobble)*s, 8*s, 4.5*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, r, r*1.15, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 2*s; ctx.stroke();
+  ctx.strokeStyle = t.arm; ctx.lineWidth = 0.8*s; ctx.globalAlpha = 0.3;
+  ctx.beginPath();
+  ctx.moveTo(-5*s, -6*s); ctx.quadraticCurveTo(0, 0, 5*s, -4*s);
+  ctx.moveTo(-4*s, 5*s); ctx.quadraticCurveTo(2*s, 2*s, 6*s, 6*s);
+  ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(7*s, 0, 4.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(9*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(9*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieBurrower(ctx, z, t, s, wobble) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(5*s, (-5+wobble)*s, 10*s, 2.8*s);
+  ctx.fillRect(5*s, (3-wobble)*s, 10*s, 2.8*s);
+  ctx.fillStyle = '#887755';
+  ctx.fillRect(14*s, (-5.5+wobble)*s, 3*s, 1.5*s);
+  ctx.fillRect(14*s, (3.5-wobble)*s, 3*s, 1.5*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 10*s, 9*s, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.3*s; ctx.stroke();
+  ctx.fillStyle = '#554433'; ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.arc(-3*s, -3*s, 2.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(2*s, 4*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(7*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombieFallback(ctx, z, t, s, r, wobble, armReach) {
+  ctx.fillStyle = t.arm;
+  ctx.fillRect(4*s, (-5+wobble)*s, armReach, 3*s);
+  ctx.fillRect(4*s, (3-wobble)*s, armReach*0.8, 2.5*s);
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.fillStyle = t.skin;
+  ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.shadowBlur = 5*s; ctx.shadowColor = t.eyeGlow;
+  ctx.fillStyle = t.eyeColor;
+  ctx.beginPath(); ctx.arc(7*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawZombiePreEffects(ctx, z, t, s, r) {
   if (z.type === 'runner') {
     ctx.save();
     ctx.globalAlpha = 0.12;
@@ -641,7 +871,6 @@ function drawZombie(z) {
     ctx.restore();
   }
 
-  // Brute charge trail
   if (z.isBoss && z.bossType === 'brute' && z.charging) {
     ctx.save();
     for (let tr = 1; tr <= 3; tr++) {
@@ -654,7 +883,6 @@ function drawZombie(z) {
     ctx.restore();
   }
 
-  // Spitter: toxic drip
   if (z.type === 'spitter' && z.frame % 5 === 0) {
     particles.push({
       x: z.x + (Math.random() - 0.5) * 8,
@@ -664,12 +892,10 @@ function drawZombie(z) {
     });
   }
 
-  // Exploder: volatile core glow + danger ring
   if (z.type === 'exploder') {
     const hpPct = z.hp / z.maxHp;
     const pulseSpeed = 0.06 + (1 - hpPct) * 0.2;
     const pulse = Math.sin(z.frame * pulseSpeed);
-    // outer danger ring — expands as HP drops
     ctx.save();
     ctx.globalAlpha = (0.08 + (1 - hpPct) * 0.12) * (0.7 + pulse * 0.3);
     ctx.strokeStyle = '#ff4400';
@@ -679,7 +905,6 @@ function drawZombie(z) {
     ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
-    // inner core glow — double layer
     ctx.save();
     const coreAlpha = 0.12 + pulse * 0.1 + (1 - hpPct) * 0.15;
     ctx.globalAlpha = coreAlpha;
@@ -690,17 +915,14 @@ function drawZombie(z) {
     ctx.fillStyle = grd;
     ctx.beginPath(); ctx.arc(0, 0, r * 1.2, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
-    // sparks when low HP
     if (hpPct < 0.4 && z.frame % 6 === 0) {
       const sa = Math.random() * Math.PI * 2;
       particles.push({ x: z.x + Math.cos(sa)*r*0.5, y: z.y + Math.sin(sa)*r*0.5, dx: Math.cos(sa)*2, dy: Math.sin(sa)*2 - 1, life: 8, maxLife: 8, color: '#ffaa00', r: 1.5 });
     }
   }
 
-  // Healer: pulsing heal rings + cross symbol
   if (z.type === 'healer') {
     ctx.save();
-    // outer heal radius ring
     const healPulse = Math.sin(z.frame * 0.03);
     ctx.globalAlpha = 0.06 + healPulse * 0.03;
     ctx.strokeStyle = '#44ff44';
@@ -708,13 +930,11 @@ function drawZombie(z) {
     ctx.setLineDash([4, 6]);
     ctx.beginPath(); ctx.arc(0, 0, 80 / s, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
-    // inner aura with ring wave
     const waveR = (z.frame % 120) / 120 * 80 / s;
     ctx.globalAlpha = 0.15 * (1 - waveR / (80 / s));
     ctx.strokeStyle = '#66ff66';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(0, 0, waveR, 0, Math.PI * 2); ctx.stroke();
-    // soft glow
     ctx.globalAlpha = 0.06 + healPulse * 0.02;
     const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2);
     grd.addColorStop(0, '#44ff88');
@@ -725,7 +945,6 @@ function drawZombie(z) {
     ctx.restore();
   }
 
-  // Screamer: sound wave rings emanating outward
   if (z.type === 'screamer' && z.screamCooldown > 240) {
     ctx.save();
     const progress = 1 - (z.screamCooldown - 240) / 60;
@@ -739,7 +958,6 @@ function drawZombie(z) {
     ctx.restore();
   }
 
-  // Broodmother: egg sacs on body
   if (z.type === 'broodmother') {
     ctx.save();
     ctx.globalAlpha = 0.5;
@@ -752,399 +970,26 @@ function drawZombie(z) {
     }
     ctx.restore();
   }
+}
 
-  // Burrower: underground effect when burrowed
-  if (z.type === 'burrower' && z.burrowed) {
-    // dirt mound shadow
-    ctx.save();
-    ctx.globalAlpha = 0.25 + Math.sin(z.frame * 0.15) * 0.1;
-    ctx.fillStyle = '#554433';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r * 0.8, r * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    // dirt spray particles
-    if (z.frame % 3 === 0) {
-      const pa = Math.random() * Math.PI * 2;
-      particles.push({ x: z.x + Math.cos(pa)*6, y: z.y + Math.sin(pa)*6, dx: Math.cos(pa)*1.5, dy: -1.5 - Math.random(), life: 10, maxLife: 10, color: z.frame % 6 < 3 ? '#886644' : '#665533', r: 1.5 + Math.random() });
-    }
-    // small cracks radiating
-    ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.strokeStyle = '#443322';
-    ctx.lineWidth = 0.8;
-    for (let i = 0; i < 4; i++) {
-      const ca = (i / 4) * Math.PI * 2 + z.frame * 0.02;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(ca) * r * 0.3, Math.sin(ca) * r * 0.3);
-      ctx.lineTo(Math.cos(ca) * r * 0.8, Math.sin(ca) * r * 0.8);
-      ctx.stroke();
-    }
-    ctx.restore();
-    ctx.restore();
-    return;
-  }
-
-  ctx.rotate(z.angle);
-  const wobble = Math.sin(z.wobble * 0.5) * 2;
-  const armReach = z.hitting ? 14 * s : 10 * s;
-
-  // ── N-02 HUSK: Thin, ribs, claws, hollow cheeks ──
-  if (z.type === 'normal') {
-    // Thin arms with claw-tips
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(6*s, (-5 + wobble)*s, 10*s, 2.5*s);
-    ctx.fillRect(6*s, (3.5 - wobble)*s, 8*s, 2.2*s);
-    // Claws
-    ctx.fillStyle = '#2a5015';
-    ctx.fillRect((15 + (z.hitting?3:0))*s, (-5.5 + wobble)*s, 3*s, 1.5*s);
-    ctx.fillRect((15 + (z.hitting?3:0))*s, (-3.5 + wobble)*s, 2.5*s, 1.2*s);
-    ctx.fillRect((13 + (z.hitting?3:0))*s, (3 - wobble)*s, 2.5*s, 1.2*s);
-    ctx.fillRect((13 + (z.hitting?3:0))*s, (5 - wobble)*s, 3*s, 1.2*s);
-
-    // Thin oval body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, 10*s, 8.5*s, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.2*s; ctx.stroke();
-
-    // Rib lines
-    ctx.strokeStyle = '#2a5518'; ctx.lineWidth = 0.8*s;
-    for (let i = -2; i <= 2; i++) {
-      ctx.beginPath();
-      ctx.moveTo(-4*s, i*2.8*s);
-      ctx.quadraticCurveTo(0, i*2.2*s, 5*s, i*2.5*s);
-      ctx.stroke();
-    }
-
-    // Head
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
-
-    // Hollow cheeks
-    ctx.fillStyle = '#2a5518'; ctx.globalAlpha = 0.3;
-    ctx.beginPath(); ctx.arc(4*s, -3.5*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(4*s, 3.5*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Eyes
-    ctx.save();
-    ctx.shadowBlur = 6*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7.5*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7.5*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── R-01 SPRINTER: Arms back, motion blur, open jaw ──
-  } else if (z.type === 'runner') {
-    // Arms swept back
-    ctx.fillStyle = t.arm;
-    ctx.save(); ctx.translate(-4*s, -4*s); ctx.rotate(0.5 + wobble*0.03);
-    ctx.fillRect(0, -1*s, -12*s, 2.5*s); ctx.restore();
-    ctx.save(); ctx.translate(-4*s, 4*s); ctx.rotate(-0.5 - wobble*0.03);
-    ctx.fillRect(0, -1*s, -12*s, 2.5*s); ctx.restore();
-
-    // Narrow body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, 11*s, 6.5*s, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
-
-    // Small feral head
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(7*s, 0, 4*s, 0, Math.PI*2); ctx.fill();
-
-    // Open jaw — triangle
-    ctx.fillStyle = '#882200';
-    ctx.beginPath();
-    ctx.moveTo(9*s, -1.5*s); ctx.lineTo(12*s, 0); ctx.lineTo(9*s, 1.5*s);
-    ctx.fill();
-
-    // Eyes — intense yellow
-    ctx.save();
-    ctx.shadowBlur = 7*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(8.5*s, -2*s, 1.6*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(8.5*s, 2*s, 1.6*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── T-03 GOLEM: Blocky, asymmetric, one huge arm ──
-  } else if (z.type === 'tank') {
-    const tSwing = Math.sin(z.wobble * 0.3) * 1.5;
-
-    // Small left arm
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(4*s, (-8 + tSwing)*s, 9*s, 4*s);
-    // HUGE right arm with fist
-    ctx.fillRect(2*s, (4 - tSwing)*s, 15*s, 6.5*s);
-    ctx.beginPath(); ctx.arc(16*s, (7 - tSwing)*s, 4.5*s, 0, Math.PI*2); ctx.fill();
-
-    // Blocky body
-    ctx.fillStyle = t.body;
-    ctx.beginPath();
-    ctx.moveTo(-12*s, -13*s);
-    ctx.lineTo(8*s, -14*s);
-    ctx.lineTo(10*s, 14*s);
-    ctx.lineTo(-11*s, 12*s);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 2*s; ctx.stroke();
-
-    // Crack lines
-    ctx.strokeStyle = '#551010'; ctx.lineWidth = 1.2*s;
-    ctx.beginPath();
-    ctx.moveTo(-8*s, -10*s); ctx.lineTo(0, 0); ctx.lineTo(-5*s, 10*s);
-    ctx.stroke();
-
-    // Head — tilted
-    ctx.fillStyle = t.skin;
-    ctx.save();
-    ctx.translate(7*s, -2*s); ctx.rotate(-0.15);
-    ctx.beginPath(); ctx.arc(0, 0, 5*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-    // Eyes — asymmetric (one bigger)
-    ctx.save();
-    ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(9*s, -4.5*s, 2.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(10*s, 0.5*s, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── S-02 SHAMAN: Big glowing head, ritual markings, third eye ──
-  } else if (z.type === 'spitter') {
-    const throwExt = z.throwAnim > 0 ? z.throwAnim * 1.5 : 0;
-
-    // Arms with dripping hands
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(5*s, (-5 + wobble)*s, (9 + throwExt)*s, 2.8*s);
-    ctx.fillRect(5*s, (3 - wobble)*s, 9*s, 2.8*s);
-    // Toxic drips from hands
-    ctx.fillStyle = t.glowDim; ctx.globalAlpha = 0.5;
-    ctx.fillRect((13 + throwExt)*s, (-4.5 + wobble)*s, 1.5*s, 4*s);
-    ctx.fillRect(13*s, (3.5 - wobble)*s, 1.5*s, 3.5*s);
-    ctx.globalAlpha = 1;
-
-    // Slim body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, 9*s, 8.5*s, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.2*s; ctx.stroke();
-
-    // Ritual markings on body
-    ctx.strokeStyle = t.glowDim; ctx.lineWidth = 0.7*s; ctx.globalAlpha = 0.4;
-    ctx.beginPath(); ctx.arc(-1*s, 0, 5*s, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-4*s, -4*s); ctx.lineTo(4*s, 4*s);
-    ctx.moveTo(-4*s, 4*s); ctx.lineTo(4*s, -4*s);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    // BIG glowing head
-    ctx.save();
-    const gp = 0.15 + Math.sin(frameCount * 0.1) * 0.08;
-    ctx.globalAlpha = gp; ctx.fillStyle = t.glow;
-    ctx.beginPath(); ctx.arc(5*s, 0, 9*s, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1; ctx.restore();
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 6.5*s, 0, Math.PI*2); ctx.fill();
-
-    // Third eye (center, large, bright)
-    ctx.save();
-    ctx.shadowBlur = 8*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.glow;
-    ctx.beginPath(); ctx.arc(9*s, 0, 2.5*s, 0, Math.PI*2); ctx.fill();
-
-    // Regular eyes
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7.5*s, -3*s, 1.6*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7.5*s, 3*s, 1.6*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Exploder: bloated round body, volatile core ──
-  } else if (z.type === 'exploder') {
-    // Stubby arms
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(4*s, (-5+wobble)*s, 8*s, 3*s);
-    ctx.fillRect(4*s, (3-wobble)*s, 8*s, 3*s);
-    // Bloated round body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
-    // Volatile core (inner glow already drawn pre-rotate)
-    ctx.fillStyle = '#ff6622'; ctx.globalAlpha = 0.3;
-    ctx.beginPath(); ctx.arc(0, 0, r*0.5, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-    // Small head
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 4*s, 0, Math.PI*2); ctx.fill();
-    // Eyes
-    ctx.save(); ctx.shadowBlur = 5*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7*s, -2*s, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7*s, 2*s, 1.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Screamer: thin, pale, open mouth ──
-  } else if (z.type === 'screamer') {
-    // Thin arms raised
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(3*s, (-6+wobble)*s, 10*s, 2.5*s);
-    ctx.fillRect(3*s, (4-wobble)*s, 10*s, 2.5*s);
-    // Thin body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, 9*s, 7.5*s, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.2*s; ctx.stroke();
-    // Head with wide open mouth
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
-    // Open mouth
-    ctx.fillStyle = '#222';
-    ctx.beginPath(); ctx.arc(8*s, 0, 3*s, 0, Math.PI*2); ctx.fill();
-    // Eyes — intense red
-    ctx.save(); ctx.shadowBlur = 6*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(6*s, -3*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(6*s, 3*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Healer: green, crosses on body ──
-  } else if (z.type === 'healer') {
-    // Arms
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(4*s, (-5+wobble)*s, 9*s, 2.8*s);
-    ctx.fillRect(4*s, (3-wobble)*s, 9*s, 2.8*s);
-    // Body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
-    // Cross marks on body
-    ctx.fillStyle = '#66ff88'; ctx.globalAlpha = 0.3;
-    ctx.fillRect(-1.5*s, -5*s, 3*s, 10*s);
-    ctx.fillRect(-5*s, -1.5*s, 10*s, 3*s);
-    ctx.globalAlpha = 1;
-    // Head
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
-    // Eyes — green glow
-    ctx.save(); ctx.shadowBlur = 5*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7*s, -2.2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7*s, 2.2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Shielder: blue-grey, bulky ──
-  } else if (z.type === 'shielder') {
-    // Thick arms holding shield
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(3*s, (-7+wobble)*s, 10*s, 4*s);
-    ctx.fillRect(3*s, (4-wobble)*s, 10*s, 4*s);
-    // Wide body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, r*0.95, r*1.1, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.8*s; ctx.stroke();
-    // Head
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(6*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
-    // Eyes — blue
-    ctx.save(); ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(8*s, -2.2*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(8*s, 2.2*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Broodmother: purple-brown, large, egg sacs ──
-  } else if (z.type === 'broodmother') {
-    // Thick short arms
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(3*s, (-7+wobble)*s, 8*s, 4.5*s);
-    ctx.fillRect(3*s, (3-wobble)*s, 8*s, 4.5*s);
-    // Large bloated body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, r, r*1.15, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 2*s; ctx.stroke();
-    // Veiny texture
-    ctx.strokeStyle = t.arm; ctx.lineWidth = 0.8*s; ctx.globalAlpha = 0.3;
-    ctx.beginPath();
-    ctx.moveTo(-5*s, -6*s); ctx.quadraticCurveTo(0, 0, 5*s, -4*s);
-    ctx.moveTo(-4*s, 5*s); ctx.quadraticCurveTo(2*s, 2*s, 6*s, 6*s);
-    ctx.stroke(); ctx.globalAlpha = 1;
-    // Head — small relative to body
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(7*s, 0, 4.5*s, 0, Math.PI*2); ctx.fill();
-    // Eyes
-    ctx.save(); ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(9*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(9*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Burrower: brown/earth tones, digging claws ──
-  } else if (z.type === 'burrower') {
-    // Arms with digging claws
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(5*s, (-5+wobble)*s, 10*s, 2.8*s);
-    ctx.fillRect(5*s, (3-wobble)*s, 10*s, 2.8*s);
-    // Claw tips
-    ctx.fillStyle = '#887755';
-    ctx.fillRect(14*s, (-5.5+wobble)*s, 3*s, 1.5*s);
-    ctx.fillRect(14*s, (3.5-wobble)*s, 3*s, 1.5*s);
-    // Body
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.ellipse(0, 0, 10*s, 9*s, 0, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.3*s; ctx.stroke();
-    // Dirt patches
-    ctx.fillStyle = '#554433'; ctx.globalAlpha = 0.3;
-    ctx.beginPath(); ctx.arc(-3*s, -3*s, 2.5*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(2*s, 4*s, 2*s, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-    // Head
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
-    // Eyes
-    ctx.save(); ctx.shadowBlur = 4*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-
-  // ── Fallback: generic zombie body for unknown types ──
-  } else {
-    ctx.fillStyle = t.arm;
-    ctx.fillRect(4*s, (-5+wobble)*s, armReach, 3*s);
-    ctx.fillRect(4*s, (3-wobble)*s, armReach*0.8, 2.5*s);
-    ctx.fillStyle = t.body;
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = t.outline; ctx.lineWidth = 1.5*s; ctx.stroke();
-    ctx.fillStyle = t.skin;
-    ctx.beginPath(); ctx.arc(5*s, 0, 5*s, 0, Math.PI*2); ctx.fill();
-    ctx.save(); ctx.shadowBlur = 5*s; ctx.shadowColor = t.eyeGlow;
-    ctx.fillStyle = t.eyeColor;
-    ctx.beginPath(); ctx.arc(7*s, -2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(7*s, 2*s, 1.8*s, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-  }
-
-  ctx.restore();
-
-  // HP bar — unrotated, above zombie
+function drawZombiePostEffects(ctx, z, t, s, r) {
   if (z.alive && z.hp < z.maxHp) {
     ctx.save();
     ctx.translate(z.x, z.y);
-    const bw = 24 * s, bh = 3;
-    ctx.fillStyle = '#1a0000';
-    ctx.fillRect(-bw / 2, -r - 10, bw, bh);
-    ctx.fillStyle = '#ee2200';
-    ctx.fillRect(-bw / 2, -r - 10, bw * (z.hp / z.maxHp), bh);
+    const bw = 24 * s;
+    ctx.fillStyle = HEALTH_BAR_COLOR_BG;
+    ctx.fillRect(-bw / 2, -r - 10, bw, HEALTH_BAR_HEIGHT);
+    ctx.fillStyle = HEALTH_BAR_COLOR_FG;
+    ctx.fillRect(-bw / 2, -r - 10, bw * (z.hp / z.maxHp), HEALTH_BAR_HEIGHT);
     ctx.restore();
   }
 
-  // Shielder front shield
   if (z.type === 'shielder' && z.alive) {
     ctx.save();
     const shieldPct = z.shieldBroken ? 0 : z.shieldHp / z.shieldMaxHp;
     if (!z.shieldBroken) {
-      // shield body — layered arc with energy effect
       const shieldAlpha = 0.25 + shieldPct * 0.45;
       ctx.globalAlpha = shieldAlpha;
-      // outer edge glow
       ctx.strokeStyle = '#88bbee';
       ctx.lineWidth = 4 * s;
       ctx.shadowColor = '#4488cc';
@@ -1153,10 +998,8 @@ function drawZombie(z) {
       ctx.arc(r * 0.6, 0, r * 1.0, -Math.PI * 0.5, Math.PI * 0.5);
       ctx.stroke();
       ctx.shadowBlur = 0;
-      // inner fill
       ctx.fillStyle = 'rgba(80,140,200,0.12)';
       ctx.fill();
-      // energy lines on shield
       ctx.globalAlpha = shieldAlpha * 0.6;
       ctx.strokeStyle = '#aaddff';
       ctx.lineWidth = 0.8 * s;
@@ -1169,7 +1012,6 @@ function drawZombie(z) {
         ctx.lineTo(lx + Math.cos(lineAngle) * r * 0.25, ly + Math.sin(lineAngle) * r * 0.25);
         ctx.stroke();
       }
-      // damage flash when recently hit
       if (z.shieldRegenTimer > 280) {
         ctx.globalAlpha = (z.shieldRegenTimer - 280) / 20 * 0.3;
         ctx.strokeStyle = '#ffffff';
@@ -1179,7 +1021,6 @@ function drawZombie(z) {
         ctx.stroke();
       }
     } else {
-      // broken shield — faint cracked remnant
       ctx.globalAlpha = 0.08 + Math.sin(z.frame * 0.05) * 0.03;
       ctx.strokeStyle = '#445566';
       ctx.lineWidth = 1.5 * s;
@@ -1192,7 +1033,6 @@ function drawZombie(z) {
     ctx.restore();
   }
 
-  // Boss HP bar
   if (z.isBoss && z.alive) {
     ctx.save();
     ctx.translate(z.x, z.y);
@@ -1224,6 +1064,110 @@ function drawZombie(z) {
     }
     ctx.restore();
   }
+}
+
+function drawZombie(z) {
+  if (!z.alive && !z.deathTimer) return;
+
+  let typeKey = z.type;
+  if (z.isBoss) {
+    if (z.bossType === 'brute') typeKey = 'boss_brute';
+    else if (z.bossType === 'necromancer') typeKey = 'boss_necro';
+    else if (z.bossType === 'abomination') typeKey = z.hasSplit ? 'boss_abom_split' : 'boss_abom';
+  }
+  const t = ZOMBIE_TYPES[typeKey] || ZOMBIE_TYPES.normal;
+  const s = t.scale;
+  const r = ZOMBIE_BASE_RADIUS * s;
+
+  ctx.save();
+  ctx.translate(z.x, z.y);
+
+  if (!z.alive && z.deathTimer > 0) {
+    const maxTimer = z.isBoss ? DEATH_TIMER_BOSS : DEATH_TIMER_NORMAL;
+    const prog = 1 - z.deathTimer / maxTimer;
+    const fragmentCount = z.isBoss ? DEATH_FRAGMENTS_BOSS : DEATH_FRAGMENTS_NORMAL;
+    for (let f = 0; f < fragmentCount; f++) {
+      const a = (f / fragmentCount) * Math.PI * 2 + z.angle;
+      const d = prog * (z.isBoss ? DEATH_SCATTER_BOSS : DEATH_SCATTER_NORMAL) * s;
+      ctx.globalAlpha = (1 - prog) * 0.7;
+      ctx.fillStyle = f % 2 === 0 ? t.body : t.skin;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * d, Math.sin(a) * d, (z.isBoss ? 5 : 3) * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = SHADOW_ALPHA;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(0, 3, r * 1.1, r * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  drawZombiePreEffects(ctx, z, t, s, r);
+
+  if (z.type === 'burrower' && z.burrowed) {
+    ctx.save();
+    ctx.globalAlpha = 0.25 + Math.sin(z.frame * 0.15) * 0.1;
+    ctx.fillStyle = '#554433';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.8, r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    if (z.frame % 3 === 0) {
+      const pa = Math.random() * Math.PI * 2;
+      particles.push({ x: z.x + Math.cos(pa)*6, y: z.y + Math.sin(pa)*6, dx: Math.cos(pa)*1.5, dy: -1.5 - Math.random(), life: 10, maxLife: 10, color: z.frame % 6 < 3 ? '#886644' : '#665533', r: 1.5 + Math.random() });
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.15;
+    ctx.strokeStyle = '#443322';
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 4; i++) {
+      const ca = (i / 4) * Math.PI * 2 + z.frame * 0.02;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ca) * r * 0.3, Math.sin(ca) * r * 0.3);
+      ctx.lineTo(Math.cos(ca) * r * 0.8, Math.sin(ca) * r * 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
+
+  ctx.rotate(z.angle);
+  const wobble = Math.sin(z.wobble * 0.5) * 2;
+  const armReach = z.hitting ? 14 * s : 10 * s;
+
+  if (z.type === 'normal') {
+    drawZombieNormal(ctx, z, t, s, wobble);
+  } else if (z.type === 'runner') {
+    drawZombieRunner(ctx, z, t, s, wobble);
+  } else if (z.type === 'tank') {
+    drawZombieTank(ctx, z, t, s);
+  } else if (z.type === 'spitter') {
+    drawZombieSpitter(ctx, z, t, s, wobble);
+  } else if (z.type === 'exploder') {
+    drawZombieExploder(ctx, z, t, s, r, wobble);
+  } else if (z.type === 'screamer') {
+    drawZombieScreamer(ctx, z, t, s, wobble);
+  } else if (z.type === 'healer') {
+    drawZombieHealer(ctx, z, t, s, r, wobble);
+  } else if (z.type === 'shielder') {
+    drawZombieShielder(ctx, z, t, s, r, wobble);
+  } else if (z.type === 'broodmother') {
+    drawZombieBroodmother(ctx, z, t, s, r, wobble);
+  } else if (z.type === 'burrower') {
+    drawZombieBurrower(ctx, z, t, s, wobble);
+  } else {
+    drawZombieFallback(ctx, z, t, s, r, wobble, armReach);
+  }
+
+  ctx.restore();
+
+  drawZombiePostEffects(ctx, z, t, s, r);
 }
 
 function drawPlayer() {
