@@ -564,50 +564,28 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
   document.getElementById('pause-screen').style.display = 'none';
 
   if (authToken) {
-    try {
-      await fetch('/api/stats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify(runStats)
-      });
-    } catch {}
+    try { await syncToServer('/api/stats', runStats); } catch {}
 
     if (pendingXp > 0) {
       const xpToSync = pendingXp;
       pendingXp = 0;
       globalXp += xpToSync;
-      try {
-        await fetch('/api/xp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-          body: JSON.stringify({ xp: xpToSync })
-        });
-      } catch {}
+      try { await syncToServer('/api/xp', { xp: xpToSync }); } catch {}
     }
 
     if (pendingGold > 0 || pendingDiamonds > 0) {
       const g = pendingGold, d = pendingDiamonds;
       pendingGold = 0; pendingDiamonds = 0;
       globalGold += g; globalDiamonds += d;
-      try {
-        await fetch('/api/gold', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-          body: JSON.stringify({ gold: g, diamonds: d })
-        });
-      } catch {}
+      try { await syncToServer('/api/gold', { gold: g, diamonds: d }); } catch {}
     }
 
     try {
-      const res = await fetch('/api/death', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + authToken }
-      });
+      const res = await syncToServer('/api/death', {});
       if (res.ok) {
         const data = await res.json();
         globalXp = data.xp;
         globalGold = 0;
-        // globalDiamonds stays — diamonds persist through death
       }
     } catch {}
   }
