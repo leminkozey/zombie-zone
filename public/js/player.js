@@ -1,14 +1,67 @@
-// ── RESCUE ──────────────────────────────────────────
+const RESCUE_BASE_RADIUS = 60;
+const RESCUE_MIN_WALL_DIST = 3; // in tiles
+const RESCUE_MIN_BORDER_DIST = 5; // in tiles
+const RESCUE_SPAWN_ATTEMPTS = 50;
+const RESCUE_HOLD_DURATION = 3000; // ms
+const RESCUE_DECAY_SLOWDOWN = 3; // decay is 3x slower than fill
+const EVAC_CHOPPER_SPEED_MULT = 0.5;
+const EVAC_CHOPPER_SNAP_DIST_SQ = 100; // 10px squared
+
+const TURRET_RANGE = 150;
+const TURRET_DPS = 2;
+const TURRET_FIRE_INTERVAL = 2;
+const TURRET_MELEE_INTERVAL = 40;
+const TURRET_MELEE_DMG = 8;
+const TURRET_SELF_REPAIR_PER_SEC = 2;
+const TURRET_AGGRO_DURATION = 300;
+
+const BUILDER_MAX_BLOCKS = 15;
+const BUILDER_BLOCK_HP = 10;
+const BUILDER_HEAL_DELAY_FRAMES = 600; // 10s at 60fps
+const BUILDER_HEAL_RATE = 0.01;
+
+const SNIPER_EXPLOSIVE_AOE = 40;
+const SNIPER_EXPLOSIVE_DMG_MULT = 0.5;
+const SNIPER_EXPLOSIVE_PARTICLE_COUNT = 8;
+
+const SHOTGUN_PELLET_COUNT = 5;
+const SHOTGUN_PELLET_SPACING = 0.12;
+const SLUG_SPEED_MULT = 1.2;
+const SLUG_RANGE_MULT = 1.5;
+const SLUG_DMG_MULT = 5;
+
+const MINIGUN_SPINUP_THRESHOLD = 40;
+const MINIGUN_RAMP_FRAMES = 180;
+const MINIGUN_MOVE_SPEED_MULT = 0.35;
+
+const BLOOD_DECAL_LIMIT = 200;
+
+const IRON_SKIN_COOLDOWN = 60000; // 60s
+const SECOND_WIND_HP_PCT = 0.3;
+const BERSERKER_HP_THRESHOLD = 0.5;
+const ADRENALIN_HP_THRESHOLD = 0.3;
+
+const MEDIC_HEAL_ZONE_RADIUS = 80;
+const MEDIC_HEAL_ZONE_DURATION = 480; // 8s at 60fps
+const MEDIC_HEAL_PER_SEC = 5;
+
+const TIME_TRAVELER_ABILITY_DURATION = 480; // 5s slow + 3s fast
+const TIME_TRAVELER_SLOW_PHASE = 300; // 5s at 60fps
+const TIME_TRAVELER_SLOW_SCALE = 0.2;
+const TIME_TRAVELER_SPEED_MULT = 1.8;
+
+const ZHASH_CELL = 80;
+const _zombieHash = new Map();
+
 function spawnRescueCircle() {
-  const baseRadius = 60;
-  const radius = baseRadius * (1 + getPlayerStat('rescueCircleRadiusPct'));
-  const minWallDist = 3 * TILE;
-  const minBorderDist = 5 * TILE;
+  const radius = RESCUE_BASE_RADIUS * (1 + getPlayerStat('rescueCircleRadiusPct'));
+  const minWallDist = RESCUE_MIN_WALL_DIST * TILE;
+  const minBorderDist = RESCUE_MIN_BORDER_DIST * TILE;
   const mapW = COLS * TILE;
   const mapH = ROWS * TILE;
 
   let best = null;
-  for (let attempt = 0; attempt < 50; attempt++) {
+  for (let attempt = 0; attempt < RESCUE_SPAWN_ATTEMPTS; attempt++) {
     const x = minBorderDist + Math.random() * (mapW - 2 * minBorderDist);
     const y = minBorderDist + Math.random() * (mapH - 2 * minBorderDist);
 
@@ -22,7 +75,7 @@ function spawnRescueCircle() {
         if (isWall(cc * TILE + TILE/2, cr * TILE + TILE/2)) {
           const wx = cc * TILE + TILE/2, wy = cr * TILE + TILE/2;
           const ddx = x - wx, ddy = y - wy;
-          if (Math.sqrt(ddx*ddx + ddy*ddy) < minWallDist) tooClose = true;
+          if (ddx*ddx + ddy*ddy < minWallDist * minWallDist) tooClose = true;
         }
       }
     }
@@ -48,7 +101,7 @@ function updateRescue(now) {
 
     case 'holding_f':
       if (!keys[keybinds.rescue]) { rescueState = 'idle'; break; }
-      if (now - rescueHoldStart >= 3000) {
+      if (now - rescueHoldStart >= RESCUE_HOLD_DURATION) {
         rescueState = 'survival_phase';
         rescueSurvivalTimer = getPlayerStat('rescueSurvivalTime') * 60;
         playSound('rescue_start');
@@ -68,56 +121,59 @@ function updateRescue(now) {
 
     case 'circle_spawned':
     case 'extracting': {
-      rescueExpiryTimer--;
-
-      const cdx = player.x - rescueCircle.x;
-      const cdy = player.y - rescueCircle.y;
-      const inCircle = Math.sqrt(cdx*cdx + cdy*cdy) < rescueCircle.radius;
-
-      if (rescueState === 'circle_spawned' && inCircle) {
-        rescueState = 'extracting';
-      } else if (rescueState === 'extracting' && !inCircle) {
-        rescueState = 'circle_spawned';
-      }
-
-      // Progress decays slowly when outside circle (reducible via Steady Hands)
-      if (rescueState === 'circle_spawned' && rescueExtractProgress > 0) {
-        const baseDecay = 1 / (getPlayerStat('rescueStandTime') * 60 * 3); // 3x slower than fill
-        const decayReduction = getPlayerStat('rescueDecayReduction') || 0;
-        const decayRate = baseDecay * Math.max(0, 1 - decayReduction);
-        rescueExtractProgress = Math.max(0, rescueExtractProgress - decayRate);
-      }
-
-      if (rescueState === 'extracting') {
-        const standFrames = getPlayerStat('rescueStandTime') * 60;
-        rescueExtractProgress += 1 / standFrames;
-        if (rescueExtractProgress >= 1) {
-          rescueState = 'success';
-          rescueSuccess();
-          return;
-        }
-      }
-
-      // Evac Chopper
-      if (hasSkill('evac_chopper') && rescueCircle) {
-        const speed = getPlayerStat('moveSpeed') * 0.5;
-        const ecx = player.x - rescueCircle.x;
-        const ecy = player.y - rescueCircle.y;
-        const ecdist = Math.sqrt(ecx*ecx + ecy*ecy);
-        if (ecdist > 10) {
-          rescueCircle.x += (ecx/ecdist) * speed;
-          rescueCircle.y += (ecy/ecdist) * speed;
-        }
-      }
-
-      if (rescueExpiryTimer <= 0) {
-        rescueState = 'idle';
-        rescueCircle = null;
-        rescueCooldownUntil = performance.now() + getPlayerStat('rescueCooldown') * 1000;
-        showWaveBanner('RESCUE FEHLGESCHLAGEN');
-      }
+      updateRescueExtraction();
       break;
     }
+  }
+}
+
+function updateRescueExtraction() {
+  rescueExpiryTimer--;
+
+  const cdx = player.x - rescueCircle.x;
+  const cdy = player.y - rescueCircle.y;
+  const inCircle = cdx*cdx + cdy*cdy < rescueCircle.radius * rescueCircle.radius;
+
+  if (rescueState === 'circle_spawned' && inCircle) {
+    rescueState = 'extracting';
+  } else if (rescueState === 'extracting' && !inCircle) {
+    rescueState = 'circle_spawned';
+  }
+
+  if (rescueState === 'circle_spawned' && rescueExtractProgress > 0) {
+    const baseDecay = 1 / (getPlayerStat('rescueStandTime') * 60 * RESCUE_DECAY_SLOWDOWN);
+    const decayReduction = getPlayerStat('rescueDecayReduction') || 0;
+    const decayRate = baseDecay * Math.max(0, 1 - decayReduction);
+    rescueExtractProgress = Math.max(0, rescueExtractProgress - decayRate);
+  }
+
+  if (rescueState === 'extracting') {
+    const standFrames = getPlayerStat('rescueStandTime') * 60;
+    rescueExtractProgress += 1 / standFrames;
+    if (rescueExtractProgress >= 1) {
+      rescueState = 'success';
+      rescueSuccess();
+      return;
+    }
+  }
+
+  if (hasSkill('evac_chopper') && rescueCircle) {
+    const speed = getPlayerStat('moveSpeed') * EVAC_CHOPPER_SPEED_MULT;
+    const ecx = player.x - rescueCircle.x;
+    const ecy = player.y - rescueCircle.y;
+    const ecDistSq = ecx*ecx + ecy*ecy;
+    if (ecDistSq > EVAC_CHOPPER_SNAP_DIST_SQ) {
+      const ecdist = Math.sqrt(ecDistSq);
+      rescueCircle.x += (ecx/ecdist) * speed;
+      rescueCircle.y += (ecy/ecdist) * speed;
+    }
+  }
+
+  if (rescueExpiryTimer <= 0) {
+    rescueState = 'idle';
+    rescueCircle = null;
+    rescueCooldownUntil = performance.now() + getPlayerStat('rescueCooldown') * 1000;
+    showWaveBanner('RESCUE FEHLGESCHLAGEN');
   }
 }
 
@@ -148,7 +204,6 @@ async function rescueSuccess() {
       } catch {}
     }
 
-    // Sync gold before rescue
     if (pendingGold > 0 || pendingDiamonds > 0) {
       const g = pendingGold, d = pendingDiamonds;
       pendingGold = 0; pendingDiamonds = 0;
@@ -188,7 +243,6 @@ function drawRescueCircle() {
   ctx.fillStyle = 'rgba(100, 255, 150, ' + (pulse * 0.08) + ')';
   ctx.fill();
 
-  // Show progress bar whenever there's progress (extracting OR decaying)
   if ((rescueState === 'extracting' || rescueState === 'circle_spawned') && rescueExtractProgress > 0) {
     const barW = rescueCircle.radius * 2;
     const barH = 6;
@@ -196,7 +250,6 @@ function drawRescueCircle() {
     const barY = rescueCircle.y - rescueCircle.radius - 20;
     ctx.fillStyle = '#222';
     ctx.fillRect(barX, barY, barW, barH);
-    // Green when extracting, orange-fading when decaying
     ctx.fillStyle = rescueState === 'extracting' ? '#66ff99' : '#aa8833';
     ctx.fillRect(barX, barY, barW * rescueExtractProgress, barH);
   }
@@ -205,7 +258,7 @@ function drawRescueCircle() {
 
 function drawRescueHUD() {
   ctx.save();
-  const midY = H / 2; // left-center Y position
+  const midY = H / 2;
 
   if (rescueState === 'idle') {
     const activationFrames = getPlayerStat('rescueActivationTime') * 60;
@@ -228,7 +281,6 @@ function drawRescueHUD() {
       ctx.textAlign = 'left';
       ctx.fillText('RESCUE CD ' + secsLeft + 's', 16, midY);
     } else {
-      // Ready — left center
       ctx.font = "11px 'Share Tech Mono'";
       ctx.fillStyle = '#ffaa00';
       ctx.textAlign = 'left';
@@ -237,7 +289,7 @@ function drawRescueHUD() {
   }
 
   if (rescueState === 'holding_f') {
-    const prog = Math.min((performance.now() - rescueHoldStart) / 3000, 1);
+    const prog = Math.min((performance.now() - rescueHoldStart) / RESCUE_HOLD_DURATION, 1);
     ctx.textAlign = 'center';
     const barW = 200, barH = 8;
     ctx.fillStyle = '#222';
@@ -268,12 +320,11 @@ function drawRescueHUD() {
   ctx.restore();
 }
 
-// ── INPUT ────────────────────────────────────────────
 let paused = false;
 
 function togglePause() {
-  if (mpEnabled) return; // no pause in multiplayer
-  if (!running && !paused) return; // game over, nicht pausieren
+  if (mpEnabled) return;
+  if (!running && !paused) return;
   paused = !paused;
   if (paused) {
     running = false;
@@ -289,7 +340,6 @@ document.addEventListener('keydown', e => {
   if (document.activeElement.tagName === 'INPUT') return;
   if (e.code === keybinds.pause) { togglePause(); return; }
   keys[e.code] = true;
-  // In MP mode, only track keys — server handles all game logic
   if (mpEnabled) { e.preventDefault(); return; }
   if (e.code === keybinds.reload && !reloading && player.ammo < getWeaponStat(activeWeaponId, 'mag')) startReload();
   const weaponKeys = { 'Digit1': 'pistol', 'Digit2': 'smg', 'Digit3': 'shotgun', 'Digit4': 'assault_rifle', 'Digit5': 'sniper', 'Digit6': 'minigun' };
@@ -317,23 +367,21 @@ document.addEventListener('keydown', e => {
         setTimeout(() => { activePerkActive['shotgun_dragon'] = false; }, 5000);
       }
       if (perkId === 'sniper_wallpen') {
-        // Active for 1 magazine — deactivated on reload
+        // Active for 1 magazine
       }
       if (perkId === 'pistol_akimbo') {
-        // Active for 1 magazine — deactivated on reload
+        // Active for 1 magazine
       }
       if (perkId === 'shotgun_slug') {
-        // Active for 1 magazine — deactivated on reload
+        // Active for 1 magazine
       }
       if (perkId === 'smg_drum') {
-        // Immediately give 3x mag
         player.ammo = getWeaponStat(activeWeaponId, 'mag') * 3;
         player.maxAmmo = getWeaponStat(activeWeaponId, 'mag') * 3;
         activePerkActive['smg_drum'] = false;
         updateHUD();
       }
       if (perkId === 'ar_grenade') {
-        // Fire a grenade projectile
         const gAngle = Math.atan2((mouseY + camY) - player.y, (mouseX + camX) - player.x);
         bullets.push({
           x: player.x, y: player.y,
@@ -364,7 +412,6 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 canvas.addEventListener('mousemove', e => {
   const rect = canvas.getBoundingClientRect();
-  // Scale CSS pixels to canvas pixels (canvas may be larger than CSS size)
   mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
   mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
 });
@@ -373,11 +420,8 @@ let mouseDown = false;
 canvas.addEventListener('mousedown', e => { if (e.button === 0) mouseDown = true; });
 canvas.addEventListener('mouseup',   e => { if (e.button === 0) mouseDown = false; });
 
-// ── RELOAD ───────────────────────────────────────────
 function startReload() {
-  // Soldier Rush — no reload during ability
   if (player.soldierRush) return;
-  // Juggernaut passive — minigun no reload
   if (activeOperatorId === 'juggernaut' && activeWeaponId === 'minigun') return;
   const maxAmmo = getWeaponStat(activeWeaponId, 'mag');
   if (reloading || player.ammo === maxAmmo) return;
@@ -385,7 +429,6 @@ function startReload() {
   reloadStart = performance.now();
   playSound('reload');
   document.getElementById('reload-bar-wrap').style.display = 'block';
-  // Deactivate magazine-based perks on reload
   activePerkActive['pistol_akimbo'] = false;
   activePerkActive['sniper_wallpen'] = false;
   activePerkActive['shotgun_slug'] = false;
@@ -404,7 +447,6 @@ function updateReload(now) {
   }
 }
 
-// ── OPERATOR ABILITIES ──────────────────────────────
 function activateOperatorAbility() {
   const op = OPERATORS[activeOperatorId];
   if (!op) return;
@@ -423,9 +465,9 @@ function activateOperatorAbility() {
   if (activeOperatorId === 'medic') {
     healZones.push({
       x: player.x, y: player.y,
-      radius: 80, duration: 480, // 8s
-      healPerSec: 5,
-      dps: 0, // 0 by default, upgradeable later
+      radius: MEDIC_HEAL_ZONE_RADIUS, duration: MEDIC_HEAL_ZONE_DURATION,
+      healPerSec: MEDIC_HEAL_PER_SEC,
+      dps: 0,
       placedAt: frameCount,
     });
     playSound('pickup_health');
@@ -436,7 +478,6 @@ function activateOperatorAbility() {
     const ptx = Math.floor(player.x / TILE);
     const pty = Math.floor(player.y / TILE);
     if (tx > 0 && tx < COLS-1 && ty > 0 && ty < ROWS-1 && (tx !== ptx || ty !== pty)) {
-      // reinforcement: place on existing builder block → make it indestructible
       const existing = builderBlocks.find(b => b.x === tx && b.y === ty);
       if (existing && !existing.reinforced) {
         existing.reinforced = true;
@@ -444,9 +485,7 @@ function activateOperatorAbility() {
         floatingTexts.push({ x: tx * TILE + TILE/2, y: ty * TILE, text: 'REINFORCED', life: 30, maxLife: 30, color: '#88aa66' });
         playSound('ui_click');
       } else if (!camActive && MAP[ty] && MAP[ty][tx] === 0) {
-        // new block
-        if (builderBlocks.length >= 15) {
-          // remove oldest non-reinforced, or oldest reinforced if all reinforced
+        if (builderBlocks.length >= BUILDER_MAX_BLOCKS) {
           const oldIdx = builderBlocks.findIndex(b => !b.reinforced);
           const removeIdx = oldIdx >= 0 ? oldIdx : 0;
           const old = builderBlocks.splice(removeIdx, 1)[0];
@@ -454,34 +493,32 @@ function activateOperatorAbility() {
           mapCacheCanvas = null;
           _floorNoise = null;
         }
-        builderBlocks.push({ x: tx, y: ty, hp: 10, maxHp: 10, placedAt: frameCount, reinforced: false });
+        builderBlocks.push({ x: tx, y: ty, hp: BUILDER_BLOCK_HP, maxHp: BUILDER_BLOCK_HP, placedAt: frameCount, reinforced: false });
         if (!camActive) MAP[ty][tx] = 2;
         mapCacheCanvas = null;
         _floorNoise = null;
-        computeFlowfield(); // immediate recompute so zombies path around
+        computeFlowfield();
         playSound('ui_click');
       }
     }
   }
   if (activeOperatorId === 'time_traveler') {
-    operatorAbilityTimer = 480; // 5s slow + 3s fast = 8s total
+    operatorAbilityTimer = TIME_TRAVELER_ABILITY_DURATION;
     timeTravelerPhase = 'slow';
-    timeTravelerTimer = 300; // 5s at 60fps
-    timeScale = 0.2;
+    timeTravelerTimer = TIME_TRAVELER_SLOW_PHASE;
+    timeScale = TIME_TRAVELER_SLOW_SCALE;
     frozenBullets = [];
     playSound('perk_activate');
   }
   if (activeOperatorId === 'electrician') {
     if (turrets.length >= 2) {
-      // Second activation on existing turrets: activate aggro mode
-      turrets.forEach(t => { t.aggroTimer = 300; }); // 5s aggro
+      turrets.forEach(t => { t.aggroTimer = TURRET_AGGRO_DURATION; });
       showWaveBanner('TURRET AGGRO!');
-      operatorAbilityCooldown = 0; // no cooldown for aggro toggle
+      operatorAbilityCooldown = 0;
       operatorAbilityActive = false;
       operatorAbilityTimer = 0;
       return;
     }
-    // Place turret at player position
     turrets.push({
       x: player.x, y: player.y,
       hp: 50, maxHp: 50,
@@ -504,45 +541,37 @@ function updateOperatorAbility() {
   }
 }
 
-// ── TURRETS ─────────────────────────────────────────
 function updateTurrets() {
   for (let i = turrets.length - 1; i >= 0; i--) {
     const t = turrets[i];
-    // Self-repair (passive: 2 HP/s)
     if (activeOperatorId === 'electrician' && t.hp < t.maxHp) {
-      t.hp = Math.min(t.hp + 2/60, t.maxHp);
+      t.hp = Math.min(t.hp + TURRET_SELF_REPAIR_PER_SEC/60, t.maxHp);
     }
-    // Find nearest zombie
-    let nearest = null, nearestDist = 150; // 150px range
+    let nearest = null, nearestDistSq = TURRET_RANGE * TURRET_RANGE;
     for (const z of zombies) {
       if (!z.alive) continue;
       const dx = z.x - t.x, dy = z.y - t.y;
-      const d = Math.sqrt(dx*dx + dy*dy);
-      if (d < nearestDist) { nearest = z; nearestDist = d; }
+      const dSq = dx*dx + dy*dy;
+      if (dSq < nearestDistSq) { nearest = z; nearestDistSq = dSq; }
     }
-    // Shoot at nearest
     if (nearest && t.shootCooldown <= 0) {
       t.angle = Math.atan2(nearest.y - t.y, nearest.x - t.x);
-      nearest.hp -= 2/30; // 2 DPS, fires every 2 frames
-      t.shootCooldown = 2;
-      // Tracer visual
+      nearest.hp -= TURRET_DPS/30;
+      t.shootCooldown = TURRET_FIRE_INTERVAL;
       hitTrails.push({ x1: t.x, y1: t.y, x2: nearest.x, y2: nearest.y, life: 2, maxLife: 2, style: 'minigun' });
       if (nearest.hp <= 0 && nearest.alive) {
         nearest.alive = false; nearest.deathTimer = nearest.isBoss ? 60 : 30; onZombieKill(nearest);
       }
     }
     if (t.shootCooldown > 0) t.shootCooldown--;
-    // Aggro timer tick
     if (t.aggroTimer > 0) t.aggroTimer--;
-    // Zombie damage to turret
     for (const z of zombies) {
       if (!z.alive) continue;
       const dx = z.x - t.x, dy = z.y - t.y;
       if (dx*dx + dy*dy < (z.radius + 15)**2) {
-        if (z.frame % 40 === 0) t.hp -= 8;
+        if (z.frame % TURRET_MELEE_INTERVAL === 0) t.hp -= TURRET_MELEE_DMG;
       }
     }
-    // Destroyed
     if (t.hp <= 0) {
       turrets.splice(i, 1);
       playSound('explosion');
@@ -554,25 +583,21 @@ function drawTurrets() {
   for (const t of turrets) {
     ctx.save();
     ctx.translate(t.x, t.y);
-    // Base
     ctx.fillStyle = '#3a4440';
     ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill();
     ctx.strokeStyle = '#5a6a55';
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    // Barrel
     ctx.rotate(t.angle);
     ctx.fillStyle = '#2a2e28';
     ctx.fillRect(8, -2, 12, 4);
     ctx.restore();
-    // HP bar
     if (t.hp < t.maxHp) {
       ctx.fillStyle = '#400';
       ctx.fillRect(t.x - 12, t.y - 18, 24, 3);
       ctx.fillStyle = '#0f0';
       ctx.fillRect(t.x - 12, t.y - 18, 24 * (t.hp / t.maxHp), 3);
     }
-    // Aggro indicator
     if (t.aggroTimer > 0) {
       ctx.strokeStyle = 'rgba(255,100,50,0.3)';
       ctx.lineWidth = 1;
@@ -581,21 +606,18 @@ function drawTurrets() {
   }
 }
 
-// ── BUILDER BLOCKS ──────────────────────────────────
 function updateBuilderBlocks() {
   for (let i = builderBlocks.length - 1; i >= 0; i--) {
     const b = builderBlocks[i];
-    // Self-heal after 10s if damaged
-    if (b.hp < b.maxHp && frameCount - b.placedAt > 600) {
-      b.hp = Math.min(b.hp + 0.01, b.maxHp);
+    if (b.hp < b.maxHp && frameCount - b.placedAt > BUILDER_HEAL_DELAY_FRAMES) {
+      b.hp = Math.min(b.hp + BUILDER_HEAL_RATE, b.maxHp);
     }
-    // Remove if destroyed
     if (b.hp <= 0) {
       if (MAP[b.y] && MAP[b.y][b.x] !== undefined) MAP[b.y][b.x] = 0;
       mapCacheCanvas = null;
       _floorNoise = null;
       builderBlocks.splice(i, 1);
-      computeFlowfield(); // recompute so zombies update paths
+      computeFlowfield();
     }
   }
 }
@@ -604,13 +626,11 @@ function drawBuilderBlocks() {
   for (const b of builderBlocks) {
     const x = b.x * TILE, y = b.y * TILE;
     if (b.reinforced) {
-      // reinforced block — steel look
       ctx.fillStyle = '#5a6655';
       ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
       ctx.strokeStyle = '#8a9a77';
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 1, y + 1, TILE - 2, TILE - 2);
-      // double cross-hatch
       ctx.strokeStyle = '#4a5540';
       ctx.lineWidth = 0.8;
       ctx.beginPath();
@@ -619,7 +639,6 @@ function drawBuilderBlocks() {
       ctx.moveTo(x + TILE/2, y + 2); ctx.lineTo(x + TILE/2, y + TILE - 2);
       ctx.moveTo(x + 2, y + TILE/2); ctx.lineTo(x + TILE - 2, y + TILE/2);
       ctx.stroke();
-      // corner rivets
       ctx.fillStyle = '#8a9a77';
       const rv = 2;
       ctx.fillRect(x + 3, y + 3, rv, rv);
@@ -627,20 +646,17 @@ function drawBuilderBlocks() {
       ctx.fillRect(x + 3, y + TILE - 5, rv, rv);
       ctx.fillRect(x + TILE - 5, y + TILE - 5, rv, rv);
     } else {
-      // normal block
       ctx.fillStyle = '#4a5540';
       ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
       ctx.strokeStyle = '#6a7a55';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
-      // cross-hatch
       ctx.strokeStyle = '#3a4530';
       ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.moveTo(x + 4, y + 4); ctx.lineTo(x + TILE - 4, y + TILE - 4);
       ctx.moveTo(x + TILE - 4, y + 4); ctx.lineTo(x + 4, y + TILE - 4);
       ctx.stroke();
-      // HP bar if damaged
       if (b.hp < b.maxHp) {
         const bw = TILE - 8;
         ctx.fillStyle = '#400';
@@ -652,9 +668,7 @@ function drawBuilderBlocks() {
   }
 }
 
-// ── SHOOTING ─────────────────────────────────────────
 function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
-  // Hollow Point — +50% damage to normal zombies (pistol passive)
   if (ownedPerks.includes('pistol_hollow') && weaponId === 'pistol' && z.type === 'normal') {
     effectiveDmg *= 1.5;
   }
@@ -662,34 +676,29 @@ function applyPerkDamageEffects(z, effectiveDmg, weaponId) {
   z.hp -= actualDmg;
   runStats.damageDealt += actualDmg;
 
-  // Incendiary — SMG passive: burn 3s at 2 DPS
   if (ownedPerks.includes('smg_incendiary') && weaponId === 'smg') {
     z.burnTimer = 180; z.burnDps = 2;
   }
-  // Dragon's Breath — shotgun active: burn on hit
   if (activePerkActive['shotgun_dragon'] && weaponId === 'shotgun') {
     z.burnTimer = 180; z.burnDps = 3;
   }
-  // Cryo — minigun passive: slow 30% for 2s
   if (ownedPerks.includes('minigun_cryo') && weaponId === 'minigun') {
     z.cryoTimer = 120;
   }
-  // Explosive — sniper passive: AoE on hit
   if (ownedPerks.includes('sniper_explosive') && weaponId === 'sniper' && z.alive) {
     playSound('explosion');
-    const aoeR = 40;
+    const aoeRSq = SNIPER_EXPLOSIVE_AOE * SNIPER_EXPLOSIVE_AOE;
     for (const oz of zombies) {
       if (oz === z || !oz.alive) continue;
       const odx = oz.x - z.x, ody = oz.y - z.y;
-      if (odx*odx + ody*ody < aoeR*aoeR) {
-        oz.hp -= applyBossDamage(oz, effectiveDmg * 0.5, player.x, player.y);
-        runStats.damageDealt += effectiveDmg * 0.5;
+      if (odx*odx + ody*ody < aoeRSq) {
+        oz.hp -= applyBossDamage(oz, effectiveDmg * SNIPER_EXPLOSIVE_DMG_MULT, player.x, player.y);
+        runStats.damageDealt += effectiveDmg * SNIPER_EXPLOSIVE_DMG_MULT;
         spawnBlood(oz.x, oz.y, 4);
         if (oz.hp <= 0) { oz.alive = false; oz.deathTimer = oz.isBoss ? 60 : 30; onZombieKill(oz); }
       }
     }
-    // Explosion particles
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < SNIPER_EXPLOSIVE_PARTICLE_COUNT; i++) {
       const ea = Math.random() * Math.PI * 2;
       particles.push({ x: z.x, y: z.y, dx: Math.cos(ea)*4, dy: Math.sin(ea)*4, life: 15, maxLife: 15, color: '#ff6600', r: 4 });
     }
@@ -704,32 +713,28 @@ function tryShoot() {
   const magSize = getWeaponStat(activeWeaponId, 'mag');
   let spread = getWeaponStat(activeWeaponId, 'acc');
   let dmg = getWeaponStat(activeWeaponId, 'dmg');
-  // Apply operator weapon damage buff/debuff
-  const wpnDmgMult = 1 + getPlayerStat('weaponDamagePct');
-  dmg *= wpnDmgMult;
-  // Berserker — more damage at low HP
+
+  dmg *= 1 + getPlayerStat('weaponDamagePct');
+
   const berserkerMax = getPlayerStat('berserkerMaxBonus');
   if (berserkerMax > 0) {
     const hpPct = player.hp / getPlayerStat('maxHp');
-    if (hpPct < 0.5) {
-      const berserkerMult = 1 + berserkerMax * (1 - hpPct * 2);
-      dmg *= berserkerMult;
+    if (hpPct < BERSERKER_HP_THRESHOLD) {
+      dmg *= 1 + berserkerMax * (1 - hpPct * 2);
     }
   }
-  // Juggernaut active — +50% damage
+
   if (player.juggernautActive) dmg *= 1.5;
-  // Minigun ramp-up — damage scales up after spinup (up to 2x at sustained fire)
-  if (activeWeaponId === 'minigun' && minigunSpinup > 40) {
-    dmg *= 1 + Math.min((minigunSpinup - 40) / 180, 1.0);
+
+  if (activeWeaponId === 'minigun' && minigunSpinup > MINIGUN_SPINUP_THRESHOLD) {
+    dmg *= 1 + Math.min((minigunSpinup - MINIGUN_SPINUP_THRESHOLD) / MINIGUN_RAMP_FRAMES, 1.0);
   }
-  // Operator range buff
+
   const rangeMult = 1 + getPlayerStat('weaponRangePct');
   const range = Math.round(getWeaponStat(activeWeaponId, 'range') * rangeMult);
-  // Operator fire rate buff/debuff
   const fireRateMult = 1 + getPlayerStat('fireRatePct');
   fireRate = Math.max(1, Math.round(fireRate * Math.max(0.3, fireRateMult)));
 
-  // Akimbo — double fire rate, double spread
   const akimboActive = activePerkActive['pistol_akimbo'] && activeWeaponId === 'pistol';
   if (akimboActive) {
     fireRate = Math.max(1, Math.round(fireRate / 2));
@@ -746,12 +751,11 @@ function tryShoot() {
 
   if (wpn.special === 'spinup') {
     minigunSpinup++;
-    // Overdrive — skip spinup delay but still count for ramp-up
     if (activePerkActive['minigun_overdrive']) {
       player.shootCooldown = fireRate;
     } else {
-      if (minigunSpinup < 40) {
-        const t = minigunSpinup / 40;
+      if (minigunSpinup < MINIGUN_SPINUP_THRESHOLD) {
+        const t = minigunSpinup / MINIGUN_SPINUP_THRESHOLD;
         player.shootCooldown = Math.max(fireRate, Math.round(fireRate * (6 - 5 * t * t)));
       } else {
         player.shootCooldown = fireRate;
@@ -761,12 +765,10 @@ function tryShoot() {
     player.shootCooldown = fireRate;
   }
 
-  // Soldier Rush — halve fire rate cooldown
   if (isSoldierRush) {
     player.shootCooldown = Math.max(1, Math.round(player.shootCooldown * 0.5));
   }
 
-  // Last Stand — +50% fire rate during rescue extraction
   if (typeof rescueState !== 'undefined' && rescueState === 'extracting' && hasSkill('last_stand')) {
     player.shootCooldown = Math.max(1, Math.round(player.shootCooldown * 0.5));
   }
@@ -777,154 +779,172 @@ function tryShoot() {
   updateHUD();
 
   const angle = Math.atan2((mouseY + camY) - player.y, (mouseX + camX) - player.x);
-
-  // Slug Round — shotgun fires single heavy bullet
   const slugActive = activePerkActive['shotgun_slug'] && activeWeaponId === 'shotgun';
-
   const useHitscan = wpn.type === 'Auto' || activeWeaponId === 'sniper';
 
   if (useHitscan && timeTravelerPhase !== 'slow') {
-    // Hitscan — instant ray, no bullet object
-    const bulletSpread = (Math.random() - 0.5) * spread;
-    const rayAngle = angle + bulletSpread;
-    const rayDx = Math.cos(rayAngle);
-    const rayDy = Math.sin(rayAngle);
-    const maxDist = range * BULLET_SPD;
-
-    let hitDist = maxDist;
-    let hitX = player.x + rayDx * maxDist;
-    let hitY = player.y + rayDy * maxDist;
-
-    // Wall Penetration — sniper active: skip wall check
-    const wallPenActive = activePerkActive['sniper_wallpen'] && activeWeaponId === 'sniper';
-    if (!wallPenActive) {
-      for (let d = 0; d < maxDist; d += TILE * 0.5) {
-        const wx = player.x + rayDx * d;
-        const wy = player.y + rayDy * d;
-        if (wallCollide(wx, wy, 2)) {
-          hitDist = d;
-          hitX = wx; hitY = wy;
-          break;
-        }
-      }
-    }
-
-    // FMJ — AR passive: pierce 1 extra zombie
-    const fmjActive = ownedPerks.includes('ar_fmj') && activeWeaponId === 'assault_rifle';
-    const isPierce = wpn.special === 'pierce' || fmjActive;
-    const hitZombies = [];
-    for (const z of zombies) {
-      if (!z.alive || z.burrowed) continue;
-      const zx = z.x - player.x, zy = z.y - player.y;
-      const proj = zx * rayDx + zy * rayDy;
-      if (proj < 0 || proj > hitDist) continue;
-      const perpX = zx - rayDx * proj;
-      const perpY = zy - rayDy * proj;
-      const perpDist = Math.sqrt(perpX * perpX + perpY * perpY);
-      if (perpDist < z.radius + BULLET_R) {
-        hitZombies.push({ z, proj });
-      }
-    }
-    hitZombies.sort((a, b) => a.proj - b.proj);
-
-    const sniperExecute = activeWeaponId === 'sniper' && playerWeapons.find(w => w.weapon_id === 'sniper' && w.dmg_level >= 10);
-    // FMJ pierces 2 (first + 1), sniper pierce = all
-    const maxHits = fmjActive ? 2 : (isPierce ? hitZombies.length : 1);
-    const toHit = hitZombies.slice(0, maxHits);
-    for (const { z, proj } of toHit) {
-      if (sniperExecute) {
-        z.hp = 0;
-        runStats.damageDealt += z.maxHp;
-      } else {
-        applyPerkDamageEffects(z, dmg, activeWeaponId);
-      }
-      spawnBlood(z.x, z.y, sniperExecute ? 12 : 6, rayAngle);
-      if (z.hp <= 0 && z.alive) {
-        z.alive = false;
-        z.deathTimer = z.isBoss ? 60 : 30;
-        onZombieKill(z);
-      } else if (z.alive) {
-        playSoundThrottled('zombie_hit', 80);
-      }
-    }
-    if (hitZombies.length > 0 && !isPierce) {
-      hitX = player.x + rayDx * hitZombies[0].proj;
-      hitY = player.y + rayDy * hitZombies[0].proj;
-    }
-
-    // Visual tracer
-    if (activeWeaponId === 'sniper') {
-      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 12, maxLife: 12, style: 'sniper' });
-    } else if (activeWeaponId === 'minigun') {
-      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 3, maxLife: 3, style: 'minigun' });
-    } else if (activeWeaponId === 'assault_rifle') {
-      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 8, maxLife: 8, style: 'rifle' });
-    } else {
-      hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 4, maxLife: 4, style: 'auto' });
-    }
-
+    shootHitscan(angle, spread, range, dmg, wpn, akimboActive);
   } else if (useHitscan && timeTravelerPhase === 'slow') {
-    // Slowmo: convert hitscan to frozen projectile
-    const bulletSpread = (Math.random() - 0.5) * spread;
-    frozenBullets.push({
-      x: player.x, y: player.y,
-      dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
-      dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
-      life: range, damage: dmg, pierce: wpn.special === 'pierce',
-      weaponId: activeWeaponId,
-    });
+    shootFrozenHitscan(angle, spread, range, dmg, wpn);
   } else if (wpn.special === 'shotgun' && !slugActive) {
-    // Shotgun keeps projectiles (5 pellets, short range)
-    const targetArr = timeTravelerPhase === 'slow' ? frozenBullets : bullets;
-    for (let p = 0; p < 5; p++) {
-      const pelletSpread = (p - 2) * 0.12 + (Math.random() - 0.5) * spread;
-      targetArr.push({
-        x: player.x, y: player.y,
-        dx: Math.cos(angle + pelletSpread) * BULLET_SPD,
-        dy: Math.sin(angle + pelletSpread) * BULLET_SPD,
-        life: range, damage: dmg, pierce: false,
-        weaponId: activeWeaponId,
-      });
-    }
+    shootShotgun(angle, spread, range, dmg);
   } else if (slugActive) {
-    // Slug Round — single heavy bullet, no spread, 5x damage
-    const slugBullet = {
-      x: player.x, y: player.y,
-      dx: Math.cos(angle) * BULLET_SPD * 1.2,
-      dy: Math.sin(angle) * BULLET_SPD * 1.2,
-      life: range * 1.5, damage: dmg * 5, pierce: false,
-      weaponId: activeWeaponId,
-    };
-    if (timeTravelerPhase === 'slow') frozenBullets.push(slugBullet);
-    else bullets.push(slugBullet);
+    shootSlug(angle, range, dmg);
   } else {
-    // Pistol — keep projectiles (low fire rate, few objects)
-    const bulletSpread = (Math.random() - 0.5) * spread;
-    const pistolBullet = {
-      x: player.x, y: player.y,
-      dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
-      dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
-      life: range, damage: dmg, pierce: wpn.special === 'pierce',
-      weaponId: activeWeaponId,
-    };
-    if (timeTravelerPhase === 'slow') frozenBullets.push(pistolBullet);
-    else bullets.push(pistolBullet);
-    // Akimbo — fire second bullet
-    if (akimboActive) {
-      const bulletSpread2 = (Math.random() - 0.5) * spread;
-      const akimboBullet = {
-        x: player.x, y: player.y,
-        dx: Math.cos(angle + bulletSpread2) * BULLET_SPD,
-        dy: Math.sin(angle + bulletSpread2) * BULLET_SPD,
-        life: range, damage: dmg, pierce: false,
-        weaponId: activeWeaponId,
-      };
-      if (timeTravelerPhase === 'slow') frozenBullets.push(akimboBullet);
-      else bullets.push(akimboBullet);
+    shootProjectile(angle, spread, range, dmg, wpn, akimboActive);
+  }
+
+  spawnMuzzleParticles(angle, useHitscan);
+
+  if (player.ammo === 0) {
+    activePerkActive['pistol_akimbo'] = false;
+    activePerkActive['shotgun_slug'] = false;
+    activePerkActive['sniper_wallpen'] = false;
+    startReload();
+  }
+}
+
+function shootHitscan(angle, spread, range, dmg, wpn, akimboActive) {
+  const bulletSpread = (Math.random() - 0.5) * spread;
+  const rayAngle = angle + bulletSpread;
+  const rayDx = Math.cos(rayAngle);
+  const rayDy = Math.sin(rayAngle);
+  const maxDist = range * BULLET_SPD;
+
+  let hitDist = maxDist;
+  let hitX = player.x + rayDx * maxDist;
+  let hitY = player.y + rayDy * maxDist;
+
+  const wallPenActive = activePerkActive['sniper_wallpen'] && activeWeaponId === 'sniper';
+  if (!wallPenActive) {
+    for (let d = 0; d < maxDist; d += TILE * 0.5) {
+      const wx = player.x + rayDx * d;
+      const wy = player.y + rayDy * d;
+      if (wallCollide(wx, wy, 2)) {
+        hitDist = d;
+        hitX = wx; hitY = wy;
+        break;
+      }
     }
   }
 
-  // Muzzle particles
+  const fmjActive = ownedPerks.includes('ar_fmj') && activeWeaponId === 'assault_rifle';
+  const isPierce = wpn.special === 'pierce' || fmjActive;
+  const hitZombies = [];
+  for (const z of zombies) {
+    if (!z.alive || z.burrowed) continue;
+    const zx = z.x - player.x, zy = z.y - player.y;
+    const proj = zx * rayDx + zy * rayDy;
+    if (proj < 0 || proj > hitDist) continue;
+    const perpX = zx - rayDx * proj;
+    const perpY = zy - rayDy * proj;
+    const perpDistSq = perpX * perpX + perpY * perpY;
+    const hitRadius = z.radius + BULLET_R;
+    if (perpDistSq < hitRadius * hitRadius) {
+      hitZombies.push({ z, proj });
+    }
+  }
+  hitZombies.sort((a, b) => a.proj - b.proj);
+
+  const sniperExecute = activeWeaponId === 'sniper' && playerWeapons.find(w => w.weapon_id === 'sniper' && w.dmg_level >= 10);
+  const maxHits = fmjActive ? 2 : (isPierce ? hitZombies.length : 1);
+  const toHit = hitZombies.slice(0, maxHits);
+  for (const { z, proj } of toHit) {
+    if (sniperExecute) {
+      z.hp = 0;
+      runStats.damageDealt += z.maxHp;
+    } else {
+      applyPerkDamageEffects(z, dmg, activeWeaponId);
+    }
+    spawnBlood(z.x, z.y, sniperExecute ? 12 : 6, rayAngle);
+    if (z.hp <= 0 && z.alive) {
+      z.alive = false;
+      z.deathTimer = z.isBoss ? 60 : 30;
+      onZombieKill(z);
+    } else if (z.alive) {
+      playSoundThrottled('zombie_hit', 80);
+    }
+  }
+  if (hitZombies.length > 0 && !isPierce) {
+    hitX = player.x + rayDx * hitZombies[0].proj;
+    hitY = player.y + rayDy * hitZombies[0].proj;
+  }
+
+  if (activeWeaponId === 'sniper') {
+    hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 12, maxLife: 12, style: 'sniper' });
+  } else if (activeWeaponId === 'minigun') {
+    hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 3, maxLife: 3, style: 'minigun' });
+  } else if (activeWeaponId === 'assault_rifle') {
+    hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 8, maxLife: 8, style: 'rifle' });
+  } else {
+    hitTrails.push({ x1: player.x, y1: player.y, x2: hitX, y2: hitY, life: 4, maxLife: 4, style: 'auto' });
+  }
+}
+
+function shootFrozenHitscan(angle, spread, range, dmg, wpn) {
+  const bulletSpread = (Math.random() - 0.5) * spread;
+  frozenBullets.push({
+    x: player.x, y: player.y,
+    dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
+    dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
+    life: range, damage: dmg, pierce: wpn.special === 'pierce',
+    weaponId: activeWeaponId,
+  });
+}
+
+function shootShotgun(angle, spread, range, dmg) {
+  const targetArr = timeTravelerPhase === 'slow' ? frozenBullets : bullets;
+  for (let p = 0; p < SHOTGUN_PELLET_COUNT; p++) {
+    const pelletSpread = (p - 2) * SHOTGUN_PELLET_SPACING + (Math.random() - 0.5) * spread;
+    targetArr.push({
+      x: player.x, y: player.y,
+      dx: Math.cos(angle + pelletSpread) * BULLET_SPD,
+      dy: Math.sin(angle + pelletSpread) * BULLET_SPD,
+      life: range, damage: dmg, pierce: false,
+      weaponId: activeWeaponId,
+    });
+  }
+}
+
+function shootSlug(angle, range, dmg) {
+  const slugBullet = {
+    x: player.x, y: player.y,
+    dx: Math.cos(angle) * BULLET_SPD * SLUG_SPEED_MULT,
+    dy: Math.sin(angle) * BULLET_SPD * SLUG_SPEED_MULT,
+    life: range * SLUG_RANGE_MULT, damage: dmg * SLUG_DMG_MULT, pierce: false,
+    weaponId: activeWeaponId,
+  };
+  if (timeTravelerPhase === 'slow') frozenBullets.push(slugBullet);
+  else bullets.push(slugBullet);
+}
+
+function shootProjectile(angle, spread, range, dmg, wpn, akimboActive) {
+  const bulletSpread = (Math.random() - 0.5) * spread;
+  const pistolBullet = {
+    x: player.x, y: player.y,
+    dx: Math.cos(angle + bulletSpread) * BULLET_SPD,
+    dy: Math.sin(angle + bulletSpread) * BULLET_SPD,
+    life: range, damage: dmg, pierce: wpn.special === 'pierce',
+    weaponId: activeWeaponId,
+  };
+  if (timeTravelerPhase === 'slow') frozenBullets.push(pistolBullet);
+  else bullets.push(pistolBullet);
+
+  if (akimboActive) {
+    const bulletSpread2 = (Math.random() - 0.5) * spread;
+    const akimboBullet = {
+      x: player.x, y: player.y,
+      dx: Math.cos(angle + bulletSpread2) * BULLET_SPD,
+      dy: Math.sin(angle + bulletSpread2) * BULLET_SPD,
+      life: range, damage: dmg, pierce: false,
+      weaponId: activeWeaponId,
+    };
+    if (timeTravelerPhase === 'slow') frozenBullets.push(akimboBullet);
+    else bullets.push(akimboBullet);
+  }
+}
+
+function spawnMuzzleParticles(angle, useHitscan) {
   for (let i = 0; i < (useHitscan ? 2 : 4); i++) {
     const a = angle + (Math.random()-0.5)*0.4;
     particles.push({
@@ -934,17 +954,8 @@ function tryShoot() {
       life: 6, maxLife: 6, color: '#ffcc00', r: 2,
     });
   }
-
-  if (player.ammo === 0) {
-    // Deactivate magazine-based perks on empty
-    activePerkActive['pistol_akimbo'] = false;
-    activePerkActive['shotgun_slug'] = false;
-    activePerkActive['sniper_wallpen'] = false;
-    startReload();
-  }
 }
 
-// ── XP SYSTEM ─────────────────────────────────────────
 function xpForLevel(n) {
   return Math.floor(50 * Math.pow(n, 1.5));
 }
@@ -976,7 +987,6 @@ function showLevelUp() {
   const el = document.getElementById('level-up-banner');
   el.style.opacity = 1;
   setTimeout(() => { el.style.opacity = 0; }, 2500);
-  // Expanding ring of particles (2 concentric rings)
   for (let ring = 0; ring < 2; ring++) {
     const ringCount = ring === 0 ? 24 : 16;
     const ringSpeed = ring === 0 ? 4 : 2.5;
@@ -994,7 +1004,6 @@ function showLevelUp() {
       });
     }
   }
-  // Central burst
   for (let i = 0; i < 8; i++) {
     const a = Math.random() * Math.PI * 2;
     particles.push({
@@ -1007,12 +1016,9 @@ function showLevelUp() {
   }
 }
 
-// ── PARTICLES ────────────────────────────────────────
 function spawnBlood(x, y, count = 8, dirAngle = null) {
-  if (bloodDecals.length > 200) bloodDecals.shift();
-  // Main splatter decal
+  if (bloodDecals.length > BLOOD_DECAL_LIMIT) bloodDecals.shift();
   bloodDecals.push({ x, y, r: 6 + Math.random()*6, alpha: 0.5, shape: 'circle' });
-  // Secondary directional splatter decals
   if (dirAngle !== null) {
     for (let i = 0; i < 2; i++) {
       const splatDist = 8 + Math.random() * 12;
@@ -1026,7 +1032,6 @@ function spawnBlood(x, y, count = 8, dirAngle = null) {
       });
     }
   }
-  // Particles — spray in a direction if provided
   for (let i = 0; i < count; i++) {
     const a = dirAngle !== null
       ? dirAngle + (Math.random() - 0.5) * 1.2
@@ -1043,7 +1048,6 @@ function spawnBlood(x, y, count = 8, dirAngle = null) {
   }
 }
 
-// ── PLAYER MOVE ──────────────────────────────────────
 function movePlayer() {
   let dx = 0, dy = 0;
   if (keys[keybinds.moveUp])    dy -= 1;
@@ -1060,24 +1064,20 @@ function movePlayer() {
   if (hasSkill('fortress') && player.shield >= player.maxShield && player.maxShield > 0) {
     speed *= 1.10;
   }
-  // Adrenalin — speed boost under 30% HP
   const adrenalinPct = getPlayerStat('adrenalinSpeedPct');
-  if (adrenalinPct > 0 && player.hp < getPlayerStat('maxHp') * 0.3) {
+  if (adrenalinPct > 0 && player.hp < getPlayerStat('maxHp') * ADRENALIN_HP_THRESHOLD) {
     speed *= (1 + adrenalinPct);
   }
-  // Kill Rush — temp speed boost
   if (player.killRushTimer > 0) {
     speed *= (1 + (player.killRushBoost || 0));
     player.killRushTimer--;
   }
   if (activeWeaponId === 'minigun' && mouseDown && !reloading && player.ammo > 0 && !activePerkActive['minigun_overdrive']) {
-    speed *= 0.35;
+    speed *= MINIGUN_MOVE_SPEED_MULT;
   }
-  // Time Traveler aktiv — massiver Speed-Boost
   if (activeOperatorId === 'time_traveler' && timeTravelerPhase !== 'none') {
-    speed *= 1.8;
+    speed *= TIME_TRAVELER_SPEED_MULT;
   }
-  // Boss stomp slow
   if (bossSlowTimer > 0) {
     speed *= 0.5;
   }
@@ -1095,22 +1095,18 @@ function movePlayer() {
   if (player.recoil > 0) player.recoil -= 0.5;
 }
 
-// ── DAMAGE PIPELINE ─────────────────────────────────
 function damagePlayer(rawDamage, source) {
-  // source: 'melee' or 'ranged' (spitter projectile)
   const reduction = getPlayerStat('damageReductionPct');
   let damage = Math.round(rawDamage * (1 - reduction));
 
-  // Ghost — reduce melee damage
   if (source === 'melee') {
     const ghostRed = getPlayerStat('ghostReduction');
     if (ghostRed > 0) damage = Math.round(damage * (1 - ghostRed));
   }
 
-  // Iron Skin — block next hit every 60s
   if (hasSkill('iron_skin') && player.ironSkinReady) {
     player.ironSkinReady = false;
-    player.ironSkinCooldownTime = performance.now() + 60000; // 60s
+    player.ironSkinCooldownTime = performance.now() + IRON_SKIN_COOLDOWN;
     showWaveBanner('IRON SKIN!');
     return;
   }
@@ -1142,7 +1138,7 @@ function damagePlayer(rawDamage, source) {
 
   if (player.hp <= 0 && hasSkill('second_wind') && !player.secondWindUsed) {
     player.secondWindUsed = true;
-    player.hp = Math.round(getPlayerStat('maxHp') * 0.3);
+    player.hp = Math.round(getPlayerStat('maxHp') * SECOND_WIND_HP_PCT);
     for (let i = 0; i < 20; i++) {
       const a = Math.random() * Math.PI * 2;
       particles.push({
@@ -1160,15 +1156,12 @@ function damagePlayer(rawDamage, source) {
   updateHUD();
 }
 
-// Helper to apply movement with wall sliding (hoisted out of loop for perf)
 function applyMove(entity, mx, my, collR) {
-  // Try full diagonal move
   if (!wallCollide(entity.x + mx, entity.y + my, collR)) {
     entity.x += mx;
     entity.y += my;
     return true;
   }
-  // Try each axis independently (wall sliding)
   let moved = false;
   if (!wallCollide(entity.x + mx, entity.y, collR)) {
     entity.x += mx;
@@ -1179,7 +1172,6 @@ function applyMove(entity, mx, my, collR) {
     moved = true;
   }
   if (moved) return true;
-  // Both axes blocked — try half-steps for corner scraping
   const halfMx = mx * 0.5, halfMy = my * 0.5;
   if (!wallCollide(entity.x + halfMx, entity.y, collR)) {
     entity.x += halfMx;
@@ -1189,7 +1181,6 @@ function applyMove(entity, mx, my, collR) {
     entity.y += halfMy;
     return true;
   }
-  // Corner rounding — find nearest wall corner and slide tangentially
   const tileX = Math.floor(entity.x / TILE);
   const tileY = Math.floor(entity.y / TILE);
   let bestCD = Infinity, bestNX = 0, bestNY = 0;
@@ -1202,7 +1193,7 @@ function applyMove(entity, mx, my, collR) {
       if (isTileWall(tileX + dc, tileY + dr - 1)) walls++;
       if (isTileWall(tileX + dc - 1, tileY + dr)) walls++;
       if (isTileWall(tileX + dc, tileY + dr)) walls++;
-      if (walls === 0 || walls === 4) continue; // no corner
+      if (walls === 0 || walls === 4) continue;
       const cdx = entity.x - cx, cdy = entity.y - cy;
       const cd = cdx * cdx + cdy * cdy;
       if (cd < bestCD) {
@@ -1215,7 +1206,6 @@ function applyMove(entity, mx, my, collR) {
   const maxCD = (collR + TILE) * (collR + TILE);
   if (bestCD < maxCD && (bestNX !== 0 || bestNY !== 0)) {
     const speed = Math.sqrt(mx * mx + my * my);
-    // Tangent perpendicular to corner-normal, choose direction aligned with movement
     const dot = (-bestNY) * mx + bestNX * my;
     const tx = dot > 0 ? -bestNY : bestNY;
     const ty = dot > 0 ? bestNX : -bestNX;
@@ -1230,7 +1220,6 @@ function applyMove(entity, mx, my, collR) {
       return true;
     }
   }
-  // Last resort — perpendicular nudge
   const len = Math.sqrt(mx * mx + my * my);
   if (len > 0.01) {
     const perpX = -my / len * 2, perpY = mx / len * 2;
@@ -1248,10 +1237,6 @@ function applyMove(entity, mx, my, collR) {
   return false;
 }
 
-// ── SPATIAL HASH FOR ZOMBIE SEPARATION ───────────────
-const ZHASH_CELL = 80; // ~2 tiles, covers max zombie radius overlap
-const _zombieHash = new Map();
-
 function buildZombieHash() {
   _zombieHash.clear();
   for (const z of zombies) {
@@ -1262,4 +1247,3 @@ function buildZombieHash() {
     cell.push(z);
   }
 }
-
