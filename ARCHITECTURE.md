@@ -1,118 +1,137 @@
 # Architektur
 
-## Überblick
+## Ueberblick
 
 ```
 Browser (Canvas Game)  <-->  Express Server  <-->  SQLite DB
-     index.html              server.js            data/deadzone.db
-                             database.js          data/secret.key
+     public/js/*.js          server.js            data/deadzone.db
+     index.html              game-server.js       data/secret.key
+                             database.js
 ```
 
-Das Spiel läuft komplett client-seitig im Canvas. Der Server ist nur für Auth und XP-Persistenz zuständig.
+Das Spiel laeuft komplett client-seitig im Canvas. Der Server ist fuer Auth, Persistenz (XP/Gold/Weapons/Skills) und Multiplayer zustaendig.
 
 ## Projektstruktur
 
 ```
-zombie-shooter/
-├── server.js          # Express Server, 4 API Routes, JWT Middleware
-├── database.js        # SQLite Setup, prepared Statements
+zombie-zone/
+├── server.js          # Express, JWT Auth, REST API, Socket.io Setup
+├── game-server.js     # Authoritative Multiplayer Game Logic
+├── database.js        # SQLite Schema, Prepared Statements
 ├── package.json
 ├── .gitignore
 ├── data/              # (gitignored) DB + JWT Secret
 │   ├── deadzone.db
 │   └── secret.key
 └── public/
-    └── index.html     # Das gesamte Spiel (1500+ Zeilen)
+    ├── index.html     # HTML + CSS (638 Zeilen)
+    └── js/
+        ├── auth.js        # Login, Session, Canvas Setup
+        ├── audio.js       # Web Audio SFX (prozedural)
+        ├── config.js      # Konstanten, Skills, Weapons, Operators, Perks
+        ├── map.js         # Map-Generierung + Flowfield Pathfinding
+        ├── state.js       # Game State, init(), Wave Management
+        ├── player.js      # Rescue, Input, Combat, Movement, Damage
+        ├── zombies.js     # Zombie AI, Bullets, Effekte
+        ├── rendering.js   # Alle Canvas Draw-Funktionen
+        ├── ui.js          # HUD, Sync, Dash, Game Loop
+        ├── menus.js       # Skill Tree, Arsenal, Operators, Shop
+        └── multiplayer.js # Socket.io MP, Lobby, Settings
 ```
+
+Alle JS-Dateien sind global-scoped (kein ES Modules). Reihenfolge der Script-Tags in index.html ist relevant.
 
 ## Backend
 
-### server.js (75 Zeilen)
+### server.js
 
-Express-Server mit 4 Endpoints:
+Express-Server mit JWT Auth und Rate Limiting:
 
-- `POST /api/register` — bcrypt-Hash, JWT zurück
-- `POST /api/login` — Passwort prüfen, JWT zurück
-- `GET /api/profile` — JWT validieren, XP + Name zurück
-- `POST /api/xp` — XP addieren (nicht setzen)
+- `POST /api/register` — bcrypt-Hash, JWT zurueck
+- `POST /api/login` — Passwort pruefen, JWT zurueck
+- `GET /api/profile` — XP, Gold, Diamonds, Active Operator
+- `POST /api/xp` — XP addieren
+- `POST /api/gold` — Gold/Diamonds setzen
+- `GET/POST /api/skills` — Skill Tree Persistenz
+- `GET/POST /api/weapons` — Waffen kaufen/upgraden
+- `GET/POST /api/perks` — Perks kaufen
+- `GET/POST /api/operators` — Operatoren kaufen/upgraden
+- `GET/POST /api/stats` — Spielstatistiken
+- `POST /api/death` — Death Penalty (XP-Abzug)
 
-JWT Secret wird beim ersten Start zufällig generiert und in `data/secret.key` persistiert. Tokens sind 24h gültig.
+JWT Secret wird beim ersten Start generiert und in `data/secret.key` persistiert. Tokens sind 24h gueltig.
 
-### database.js (26 Zeilen)
+### game-server.js
 
-SQLite mit WAL-Mode. Eine Tabelle:
+Authoritative Server fuer Co-op Multiplayer via Socket.io. Verwaltet GameRooms mit eigener Game Loop.
 
-```sql
-users (id, name, password_hash, xp, created_at)
+### database.js
+
+SQLite mit WAL-Mode. Tabellen: users, user_skills, user_weapons, user_perks, user_operators, user_stats.
+
+## Frontend
+
+### Script-Ladereihenfolge
+
 ```
-
-4 prepared Statements: `createUser`, `findUserByName`, `addXp`, `getUser`.
-
-## Frontend (index.html)
-
-Alles in einer Datei — CSS, HTML, JS. Kein Build-Step, kein Bundler.
-
-### Aufbau im Script-Block
-
-```
-Auth-System          (~80 Zeilen)   Token-Management, Login/Register/Logout
-Config               (~50 Zeilen)   Tile-Size, Radien, Pickup-Konstanten
-Zombie-Configs       (~30 Zeilen)   Typ-Definitionen, Spawn-Gewichtungen
-Map-Generator        (~50 Zeilen)   Dynamische Map basierend auf Bildschirmgröße
-Spawning             (~15 Zeilen)   Spawn-Edges am Kartenrand
-State + Init         (~30 Zeilen)   Alle Game-State Variablen
-Wave-System          (~30 Zeilen)   Wave-Progression, Zombie-Spawning
-Input                (~30 Zeilen)   Keyboard, Mouse, Pause
-Reload               (~20 Zeilen)   Nachladen mit Progress-Bar
-Shooting             (~25 Zeilen)   Schuss-Logik, Muzzle-Partikel
-XP-System            (~40 Zeilen)   Level-Berechnung, XP-Bar, Level-Up
-Particles + Blood    (~25 Zeilen)   Partikel-System, Blut-Decals
-Player Movement      (~20 Zeilen)   WASD + Diagonale + Wall-Collision
-Zombie Update        (~80 Zeilen)   Movement, Wall-Avoidance, Aggression, Spitter-AI
-Bullet Update        (~40 Zeilen)   Flugbahn, Treffer, Kill-Scoring
-Spitter Projectiles  (~25 Zeilen)   Grüne Kugeln, Spieler-Treffer
-Pickup-System        (~160 Zeilen)  Health + Ammo: Spawn, Timer, Drop, Pickup, Draw
-Draw Functions       (~200 Zeilen)  Map, Player, Zombies, Bullets, Minimap, HUD
-Game Over            (~20 Zeilen)   XP senden, zur Lobby
-Main Loop            (~40 Zeilen)   Update + Draw Reihenfolge
+auth.js      → Session, Canvas
+audio.js     → Sound System
+config.js    → Alle Game-Daten
+map.js       → Map + Pathfinding
+state.js     → State + Init
+player.js    → Player Mechanics
+zombies.js   → Enemy AI
+rendering.js → Draw Functions
+ui.js        → HUD + Game Loop
+menus.js     → Menu Screens
+multiplayer.js → MP + Settings + Event Listeners
 ```
 
 ### Render-Pipeline (pro Frame)
 
 1. `clearRect` — Canvas leeren
-2. `drawMap` — Tiles (Boden + Wände)
-3. `drawBloodDecals` — Blutflecken am Boden
-4. `drawHealthpacks` + `drawAmmopacks` — Pickups
-5. `drawParticles` — Partikel-Effekte
-6. `drawBullets` + `drawSpitterProjectiles` — Geschosse
-7. `drawZombie` (für jeden Zombie) — Typ-basiertes Rendering
-8. `drawPlayer` — Spieler mit Waffe
-9. `drawMinimap` — Übersichtskarte
-10. Hurt-Flash + Score-Text
+2. Camera Transform (City Map: Kamera folgt Player)
+3. `drawMap` — Tiles mit Cache-Canvas
+4. `drawBloodDecals` — Persistente Blutflecken
+5. `drawHealthpacks` + `drawAmmopacks` — Pickups
+6. `drawBuilderBlocks` + `drawTurrets` — Engineer Strukturen
+7. `drawRescueCircle` — Extraction Point
+8. `drawBroodEggs` + `drawToxicPools` — Boss Effekte
+9. `drawParticles` — Partikel-Effekte
+10. `drawBullets` + `drawHitTrails` + `drawSpitterProjectiles`
+11. `drawZombie` (pro Zombie) — Typ-basiert dispatched
+12. `drawPlayer` — Spieler mit Waffe + Afterimage
+13. `drawFrozenBullets` — Time Traveler Effekt
+14. `drawMinimap` — Uebersichtskarte
+15. HUD Update
 
 ### Sprite-System
 
-Alle Sprites sind prozedural gezeichnet (kein Spritesheet). Ausrichtung: **positiv X = vorwärts**. Rotation = `entity.angle`, kein Offset.
-
-Zombie-Rendering liest `z.type` und nutzt `ZOMBIE_TYPES` für Farben + Scale. Tank ist 1.5x größer, Runner 0.85x.
+Alle Sprites prozedural gezeichnet (kein Spritesheet). Ausrichtung: positiv X = vorwaerts. Rotation = `entity.angle`.
 
 ### Kollisions-System
 
-Tile-basiert: `wallCollide(x, y, radius)` prüft 8 Punkte um die Entity. Jeder Zombie hat eigenen `radius` (Tank größer, Runner kleiner).
+Tile-basiert: `wallCollide(x, y, radius)` prueft Punkte um die Entity. `applyMove()` mit Half-Step Fallback und Corner-Rounding.
+
+### Pathfinding
+
+- BFS Flowfield vom Player — alle Zombies folgen Gradient
+- City Map: Lokaler Flowfield (Region um Player, offset-basiert)
+- LOS + Flowfield Hybrid: Direkte Bewegung bei Sichtlinie
+- Perpendicular Escape bei Blockade
+- Spatial Hash Grid fuer O(n) Zombie-Separation
 
 ### Map-Generierung
 
-Beim Spielstart wird die Map dynamisch erzeugt:
-- `COLS` / `ROWS` basierend auf `window.innerWidth / TILE`
-- Rand = Wände
-- Symmetrische Hindernisse (Ecken-Cluster, Mitte-Pillars, Seiten-Blocker)
+3 Map-Typen:
+- **Warehouse:** Statisches Grid-Layout mit symmetrischen Hindernissen
+- **Bunker:** Perlin-Noise basiert
+- **City:** Infinite prozedurale Stadt (Seed-basiert pro Tile, Camera-System)
 
 ### Datenfluss: XP
 
 ```
-Zombie stirbt → score += z.xp, sessionXp += z.xp → updateXpBar()
-                                                          ↓
-Game Over → fetch POST /api/xp {xp: sessionXp} → DB: xp = xp + sessionXp
-                                                          ↓
-Lobby → fetch GET /api/profile → Zeige Total XP + Level
+Zombie Kill → pendingXp += z.xp → syncXp() (alle 10s) → POST /api/xp
+Game Over → syncToServer() → Final Sync
+Lobby → GET /api/profile → Total XP + Level anzeigen
 ```
