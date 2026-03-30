@@ -1,4 +1,3 @@
-// ── HUD UPDATE ───────────────────────────────────────
 function updateHUD() {
   const hpEl = document.getElementById('hp-val');
   hpEl.textContent = Math.max(0, Math.floor(player.hp));
@@ -34,7 +33,6 @@ function updateHUD() {
   // Dash display is updated in updateDash() every frame
 }
 
-// ── XP SYNC ─────────────────────────────────────────
 function syncXp() {
   if (!authToken || pendingXp <= 0) return;
   const xpToSync = pendingXp;
@@ -52,7 +50,6 @@ function syncXp() {
   });
 }
 
-// ── GOLD SYNC ────────────────────────────────────────
 function syncGold() {
   if (!authToken || (pendingGold <= 0 && pendingDiamonds <= 0)) return;
   const goldToSync = pendingGold;
@@ -75,7 +72,6 @@ function syncGold() {
   });
 }
 
-// ── GAME OVER ────────────────────────────────────────
 async function gameOver() {
   running = false;
   playSound('death');
@@ -151,7 +147,6 @@ async function gameOver() {
   showGameMenu();
 }
 
-// ── DASH SYSTEM ──────────────────────────────────────
 function tryDash() {
   if (!getPlayerStat('dashUnlocked')) return;
   if (dashActive) return;
@@ -270,7 +265,6 @@ function drawDashAfterimage() {
   ctx.restore();
 }
 
-// ── MAIN LOOP ────────────────────────────────────────
 function loop(now) {
   if (!running) return;
   if (!player._lastFrameTime) player._lastFrameTime = now;

@@ -1,4 +1,3 @@
-// ── SKILL TREE UI ──────────────────────────────────────
 const stCanvas = document.getElementById('skill-tree-canvas');
 const stCtx = stCanvas.getContext('2d');
 let stActive = false;
@@ -435,7 +434,6 @@ document.getElementById('st-survival').addEventListener('click', () => stSelectP
 document.getElementById('st-mobility').addEventListener('click', () => stSelectPath('mobility'));
 document.getElementById('st-rescue').addEventListener('click', () => stSelectPath('rescue'));
 
-// ── WEAPON PREVIEW DRAWING (TOP-DOWN SCHEMATIC) ────────
 function drawWeaponPreview(ctx, weaponId, scale) {
   ctx.save();
   const s = scale || 1;
@@ -861,7 +859,6 @@ function renderArsenal() {
   statsContainer.appendChild(perkSection);
 }
 
-// ── OPERATORS TAB ────────────────────────────────────
 function renderOperators() {
   const grid = document.getElementById('operator-grid');
   if (!grid) return;
@@ -1032,7 +1029,6 @@ function renderOperators() {
   });
 }
 
-// ── PERK SHOP ───────────────────────────────────────
 function renderShop() {
   const grid = document.getElementById('perk-shop-grid');
   if (!grid) return;

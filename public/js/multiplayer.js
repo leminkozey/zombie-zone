@@ -1,5 +1,3 @@
-// ── MULTIPLAYER HELPERS ──────────────────────────────
-
 function mpPredictLocalMovement(input) {
   let mx = 0, my = 0;
   if (input.keys.up) my -= 1;
@@ -62,7 +60,6 @@ function applyDelta(base, delta) {
   return result;
 }
 
-// ── MULTIPLAYER FUNCTIONS ─────────────────────────────
 function mpConnect() {
   if (mpSocket) return;
   mpSocket = io();
@@ -237,7 +234,6 @@ function mpEndGame() {
   showGameMenu();
 }
 
-// ── MULTIPLAYER GAME LOOP ────────────────────────────
 function mpLoop(now) {
   if (!mpEnabled) return;
   if (!mpGameState) {
@@ -495,7 +491,6 @@ function mpLoop(now) {
   requestAnimationFrame(mpLoop);
 }
 
-// ── MULTIPLAYER EVENT LISTENERS ──────────────────────
 document.querySelectorAll('.menu-tab').forEach(tab => {
   tab.addEventListener('click', () => { playSound('ui_click'); switchMenuTab(tab.dataset.tab); });
 });
@@ -632,8 +627,6 @@ document.getElementById('quit-btn').addEventListener('click', async () => {
   lastRunText = 'VERLASSEN: Wave ' + wave + '  |  75% XP VERLOREN';
   showGameMenu();
 });
-
-// ── SETTINGS SCREEN ─────────────────────────────────
 
 function renderKeybinds() {
   const list = document.getElementById('keybind-list');
@@ -786,7 +779,6 @@ document.getElementById('sound-toggle').addEventListener('change', (e) => {
   if (!soundEnabled) stopAmbient();
 });
 
-// ── MULTIPLAYER BUTTON WIRING ────────────────────────
 document.getElementById('mp-btn').addEventListener('click', () => {
   document.getElementById('overlay').style.display = 'none';
   document.getElementById('mp-lobby-screen').style.display = 'flex';
