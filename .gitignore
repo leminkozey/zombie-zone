@@ -1,4 +1,7 @@
 node_modules/
 data/
-.superpowers/
 setup-lemin.js
+
+# claude code
+.claude/
+.superpowers/
